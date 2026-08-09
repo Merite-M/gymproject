@@ -2,7 +2,7 @@
 **Project Name:** Next-Gen Fitness & Gym Enterprise SaaS (Kigali Lighthouse & Global SaaS Tier)  
 **Target Client Blueprint:** Soho Kigali & Global Scale  
 **Target Readers:** Google Jules, Windsurf, Antigravity (AI Co-Founders & Engineers)  
-**System MCP Context:** Supabase, Linear, Render  
+**System MCP Context:** Supabase, Linear, Render, Stitch, Figma, and others.  
 
 ---
 
@@ -32,7 +32,7 @@ To eliminate network latency, cookie syncing friction, and redundant deployment 
                                   |  (Single Full-Stack Node Server)   |
                                   |                                    |
                                   |  +------------------------------+  |
-                                  |  |     Frontend (React/Vite)    |  |
+                                  |  |     Frontend (React)    |  |
                                   |  +--------------+---------------+  |
                                   |                 |                  |
                                   |  +--------------v---------------+  |
