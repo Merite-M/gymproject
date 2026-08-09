@@ -372,3 +372,60 @@ CREATE POLICY member_own_bookings ON class_bookings
 CREATE POLICY public_class_schedules ON class_schedules
     FOR SELECT
     USING (gym_id = (SELECT gym_id FROM profiles WHERE id = auth.uid()));
+
+-- ==============================================================================
+-- FRONT DESK & DASHBOARD ENHANCEMENTS
+-- ==============================================================================
+
+-- 1. CRM NOTES (For Staff)
+CREATE TABLE IF NOT EXISTS member_notes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    author_id UUID REFERENCES profiles(id) ON DELETE SET NULL, -- Staff who wrote it
+    content TEXT NOT NULL,
+    is_pinned BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE member_notes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY staff_view_notes ON member_notes FOR ALL USING ((SELECT role FROM profiles WHERE id = auth.uid()) IN ('staff', 'admin'));
+
+-- 2. LIVE RECEPTION MONITOR VIEW
+-- Provides everything needed for the check-in flash cards (Module 1) in one rapid query
+CREATE OR REPLACE VIEW vw_reception_monitor AS
+SELECT
+    c.id AS checkin_id,
+    c.gym_id,
+    c.created_at AS checkin_time,
+    c.access_method,
+    c.status AS checkin_status,
+    p.id AS profile_id,
+    p.first_name,
+    p.last_name,
+    p.avatar_url,
+    p.status AS profile_status,
+    m.membership_type,
+    m.waiver_signed,
+    COALESCE(t.balance, 0.00) AS tab_balance,
+    COALESCE(
+        (SELECT sum(total) FROM invoices WHERE profile_id = p.id AND status = 'unpaid'),
+        0.00
+    ) AS overdue_invoices_total
+FROM checkins c
+JOIN profiles p ON c.profile_id = p.id
+LEFT JOIN memberships m ON m.profile_id = p.id AND m.status = 'active'
+LEFT JOIN member_tabs t ON t.profile_id = p.id
+ORDER BY c.created_at DESC;
+
+-- 3. FRONT DESK ADMIN DASHBOARD VIEW
+-- Aggregates daily metrics for the staff portal dashboard
+CREATE OR REPLACE VIEW vw_front_desk_dashboard AS
+SELECT
+    g.id AS gym_id,
+    CURRENT_DATE AS report_date,
+    (SELECT COUNT(*) FROM checkins WHERE gym_id = g.id AND DATE(created_at AT TIME ZONE g.timezone) = CURRENT_DATE) AS total_checkins_today,
+    (SELECT COUNT(*) FROM class_bookings cb JOIN class_schedules cs ON cb.schedule_id = cs.id WHERE cs.gym_id = g.id AND DATE(cs.start_time AT TIME ZONE g.timezone) = CURRENT_DATE AND cb.status = 'checked_in') AS classes_attended_today,
+    (SELECT COUNT(*) FROM profiles WHERE gym_id = g.id AND status = 'active') AS total_active_members,
+    (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE gym_id = g.id AND status = 'completed' AND DATE(created_at AT TIME ZONE g.timezone) = CURRENT_DATE) AS revenue_collected_today
+FROM gyms g;
