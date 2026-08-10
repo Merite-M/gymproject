@@ -591,3 +591,215 @@ LEFT JOIN shift_tasks st ON sl.id = st.shift_id
 LEFT JOIN task_templates tt ON st.task_template_id = tt.id
 GROUP BY
     sl.id, sl.gym_id, sl.staff_id, p.first_name, p.last_name, sl.shift_start, sl.shift_end, sl.status;
+-- GYM-13: Digital Waiver
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS waiver_signed BOOLEAN DEFAULT FALSE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS waiver_signed_at TIMESTAMP WITH TIME ZONE;
+
+CREATE OR REPLACE FUNCTION check_waiver_before_checkin()
+RETURNS TRIGGER AS $$
+DECLARE
+    is_signed BOOLEAN;
+BEGIN
+    SELECT waiver_signed INTO is_signed FROM profiles WHERE id = NEW.profile_id;
+    IF is_signed = FALSE THEN
+        NEW.status := 'warning';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_check_waiver ON checkins;
+CREATE TRIGGER trg_check_waiver
+BEFORE INSERT ON checkins
+FOR EACH ROW EXECUTE FUNCTION check_waiver_before_checkin();
+
+
+-- GYM-11: Membership State Machine
+CREATE OR REPLACE FUNCTION update_membership_state_on_hold()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+        IF CURRENT_DATE >= NEW.start_date AND CURRENT_DATE <= NEW.end_date THEN
+            UPDATE memberships SET status = 'frozen' WHERE id = NEW.membership_id;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_membership_hold_state ON membership_holds;
+CREATE TRIGGER trg_membership_hold_state
+AFTER INSERT OR UPDATE ON membership_holds
+FOR EACH ROW EXECUTE FUNCTION update_membership_state_on_hold();
+
+CREATE OR REPLACE FUNCTION process_membership_cancellation(m_id UUID)
+RETURNS VOID AS $$
+DECLARE
+    m RECORD;
+    cancel_fee DECIMAL(12, 2) := 50.00; -- Flat fee for early cancellation
+BEGIN
+    SELECT * INTO m FROM memberships WHERE id = m_id;
+
+    IF m.end_date IS NOT NULL AND CURRENT_DATE < m.end_date THEN
+        INSERT INTO invoices (gym_id, profile_id, status, subtotal, tax, total, due_date)
+        VALUES (m.gym_id, m.profile_id, 'unpaid', cancel_fee, 0.00, cancel_fee, CURRENT_DATE);
+    END IF;
+
+    UPDATE memberships SET status = 'cancelled', cancellation_date = CURRENT_DATE WHERE id = m_id;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- GYM-20: Class Capacity
+CREATE OR REPLACE FUNCTION enforce_class_capacity()
+RETURNS TRIGGER AS $$
+DECLARE
+    current_bookings INTEGER;
+    max_cap INTEGER;
+BEGIN
+    IF NEW.status IN ('booked', 'checked_in') THEN
+        SELECT COUNT(*) INTO current_bookings
+        FROM class_bookings
+        WHERE schedule_id = NEW.schedule_id AND status IN ('booked', 'checked_in');
+
+        SELECT COALESCE(cs.capacity_override, f.max_capacity) INTO max_cap
+        FROM class_schedules cs
+        JOIN facilities f ON cs.facility_id = f.id
+        WHERE cs.id = NEW.schedule_id;
+
+        IF current_bookings >= max_cap THEN
+            RAISE EXCEPTION 'Class has reached maximum capacity of %', max_cap;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_enforce_class_capacity ON class_bookings;
+CREATE TRIGGER trg_enforce_class_capacity
+BEFORE INSERT OR UPDATE ON class_bookings
+FOR EACH ROW EXECUTE FUNCTION enforce_class_capacity();
+
+
+-- GYM-21: Waitlists
+CREATE TABLE IF NOT EXISTS waitlists (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    schedule_id UUID REFERENCES class_schedules(id) ON DELETE CASCADE,
+    profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) DEFAULT 'waiting' CHECK (status IN ('waiting', 'promoted', 'expired')),
+    UNIQUE (schedule_id, profile_id)
+);
+
+ALTER TABLE waitlists ENABLE ROW LEVEL SECURITY;
+CREATE POLICY waitlists_isolation ON waitlists FOR ALL USING (gym_id = (SELECT gym_id FROM profiles WHERE id = auth.uid()));
+
+CREATE OR REPLACE FUNCTION auto_promote_waitlist()
+RETURNS TRIGGER AS $$
+DECLARE
+    next_waitlist_id UUID;
+    next_profile_id UUID;
+BEGIN
+    IF OLD.status IN ('booked', 'checked_in') AND NEW.status = 'cancelled' THEN
+        SELECT id, profile_id INTO next_waitlist_id, next_profile_id
+        FROM waitlists
+        WHERE schedule_id = NEW.schedule_id AND status = 'waiting'
+        ORDER BY joined_at ASC
+        LIMIT 1;
+
+        IF next_waitlist_id IS NOT NULL THEN
+            UPDATE waitlists SET status = 'promoted' WHERE id = next_waitlist_id;
+
+            INSERT INTO class_bookings (schedule_id, profile_id, status)
+            VALUES (NEW.schedule_id, next_profile_id, 'booked');
+
+            INSERT INTO notification_queue (gym_id, profile_id, channel, recipient, subject, content)
+            SELECT (SELECT gym_id FROM class_schedules WHERE id = NEW.schedule_id),
+                   next_profile_id,
+                   'email',
+                   (SELECT email FROM profiles WHERE id = next_profile_id),
+                   'Waitlist Promotion',
+                   'You have been promoted from the waitlist and are now booked in the class!';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_auto_promote_waitlist ON class_bookings;
+CREATE TRIGGER trg_auto_promote_waitlist
+AFTER UPDATE ON class_bookings
+FOR EACH ROW EXECUTE FUNCTION auto_promote_waitlist();
+
+
+-- GYM-22: POS Real-time Stock Control
+CREATE OR REPLACE FUNCTION decrement_stock_on_sale()
+RETURNS TRIGGER AS $$
+DECLARE
+    current_stock INTEGER;
+    min_stock INTEGER;
+    p_gym_id UUID;
+BEGIN
+    IF NEW.product_id IS NOT NULL THEN
+        UPDATE products SET stock_quantity = stock_quantity - NEW.quantity, updated_at = CURRENT_TIMESTAMP
+        WHERE id = NEW.product_id
+        RETURNING stock_quantity, min_stock_alert, gym_id INTO current_stock, min_stock, p_gym_id;
+
+        INSERT INTO inventory_ledger (gym_id, product_id, change_amount, reason, reference_id)
+        VALUES (p_gym_id, NEW.product_id, -NEW.quantity, 'sale', NEW.invoice_id);
+
+        IF current_stock < min_stock THEN
+            INSERT INTO notification_queue (gym_id, profile_id, channel, recipient, subject, content)
+            VALUES (
+                p_gym_id,
+                NULL,
+                'email',
+                (SELECT contact_email FROM gyms WHERE id = p_gym_id),
+                'Low Stock Alert',
+                'Product ' || (SELECT name FROM products WHERE id = NEW.product_id) || ' is low on stock. Current: ' || current_stock
+            );
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_decrement_stock_on_sale ON invoice_items;
+CREATE TRIGGER trg_decrement_stock_on_sale
+AFTER INSERT ON invoice_items
+FOR EACH ROW EXECUTE FUNCTION decrement_stock_on_sale();
+
+
+-- GYM-23: Event-Based Marketing on Payment Fail
+CREATE OR REPLACE FUNCTION trigger_marketing_on_payment_fail()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.status = 'failed' AND OLD.status != 'failed' THEN
+        INSERT INTO webhook_events (gym_id, provider, provider_event_id, event_type, payload)
+        VALUES (
+            NEW.gym_id,
+            'custom',
+            uuid_generate_v4()::text,
+            'payment_failed',
+            jsonb_build_object('profile_id', NEW.profile_id, 'amount', NEW.amount)
+        );
+
+        INSERT INTO notification_queue (gym_id, profile_id, channel, recipient, subject, content)
+        VALUES (
+            NEW.gym_id,
+            NEW.profile_id,
+            'email',
+            (SELECT email FROM profiles WHERE id = NEW.profile_id),
+            'Payment Failed',
+            'Your recent payment of ' || NEW.amount || ' failed. Please update your payment method.'
+        );
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_marketing_payment_fail ON payments;
+CREATE TRIGGER trg_marketing_payment_fail
+AFTER UPDATE ON payments
+FOR EACH ROW EXECUTE FUNCTION trigger_marketing_on_payment_fail();
