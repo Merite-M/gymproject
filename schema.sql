@@ -11,12 +11,24 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- MODULE 1: MULTI-TENANT CORE & ACCESS CONTROL
 -- ==============================================================================
 
--- GYMS TABLE (Multi-Tenant Core)
-CREATE TABLE IF NOT EXISTS gyms (
+-- TENANTS TABLE (Multi-Tenant Core)
+CREATE TABLE IF NOT EXISTS tenants (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
     country VARCHAR(100) DEFAULT 'Rwanda',
     timezone VARCHAR(100) DEFAULT 'Africa/Kigali',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- CLUBS/BRANCHES TABLE (Hierarchy under Tenants)
+CREATE TABLE IF NOT EXISTS branches (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    address TEXT,
+    contact_email VARCHAR(255),
+    phone_number VARCHAR(50),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -28,7 +40,7 @@ CREATE TABLE IF NOT EXISTS gyms (
 -- PROFILES (Users/Members/Staff)
 CREATE TABLE IF NOT EXISTS profiles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     first_name VARCHAR(150) NOT NULL,
     last_name VARCHAR(150) NOT NULL,
     email VARCHAR(255),
@@ -40,8 +52,8 @@ CREATE TABLE IF NOT EXISTS profiles (
     master_account_id UUID REFERENCES profiles(id) ON DELETE SET NULL, -- For family linked accounts
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (gym_id, email),
-    UNIQUE (gym_id, phone)
+    UNIQUE (tenant_id, email),
+    UNIQUE (tenant_id, phone)
 );
 
 -- MEMBERSHIPS
@@ -49,7 +61,7 @@ CREATE TABLE IF NOT EXISTS profiles (
 CREATE TABLE IF NOT EXISTS memberships (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     membership_type VARCHAR(100) NOT NULL,
     billing_interval VARCHAR(50) DEFAULT 'monthly' CHECK (billing_interval IN ('weekly', 'monthly', 'annual', 'one_time', 'per_visit')),
     start_date DATE NOT NULL,
@@ -67,6 +79,7 @@ CREATE TABLE IF NOT EXISTS memberships (
 -- MEMBERSHIP HOLDS (Freeze Windows)
 CREATE TABLE IF NOT EXISTS membership_holds (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     membership_id UUID REFERENCES memberships(id) ON DELETE CASCADE,
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
@@ -82,18 +95,18 @@ CREATE TABLE IF NOT EXISTS membership_holds (
 CREATE TABLE IF NOT EXISTS access_tokens (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     token_type VARCHAR(50) NOT NULL CHECK (token_type IN ('rfid_fob', 'ble_mac', 'qr_static', 'qr_dynamic')),
     token_value VARCHAR(255) NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (gym_id, token_value)
+    UNIQUE (tenant_id, token_value)
 );
 
 -- DOORS & HARDWARE RELAYS
 CREATE TABLE IF NOT EXISTS hardware_devices (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     device_type VARCHAR(50) DEFAULT 'shelly_relay',
     ip_address VARCHAR(50),
@@ -104,10 +117,10 @@ CREATE TABLE IF NOT EXISTS hardware_devices (
 
 -- LIVE CHECK-INS
 -- Optimized for high-velocity writes and partitioning if needed
-CREATE TABLE IF NOT EXISTS checkins (
+CREATE TABLE IF NOT EXISTS check_ins (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     device_id UUID REFERENCES hardware_devices(id) ON DELETE SET NULL,
     access_method VARCHAR(50) NOT NULL CHECK (access_method IN ('qr_code', 'rfid_fob', 'bluetooth', 'manual_override')),
     status VARCHAR(50) NOT NULL CHECK (status IN ('approved', 'denied_expired', 'denied_debt', 'denied_time', 'warning')),
@@ -116,8 +129,9 @@ CREATE TABLE IF NOT EXISTS checkins (
 );
 
 -- INDEX for high velocity queries on today's check-ins (Live Monitor)
-CREATE INDEX idx_checkins_gym_created ON checkins (gym_id, created_at DESC);
-CREATE INDEX idx_checkins_profile ON checkins (profile_id, created_at DESC);
+CREATE INDEX idx_check_ins_gym_created ON check_ins (tenant_id, created_at DESC);
+CREATE INDEX idx_check_ins_profile ON check_ins USING btree (profile_id) INCLUDE (created_at);
+CREATE INDEX idx_check_ins_tenant_status ON check_ins (tenant_id) WHERE status != 'approved';
 
 -- CO-FOUNDER CHALLENGE 1: SWIPE TIMEOUT (Prevent Tailgating)
 -- Triggers a constraint failing if a checkin for the same profile occurs within 3 seconds
@@ -125,9 +139,9 @@ CREATE OR REPLACE FUNCTION prevent_double_scan()
 RETURNS TRIGGER AS $$
 BEGIN
     IF EXISTS (
-        SELECT 1 FROM checkins
+        SELECT 1 FROM check_ins
         WHERE profile_id = NEW.profile_id
-        AND gym_id = NEW.gym_id
+        AND tenant_id = NEW.tenant_id
         AND created_at > (NEW.created_at - INTERVAL '3 seconds')
     ) THEN
         RAISE EXCEPTION 'Swipe timeout: Double scan detected within 3 seconds for profile %', NEW.profile_id;
@@ -137,7 +151,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_prevent_double_scan
-BEFORE INSERT ON checkins
+BEFORE INSERT ON check_ins
 FOR EACH ROW EXECUTE FUNCTION prevent_double_scan();
 
 
@@ -148,7 +162,7 @@ FOR EACH ROW EXECUTE FUNCTION prevent_double_scan();
 -- FACILITIES / ROOMS
 CREATE TABLE IF NOT EXISTS facilities (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     max_capacity INTEGER NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -157,7 +171,7 @@ CREATE TABLE IF NOT EXISTS facilities (
 -- CLASS CATEGORIES
 CREATE TABLE IF NOT EXISTS class_categories (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     color_hex VARCHAR(10),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -166,7 +180,7 @@ CREATE TABLE IF NOT EXISTS class_categories (
 -- CLASS SCHEDULES
 CREATE TABLE IF NOT EXISTS class_schedules (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     category_id UUID REFERENCES class_categories(id),
     facility_id UUID REFERENCES facilities(id),
     trainer_id UUID REFERENCES profiles(id),
@@ -187,7 +201,7 @@ BEGIN
     IF EXISTS (
         SELECT 1 FROM class_schedules
         WHERE trainer_id = NEW.trainer_id
-        AND gym_id = NEW.gym_id
+        AND tenant_id = NEW.tenant_id
         AND is_cancelled = FALSE
         AND id != NEW.id -- exclude self on update
         AND (NEW.start_time, NEW.end_time) OVERLAPS (start_time, end_time)
@@ -199,7 +213,7 @@ BEGIN
     IF EXISTS (
         SELECT 1 FROM class_schedules
         WHERE facility_id = NEW.facility_id
-        AND gym_id = NEW.gym_id
+        AND tenant_id = NEW.tenant_id
         AND is_cancelled = FALSE
         AND id != NEW.id
         AND (NEW.start_time, NEW.end_time) OVERLAPS (start_time, end_time)
@@ -218,6 +232,7 @@ FOR EACH ROW EXECUTE FUNCTION prevent_resource_conflict();
 -- CLASS ROSTERS (Bookings)
 CREATE TABLE IF NOT EXISTS class_bookings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     schedule_id UUID REFERENCES class_schedules(id) ON DELETE CASCADE,
     profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     status VARCHAR(50) DEFAULT 'booked' CHECK (status IN ('booked', 'checked_in', 'no_show', 'cancelled', 'waitlisted')),
@@ -233,7 +248,7 @@ CREATE TABLE IF NOT EXISTS class_bookings (
 -- INVENTORY PRODUCTS
 CREATE TABLE IF NOT EXISTS products (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     name VARCHAR(200) NOT NULL,
     sku VARCHAR(100),
     barcode VARCHAR(100),
@@ -250,7 +265,7 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE TABLE IF NOT EXISTS member_tabs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     balance DECIMAL(12, 2) DEFAULT 0.00, -- Negative = owes money, Positive = store credit
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(profile_id)
@@ -259,7 +274,7 @@ CREATE TABLE IF NOT EXISTS member_tabs (
 -- INVOICES (Accrued Revenue - Separate from memberships)
 CREATE TABLE IF NOT EXISTS invoices (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     status VARCHAR(50) DEFAULT 'unpaid' CHECK (status IN ('draft', 'unpaid', 'paid', 'void', 'refunded')),
     subtotal DECIMAL(12, 2) NOT NULL,
@@ -273,11 +288,12 @@ CREATE TABLE IF NOT EXISTS invoices (
 
 -- PARTIAL INDEX: Optimization for Dunning/Billing cron scripts
 -- Rapidly find unpaid invoices without scanning paid ones
-CREATE INDEX idx_unpaid_invoices ON invoices (gym_id, due_date) WHERE status = 'unpaid';
+CREATE INDEX idx_unpaid_invoices ON invoices (tenant_id, due_date) WHERE status = 'unpaid';
 
 -- INVOICE ITEMS
 CREATE TABLE IF NOT EXISTS invoice_items (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     invoice_id UUID REFERENCES invoices(id) ON DELETE CASCADE,
     product_id UUID REFERENCES products(id), -- Nullable for membership fees
     description VARCHAR(255) NOT NULL,
@@ -290,7 +306,7 @@ CREATE TABLE IF NOT EXISTS invoice_items (
 -- PAYMENTS & SHIFT LEDGERS (Prevent Cash Fraud)
 CREATE TABLE IF NOT EXISTS shift_ledgers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     staff_id UUID REFERENCES profiles(id),
     shift_start TIMESTAMP WITH TIME ZONE NOT NULL,
     shift_end TIMESTAMP WITH TIME ZONE,
@@ -304,7 +320,7 @@ CREATE TABLE IF NOT EXISTS shift_ledgers (
 CREATE TABLE IF NOT EXISTS payments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     invoice_id UUID REFERENCES invoices(id) ON DELETE CASCADE,
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     profile_id UUID REFERENCES profiles(id),
     shift_id UUID REFERENCES shift_ledgers(id),
     amount DECIMAL(12, 2) NOT NULL,
@@ -321,7 +337,7 @@ CREATE TABLE IF NOT EXISTS payments (
 -- ANALYTICS SNAPSHOTS (CO-FOUNDER CHALLENGE 3: Predictive Churn)
 CREATE TABLE IF NOT EXISTS analytics_snapshots (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     snapshot_date DATE NOT NULL,
     trailing_4wk_avg_visits DECIMAL(5, 2) NOT NULL,
@@ -334,7 +350,7 @@ CREATE TABLE IF NOT EXISTS analytics_snapshots (
 -- WORKFLOW TRIGGERS
 CREATE TABLE IF NOT EXISTS marketing_workflows (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     name VARCHAR(200) NOT NULL,
     trigger_type VARCHAR(100) NOT NULL, -- e.g., 'absence_14_days', 'churn_risk_high'
     is_active BOOLEAN DEFAULT TRUE,
@@ -345,16 +361,16 @@ CREATE TABLE IF NOT EXISTS marketing_workflows (
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ==============================================================================
 
-ALTER TABLE gyms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE checkins ENABLE ROW LEVEL SECURITY;
+ALTER TABLE check_ins ENABLE ROW LEVEL SECURITY;
 ALTER TABLE class_bookings ENABLE ROW LEVEL SECURITY;
 
 -- 1. GYM ISOLATION: Staff/Admin can view everything in their gym
 CREATE POLICY staff_gym_isolation ON profiles
     FOR ALL
     USING (
-        gym_id = (SELECT gym_id FROM profiles WHERE id = auth.uid())
+        tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid())
         AND (SELECT role FROM profiles WHERE id = auth.uid()) IN ('staff', 'admin')
     );
 
@@ -371,7 +387,7 @@ CREATE POLICY member_own_bookings ON class_bookings
 -- 4. READ-ONLY SCHEDULING: Everyone can see the class schedule
 CREATE POLICY public_class_schedules ON class_schedules
     FOR SELECT
-    USING (gym_id = (SELECT gym_id FROM profiles WHERE id = auth.uid()));
+    USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
 
 -- ==============================================================================
 -- FRONT DESK & DASHBOARD ENHANCEMENTS
@@ -381,7 +397,7 @@ CREATE POLICY public_class_schedules ON class_schedules
 CREATE TABLE IF NOT EXISTS member_notes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     author_id UUID REFERENCES profiles(id) ON DELETE SET NULL, -- Staff who wrote it
     content TEXT NOT NULL,
     is_pinned BOOLEAN DEFAULT FALSE,
@@ -396,7 +412,7 @@ CREATE POLICY staff_view_notes ON member_notes FOR ALL USING ((SELECT role FROM 
 CREATE OR REPLACE VIEW vw_reception_monitor AS
 SELECT
     c.id AS checkin_id,
-    c.gym_id,
+    c.tenant_id,
     c.created_at AS checkin_time,
     c.access_method,
     c.status AS checkin_status,
@@ -412,7 +428,7 @@ SELECT
         (SELECT sum(total) FROM invoices WHERE profile_id = p.id AND status = 'unpaid'),
         0.00
     ) AS overdue_invoices_total
-FROM checkins c
+FROM check_ins c
 JOIN profiles p ON c.profile_id = p.id
 LEFT JOIN memberships m ON m.profile_id = p.id AND m.status = 'active'
 LEFT JOIN member_tabs t ON t.profile_id = p.id
@@ -422,13 +438,13 @@ ORDER BY c.created_at DESC;
 -- Aggregates daily metrics for the staff portal dashboard
 CREATE OR REPLACE VIEW vw_front_desk_dashboard AS
 SELECT
-    g.id AS gym_id,
+    g.id AS tenant_id,
     CURRENT_DATE AS report_date,
-    (SELECT COUNT(*) FROM checkins WHERE gym_id = g.id AND DATE(created_at AT TIME ZONE g.timezone) = CURRENT_DATE) AS total_checkins_today,
-    (SELECT COUNT(*) FROM class_bookings cb JOIN class_schedules cs ON cb.schedule_id = cs.id WHERE cs.gym_id = g.id AND DATE(cs.start_time AT TIME ZONE g.timezone) = CURRENT_DATE AND cb.status = 'checked_in') AS classes_attended_today,
-    (SELECT COUNT(*) FROM profiles WHERE gym_id = g.id AND status = 'active') AS total_active_members,
-    (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE gym_id = g.id AND status = 'completed' AND DATE(created_at AT TIME ZONE g.timezone) = CURRENT_DATE) AS revenue_collected_today
-FROM gyms g;
+    (SELECT COUNT(*) FROM check_ins WHERE tenant_id = g.id AND DATE(created_at AT TIME ZONE g.timezone) = CURRENT_DATE) AS total_check_ins_today,
+    (SELECT COUNT(*) FROM class_bookings cb JOIN class_schedules cs ON cb.schedule_id = cs.id WHERE cs.tenant_id = g.id AND DATE(cs.start_time AT TIME ZONE g.timezone) = CURRENT_DATE AND cb.status = 'checked_in') AS classes_attended_today,
+    (SELECT COUNT(*) FROM profiles WHERE tenant_id = g.id AND status = 'active') AS total_active_members,
+    (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE tenant_id = g.id AND status = 'completed' AND DATE(created_at AT TIME ZONE g.timezone) = CURRENT_DATE) AS revenue_collected_today
+FROM tenants g;
 
 -- ==============================================================================
 -- MODULE 7: OPERATIONS, ROSTER TRACKING & SHIFT TASKS (GYM-26)
@@ -437,7 +453,7 @@ FROM gyms g;
 -- STAFF ROSTERS (Schedules)
 CREATE TABLE IF NOT EXISTS staff_rosters (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     staff_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     shift_start TIMESTAMP WITH TIME ZONE NOT NULL,
     shift_end TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -448,7 +464,7 @@ CREATE TABLE IF NOT EXISTS staff_rosters (
 -- TASK TEMPLATES (Checklist definitions)
 CREATE TABLE IF NOT EXISTS task_templates (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     description TEXT,
     role_target VARCHAR(100), -- E.g. 'reception', 'cleaner'
@@ -461,7 +477,7 @@ CREATE TABLE IF NOT EXISTS task_templates (
 -- SHIFT TASKS (Actual execution log)
 CREATE TABLE IF NOT EXISTS shift_tasks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     shift_id UUID REFERENCES shift_ledgers(id) ON DELETE CASCADE,
     task_template_id UUID REFERENCES task_templates(id) ON DELETE CASCADE,
     status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
@@ -483,15 +499,15 @@ ALTER TABLE shift_tasks ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY staff_rosters_isolation ON staff_rosters
     FOR ALL
-    USING (gym_id = (SELECT gym_id FROM profiles WHERE id = auth.uid()));
+    USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
 
 CREATE POLICY task_templates_isolation ON task_templates
     FOR ALL
-    USING (gym_id = (SELECT gym_id FROM profiles WHERE id = auth.uid()));
+    USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
 
 CREATE POLICY shift_tasks_isolation ON shift_tasks
     FOR ALL
-    USING (gym_id = (SELECT gym_id FROM profiles WHERE id = auth.uid()));
+    USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
 
 
 -- ==============================================================================
@@ -570,7 +586,7 @@ FOR EACH ROW EXECUTE FUNCTION enforce_shift_completion();
 CREATE OR REPLACE VIEW vw_manager_shift_metrics AS
 SELECT
     sl.id AS shift_id,
-    sl.gym_id,
+    sl.tenant_id,
     sl.staff_id,
     p.first_name,
     p.last_name,
@@ -590,7 +606,7 @@ JOIN profiles p ON sl.staff_id = p.id
 LEFT JOIN shift_tasks st ON sl.id = st.shift_id
 LEFT JOIN task_templates tt ON st.task_template_id = tt.id
 GROUP BY
-    sl.id, sl.gym_id, sl.staff_id, p.first_name, p.last_name, sl.shift_start, sl.shift_end, sl.status;
+    sl.id, sl.tenant_id, sl.staff_id, p.first_name, p.last_name, sl.shift_start, sl.shift_end, sl.status;
 -- GYM-13: Digital Waiver
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS waiver_signed BOOLEAN DEFAULT FALSE;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS waiver_signed_at TIMESTAMP WITH TIME ZONE;
@@ -608,9 +624,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_check_waiver ON checkins;
+DROP TRIGGER IF EXISTS trg_check_waiver ON check_ins;
 CREATE TRIGGER trg_check_waiver
-BEFORE INSERT ON checkins
+BEFORE INSERT ON check_ins
 FOR EACH ROW EXECUTE FUNCTION check_waiver_before_checkin();
 
 
@@ -641,8 +657,8 @@ BEGIN
     SELECT * INTO m FROM memberships WHERE id = m_id;
 
     IF m.end_date IS NOT NULL AND CURRENT_DATE < m.end_date THEN
-        INSERT INTO invoices (gym_id, profile_id, status, subtotal, tax, total, due_date)
-        VALUES (m.gym_id, m.profile_id, 'unpaid', cancel_fee, 0.00, cancel_fee, CURRENT_DATE);
+        INSERT INTO invoices (tenant_id, profile_id, status, subtotal, tax, total, due_date)
+        VALUES (m.tenant_id, m.profile_id, 'unpaid', cancel_fee, 0.00, cancel_fee, CURRENT_DATE);
     END IF;
 
     UPDATE memberships SET status = 'cancelled', cancellation_date = CURRENT_DATE WHERE id = m_id;
@@ -684,7 +700,7 @@ FOR EACH ROW EXECUTE FUNCTION enforce_class_capacity();
 -- GYM-21: Waitlists
 CREATE TABLE IF NOT EXISTS waitlists (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     schedule_id UUID REFERENCES class_schedules(id) ON DELETE CASCADE,
     profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -693,7 +709,7 @@ CREATE TABLE IF NOT EXISTS waitlists (
 );
 
 ALTER TABLE waitlists ENABLE ROW LEVEL SECURITY;
-CREATE POLICY waitlists_isolation ON waitlists FOR ALL USING (gym_id = (SELECT gym_id FROM profiles WHERE id = auth.uid()));
+CREATE POLICY waitlists_isolation ON waitlists FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
 
 CREATE OR REPLACE FUNCTION auto_promote_waitlist()
 RETURNS TRIGGER AS $$
@@ -714,8 +730,8 @@ BEGIN
             INSERT INTO class_bookings (schedule_id, profile_id, status)
             VALUES (NEW.schedule_id, next_profile_id, 'booked');
 
-            INSERT INTO notification_queue (gym_id, profile_id, channel, recipient, subject, content)
-            SELECT (SELECT gym_id FROM class_schedules WHERE id = NEW.schedule_id),
+            INSERT INTO notification_queue (tenant_id, profile_id, channel, recipient, subject, content)
+            SELECT (SELECT tenant_id FROM class_schedules WHERE id = NEW.schedule_id),
                    next_profile_id,
                    'email',
                    (SELECT email FROM profiles WHERE id = next_profile_id),
@@ -739,23 +755,23 @@ RETURNS TRIGGER AS $$
 DECLARE
     current_stock INTEGER;
     min_stock INTEGER;
-    p_gym_id UUID;
+    p_tenant_id UUID;
 BEGIN
     IF NEW.product_id IS NOT NULL THEN
         UPDATE products SET stock_quantity = stock_quantity - NEW.quantity, updated_at = CURRENT_TIMESTAMP
         WHERE id = NEW.product_id
-        RETURNING stock_quantity, min_stock_alert, gym_id INTO current_stock, min_stock, p_gym_id;
+        RETURNING stock_quantity, min_stock_alert, tenant_id INTO current_stock, min_stock, p_tenant_id;
 
-        INSERT INTO inventory_ledger (gym_id, product_id, change_amount, reason, reference_id)
-        VALUES (p_gym_id, NEW.product_id, -NEW.quantity, 'sale', NEW.invoice_id);
+        INSERT INTO inventory_ledger (tenant_id, product_id, change_amount, reason, reference_id)
+        VALUES (p_tenant_id, NEW.product_id, -NEW.quantity, 'sale', NEW.invoice_id);
 
         IF current_stock < min_stock THEN
-            INSERT INTO notification_queue (gym_id, profile_id, channel, recipient, subject, content)
+            INSERT INTO notification_queue (tenant_id, profile_id, channel, recipient, subject, content)
             VALUES (
-                p_gym_id,
+                p_tenant_id,
                 NULL,
                 'email',
-                (SELECT contact_email FROM gyms WHERE id = p_gym_id),
+                (SELECT contact_email FROM tenants WHERE id = p_tenant_id),
                 'Low Stock Alert',
                 'Product ' || (SELECT name FROM products WHERE id = NEW.product_id) || ' is low on stock. Current: ' || current_stock
             );
@@ -776,18 +792,18 @@ CREATE OR REPLACE FUNCTION trigger_marketing_on_payment_fail()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.status = 'failed' AND OLD.status != 'failed' THEN
-        INSERT INTO webhook_events (gym_id, provider, provider_event_id, event_type, payload)
+        INSERT INTO webhook_events (tenant_id, provider, provider_event_id, event_type, payload)
         VALUES (
-            NEW.gym_id,
+            NEW.tenant_id,
             'custom',
             uuid_generate_v4()::text,
             'payment_failed',
             jsonb_build_object('profile_id', NEW.profile_id, 'amount', NEW.amount)
         );
 
-        INSERT INTO notification_queue (gym_id, profile_id, channel, recipient, subject, content)
+        INSERT INTO notification_queue (tenant_id, profile_id, channel, recipient, subject, content)
         VALUES (
-            NEW.gym_id,
+            NEW.tenant_id,
             NEW.profile_id,
             'email',
             (SELECT email FROM profiles WHERE id = NEW.profile_id),
@@ -803,3 +819,56 @@ DROP TRIGGER IF EXISTS trg_marketing_payment_fail ON payments;
 CREATE TRIGGER trg_marketing_payment_fail
 AFTER UPDATE ON payments
 FOR EACH ROW EXECUTE FUNCTION trigger_marketing_on_payment_fail();
+
+
+-- ==============================================================================
+-- ADDITIONAL RLS POLICIES (Enforcing tenant_id isolation on all tables)
+-- ==============================================================================
+
+ALTER TABLE branches ENABLE ROW LEVEL SECURITY;
+CREATE POLICY branches_isolation ON branches FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
+
+ALTER TABLE memberships ENABLE ROW LEVEL SECURITY;
+CREATE POLICY memberships_isolation ON memberships FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
+
+ALTER TABLE membership_holds ENABLE ROW LEVEL SECURITY;
+CREATE POLICY membership_holds_isolation ON membership_holds FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
+
+ALTER TABLE access_tokens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY access_tokens_isolation ON access_tokens FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
+
+ALTER TABLE hardware_devices ENABLE ROW LEVEL SECURITY;
+CREATE POLICY hardware_devices_isolation ON hardware_devices FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
+
+ALTER TABLE facilities ENABLE ROW LEVEL SECURITY;
+CREATE POLICY facilities_isolation ON facilities FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
+
+ALTER TABLE class_categories ENABLE ROW LEVEL SECURITY;
+CREATE POLICY class_categories_isolation ON class_categories FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
+
+ALTER TABLE class_schedules ENABLE ROW LEVEL SECURITY;
+CREATE POLICY class_schedules_isolation ON class_schedules FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
+
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+CREATE POLICY products_isolation ON products FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
+
+ALTER TABLE member_tabs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY member_tabs_isolation ON member_tabs FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
+
+ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
+CREATE POLICY invoices_isolation ON invoices FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
+
+ALTER TABLE invoice_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY invoice_items_isolation ON invoice_items FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
+
+ALTER TABLE shift_ledgers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY shift_ledgers_isolation ON shift_ledgers FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
+
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY payments_isolation ON payments FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
+
+ALTER TABLE analytics_snapshots ENABLE ROW LEVEL SECURITY;
+CREATE POLICY analytics_snapshots_isolation ON analytics_snapshots FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
+
+ALTER TABLE marketing_workflows ENABLE ROW LEVEL SECURITY;
+CREATE POLICY marketing_workflows_isolation ON marketing_workflows FOR ALL USING (tenant_id = (SELECT tenant_id FROM profiles WHERE id = auth.uid()));
