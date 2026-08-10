@@ -429,3 +429,165 @@ SELECT
     (SELECT COUNT(*) FROM profiles WHERE gym_id = g.id AND status = 'active') AS total_active_members,
     (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE gym_id = g.id AND status = 'completed' AND DATE(created_at AT TIME ZONE g.timezone) = CURRENT_DATE) AS revenue_collected_today
 FROM gyms g;
+
+-- ==============================================================================
+-- MODULE 7: OPERATIONS, ROSTER TRACKING & SHIFT TASKS (GYM-26)
+-- ==============================================================================
+
+-- STAFF ROSTERS (Schedules)
+CREATE TABLE IF NOT EXISTS staff_rosters (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    staff_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    shift_start TIMESTAMP WITH TIME ZONE NOT NULL,
+    shift_end TIMESTAMP WITH TIME ZONE NOT NULL,
+    role VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- TASK TEMPLATES (Checklist definitions)
+CREATE TABLE IF NOT EXISTS task_templates (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    role_target VARCHAR(100), -- E.g. 'reception', 'cleaner'
+    is_mandatory BOOLEAN DEFAULT TRUE,
+    requires_photo_evidence BOOLEAN DEFAULT FALSE,
+    requires_iot_validation BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- SHIFT TASKS (Actual execution log)
+CREATE TABLE IF NOT EXISTS shift_tasks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+    shift_id UUID REFERENCES shift_ledgers(id) ON DELETE CASCADE,
+    task_template_id UUID REFERENCES task_templates(id) ON DELETE CASCADE,
+    status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
+    completed_at TIMESTAMP WITH TIME ZONE,
+    completed_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    photo_url TEXT,
+    iot_sensor_data JSONB,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ==============================================================================
+-- RLS POLICIES FOR OPERATIONS MODULE
+-- ==============================================================================
+
+ALTER TABLE staff_rosters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE task_templates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shift_tasks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY staff_rosters_isolation ON staff_rosters
+    FOR ALL
+    USING (gym_id = (SELECT gym_id FROM profiles WHERE id = auth.uid()));
+
+CREATE POLICY task_templates_isolation ON task_templates
+    FOR ALL
+    USING (gym_id = (SELECT gym_id FROM profiles WHERE id = auth.uid()));
+
+CREATE POLICY shift_tasks_isolation ON shift_tasks
+    FOR ALL
+    USING (gym_id = (SELECT gym_id FROM profiles WHERE id = auth.uid()));
+
+
+-- ==============================================================================
+-- VALIDATION TRIGGERS FOR SHIFT TASKS (CO-FOUNDER CHALLENGE: QUALITY CONTROL)
+-- ==============================================================================
+
+-- 1. Enforce Evidence for Completed Tasks
+CREATE OR REPLACE FUNCTION enforce_task_evidence()
+RETURNS TRIGGER AS $$
+DECLARE
+    template_rec RECORD;
+BEGIN
+    -- Only check when marking as completed
+    IF NEW.status = 'completed' THEN
+        SELECT requires_photo_evidence, requires_iot_validation
+        INTO template_rec
+        FROM task_templates
+        WHERE id = NEW.task_template_id;
+
+        IF template_rec.requires_photo_evidence = TRUE AND (NEW.photo_url IS NULL OR NEW.photo_url = '') THEN
+            RAISE EXCEPTION 'Conflict: This task requires photo evidence to be marked as completed.';
+        END IF;
+
+        IF template_rec.requires_iot_validation = TRUE AND (NEW.iot_sensor_data IS NULL) THEN
+            RAISE EXCEPTION 'Conflict: This task requires IoT sensor validation data to be marked as completed.';
+        END IF;
+
+        IF NEW.completed_at IS NULL THEN
+            NEW.completed_at = CURRENT_TIMESTAMP;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_enforce_task_evidence
+BEFORE UPDATE ON shift_tasks
+FOR EACH ROW EXECUTE FUNCTION enforce_task_evidence();
+
+-- 2. Prevent Closing Shift Ledger with Incomplete Mandatory Tasks
+CREATE OR REPLACE FUNCTION enforce_shift_completion()
+RETURNS TRIGGER AS $$
+DECLARE
+    incomplete_tasks INTEGER;
+BEGIN
+    -- If closing the shift, check for mandatory tasks
+    IF NEW.status = 'closed' AND OLD.status != 'closed' THEN
+        SELECT COUNT(*)
+        INTO incomplete_tasks
+        FROM shift_tasks st
+        JOIN task_templates tt ON st.task_template_id = tt.id
+        WHERE st.shift_id = NEW.id
+        AND tt.is_mandatory = TRUE
+        AND st.status != 'completed';
+
+        IF incomplete_tasks > 0 THEN
+            RAISE EXCEPTION 'Conflict: Cannot close shift with % incomplete mandatory tasks.', incomplete_tasks;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_enforce_shift_completion
+BEFORE UPDATE ON shift_ledgers
+FOR EACH ROW EXECUTE FUNCTION enforce_shift_completion();
+
+
+-- ==============================================================================
+-- MODULE 7 VIEWS: MANAGER SHIFT DASHBOARD
+-- ==============================================================================
+
+-- Aggregates task completion metrics per shift for the manager dashboard
+CREATE OR REPLACE VIEW vw_manager_shift_metrics AS
+SELECT
+    sl.id AS shift_id,
+    sl.gym_id,
+    sl.staff_id,
+    p.first_name,
+    p.last_name,
+    sl.shift_start,
+    sl.shift_end,
+    sl.status AS shift_status,
+    COUNT(st.id) AS total_tasks,
+    SUM(CASE WHEN st.status = 'completed' THEN 1 ELSE 0 END) AS completed_tasks,
+    SUM(CASE WHEN tt.is_mandatory = TRUE AND st.status != 'completed' THEN 1 ELSE 0 END) AS pending_mandatory_tasks,
+    CASE
+        WHEN COUNT(st.id) > 0 THEN
+            ROUND((SUM(CASE WHEN st.status = 'completed' THEN 1 ELSE 0 END)::numeric / COUNT(st.id)::numeric) * 100, 2)
+        ELSE 0
+    END AS completion_rate_percentage
+FROM shift_ledgers sl
+JOIN profiles p ON sl.staff_id = p.id
+LEFT JOIN shift_tasks st ON sl.id = st.shift_id
+LEFT JOIN task_templates tt ON st.task_template_id = tt.id
+GROUP BY
+    sl.id, sl.gym_id, sl.staff_id, p.first_name, p.last_name, sl.shift_start, sl.shift_end, sl.status;
