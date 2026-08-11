@@ -1,0 +1,13 @@
+{
+  "name": "gym-backend-core",
+  "version": "1.0.0",
+  "description": "Gym SaaS Backend Core",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "build": "echo 'No build step required yet'"
+  },
+  "dependencies": {
+    "express": "^4.19.0"
+  }
+}
