@@ -10,6 +10,7 @@ export default function WaiverPage() {
   const [profileId, setProfileId] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [authToken, setAuthToken] = useState('');
 
   const clearSignature = () => {
     sigCanvas.current?.clear();
@@ -60,8 +61,11 @@ export default function WaiverPage() {
       formData.append('profile_id', profileId);
 
       // Send to backend
-      const response = await fetch('http://localhost:3001/api/waivers/sign', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/waivers/sign`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        },
         body: formData,
       });
 
@@ -107,6 +111,13 @@ export default function WaiverPage() {
               className="w-full border p-2 rounded text-black"
               value={profileId}
               onChange={(e) => setProfileId(e.target.value)}
+           />
+           <input
+              type="text"
+              placeholder="Auth Token (Bearer)"
+              className="w-full border p-2 rounded text-black"
+              value={authToken}
+              onChange={(e) => setAuthToken(e.target.value)}
            />
         </div>
 

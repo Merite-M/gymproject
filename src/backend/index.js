@@ -34,6 +34,18 @@ app.post('/api/waivers/sign', upload.single('pdf'), async (req, res) => {
       return res.status(500).json({ error: 'Supabase not configured' });
     }
 
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: 'Missing Authorization header' });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const fileName = `${tenant_id}/${profile_id}/waiver_${timestamp}.pdf`;
 
@@ -106,7 +118,7 @@ app.post('/api/checkin', async (req, res) => {
             access_method: access_method || 'manual_override',
             status: 'warning' // Or a specific denied status, let's use warning as per spec 'Liability Waiver Unsigned'
         });
-        return res.status(403).json({ error: 'Waiver not signed', status: 'warning', reason: 'Liability Waiver Unsigned' });
+        return res.status(200).json({ success: true, status: 'warning', reason: 'Liability Waiver Unsigned' });
     }
 
     // Check membership status logic can go here (simplified for now)
@@ -124,7 +136,7 @@ app.post('/api/checkin', async (req, res) => {
             access_method: access_method || 'manual_override',
             status: 'warning'
         });
-        return res.status(403).json({ error: 'Waiver expired', status: 'warning', reason: 'Liability Waiver Expired (Needs Renewal)' });
+        return res.status(200).json({ success: true, status: 'warning', reason: 'Liability Waiver Expired (Needs Renewal)' });
     }
 
     const { data: checkin, error: checkinError } = await supabase.from('check_ins').insert({
