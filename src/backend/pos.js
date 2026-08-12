@@ -1,0 +1,270 @@
+const express = require('express');
+const { createClient } = require('@supabase/supabase-js');
+const router = express.Router();
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+let supabase;
+
+if (supabaseUrl && supabaseKey) {
+  supabase = createClient(supabaseUrl, supabaseKey);
+}
+
+// Fetch products
+router.get('/products', async (req, res) => {
+  if (!supabase) return res.status(500).json({error: "Supabase config missing"});
+  try {
+    const { tenant_id } = req.query;
+    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('tenant_id', tenant_id)
+      .is('deleted_at', null);
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Process POS transaction
+router.post('/checkout', async (req, res) => {
+  if (!supabase) return res.status(500).json({error: "Supabase config missing"});
+  try {
+    const { tenant_id, profile_id, items, method, shift_id, staff_id } = req.body;
+
+    if (!tenant_id || !items || items.length === 0 || !method) {
+      return res.status(400).json({ error: 'Missing required parameters' });
+    }
+
+    if (method === 'cash' && !shift_id) {
+       return res.status(400).json({ error: 'shift_id is required for cash transactions to prevent staff pocketing.' });
+    }
+
+    // Start a simulated transaction
+    let totalAmount = 0;
+    const validatedItems = [];
+
+    for (const item of items) {
+      const { product_id, quantity } = item;
+
+      // Get product
+      const { data: product, error: productError } = await supabase
+        .from('products')
+        .select('sell_price, stock_quantity, min_stock_alert')
+        .eq('id', product_id)
+        .eq('tenant_id', tenant_id)
+        .single();
+
+      if (productError || !product) {
+        return res.status(400).json({ error: `Product ${product_id} not found` });
+      }
+
+      if (product.stock_quantity < quantity) {
+        return res.status(400).json({ error: `Insufficient stock for product ${product_id}` });
+      }
+
+      totalAmount += product.sell_price * quantity;
+
+      // Keep validated details
+      validatedItems.push({
+          product_id,
+          quantity,
+          sell_price: product.sell_price,
+          name: item.name || 'Product',
+          min_stock_alert: product.min_stock_alert,
+          current_stock: product.stock_quantity
+      });
+    }
+
+    // Process based on method
+    if (method === 'member_tab') {
+      if (!profile_id) {
+        return res.status(400).json({ error: 'profile_id required for member tab' });
+      }
+
+      // Check if primary card is declined (simulated edge case logic based on profile status or tags)
+      const { data: profile, error: profileError } = await supabase.from('profiles').select('status').eq('id', profile_id).single();
+      if (profileError) {
+          return res.status(400).json({ error: 'Profile lookup failed' });
+      }
+
+      if (profile && profile.status === 'debtor') {
+        return res.status(403).json({ error: 'Cannot charge to tab: Account is in debtor status. Please update payment method.' });
+      }
+
+      // Upsert member tab
+      const { data: existingTab, error: existingTabError } = await supabase
+        .from('member_tabs')
+        .select('balance, id')
+        .eq('profile_id', profile_id)
+        .eq('tenant_id', tenant_id)
+        .single();
+
+      if (existingTab) {
+        const newBalance = parseFloat(existingTab.balance) + totalAmount;
+        const { error: updateTabError } = await supabase.from('member_tabs').update({ balance: newBalance }).eq('id', existingTab.id);
+        if (updateTabError) throw updateTabError;
+      } else {
+        const { error: insertTabError } = await supabase.from('member_tabs').insert({
+          tenant_id,
+          profile_id,
+          balance: totalAmount
+        });
+        if (insertTabError) throw insertTabError;
+      }
+    }
+
+    // Create Invoice
+    const isUnpaid = method === 'member_tab' || method === 'momo';
+    const { data: invoice, error: invoiceError } = await supabase
+      .from('invoices')
+      .insert({
+        tenant_id,
+        profile_id,
+        subtotal: totalAmount,
+        total: totalAmount,
+        status: isUnpaid ? 'unpaid' : 'paid',
+        due_date: new Date().toISOString()
+      }).select().single();
+
+    if (invoiceError) throw invoiceError;
+
+    // Create Invoice Items and Deduct Stock
+    for (const item of validatedItems) {
+      const { product_id, quantity, sell_price, name, min_stock_alert, current_stock } = item;
+
+      const { error: itemError } = await supabase.from('invoice_items').insert({
+        tenant_id,
+        invoice_id: invoice.id,
+        product_id,
+        quantity,
+        unit_price: sell_price,
+        total_price: sell_price * quantity,
+        description: name
+      });
+      if (itemError) throw itemError;
+
+      // Deduct stock and record in ledger
+      const newStock = current_stock - quantity;
+
+      const { error: stockError } = await supabase.from('products').update({ stock_quantity: newStock }).eq('id', product_id);
+      if (stockError) throw stockError;
+
+      const { error: ledgerError } = await supabase.from('inventory_ledger').insert({
+        tenant_id,
+        product_id,
+        change_amount: -quantity,
+        reason: 'sale',
+        reference_id: invoice.id,
+        performed_by: staff_id
+      });
+      if (ledgerError) throw ledgerError;
+
+      // Low stock alert
+      if (newStock < min_stock_alert) {
+         const { error: notifError } = await supabase.from('notification_queue').insert({
+            tenant_id,
+            channel: 'email', // Or SMS/WhatsApp
+            recipient: 'admin@gym.com', // Would normally be fetched from tenant settings
+            subject: 'Low Stock Alert',
+            content: `Product ${product_id} is low on stock (${newStock} remaining).`
+         });
+         if (notifError) throw notifError;
+      }
+    }
+
+    // Record Payment
+    if (method !== 'member_tab') {
+      const paymentStatus = method === 'momo' ? 'pending' : 'completed';
+
+      const { error: paymentError } = await supabase.from('payments').insert({
+        tenant_id,
+        invoice_id: invoice.id,
+        profile_id,
+        shift_id: method === 'cash' ? shift_id : null,
+        amount: totalAmount,
+        method: method,
+        status: paymentStatus
+      });
+      if (paymentError) throw paymentError;
+
+      // If cash, update shift ledger expected cash
+      if (method === 'cash' && shift_id) {
+         const { data: shift, error: shiftFetchError } = await supabase.from('shift_ledgers').select('expected_cash').eq('id', shift_id).single();
+         if (shiftFetchError) throw shiftFetchError;
+
+         if (shift) {
+             const newExpected = parseFloat(shift.expected_cash || 0) + totalAmount;
+             const { error: shiftUpdateError } = await supabase.from('shift_ledgers').update({ expected_cash: newExpected }).eq('id', shift_id);
+             if (shiftUpdateError) throw shiftUpdateError;
+         }
+      }
+    }
+
+    res.json({ success: true, invoice_id: invoice.id, total: totalAmount });
+  } catch (error) {
+    console.error("Checkout error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Shift management (Till Audit)
+router.post('/shift/start', async (req, res) => {
+    if (!supabase) return res.status(500).json({error: "Supabase config missing"});
+    try {
+        const { tenant_id, staff_id, starting_cash } = req.body;
+        const { data, error } = await supabase.from('shift_ledgers').insert({
+            tenant_id,
+            staff_id,
+            shift_start: new Date().toISOString(),
+            starting_cash,
+            expected_cash: starting_cash,
+            status: 'open'
+        }).select().single();
+        if (error) throw error;
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/shift/end', async (req, res) => {
+    if (!supabase) return res.status(500).json({error: "Supabase config missing"});
+    try {
+        const { shift_id, actual_cash } = req.body;
+        const { data: shift, error: shiftFetchError } = await supabase.from('shift_ledgers').select('expected_cash, tenant_id').eq('id', shift_id).single();
+
+        if (shiftFetchError) throw shiftFetchError;
+
+        let status = 'closed';
+        if (parseFloat(actual_cash) !== parseFloat(shift.expected_cash)) {
+            status = 'discrepancy';
+            // Alert logic here
+            const { error: auditError } = await supabase.from('audit_logs').insert({
+                tenant_id: shift.tenant_id,
+                action_type: 'till_discrepancy',
+                entity_name: 'shift_ledgers',
+                entity_id: shift_id,
+                new_values: { expected: shift.expected_cash, actual: actual_cash }
+            });
+            if (auditError) throw auditError;
+        }
+
+        const { data, error } = await supabase.from('shift_ledgers').update({
+            shift_end: new Date().toISOString(),
+            actual_cash,
+            status
+        }).eq('id', shift_id).select().single();
+
+        if (error) throw error;
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+module.exports = router;

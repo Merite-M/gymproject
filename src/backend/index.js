@@ -159,6 +159,9 @@ app.post('/api/checkin', async (req, res) => {
   }
 });
 
+const posRoutes = require("./pos");
+app.use("/api/pos", posRoutes);
+
 app.listen(port, () => {
   console.log(`Backend server running on port ${port}`);
 });
