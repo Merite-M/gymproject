@@ -121,6 +121,29 @@ app.post('/api/checkin', async (req, res) => {
         return res.status(200).json({ success: true, status: 'warning', reason: 'Liability Waiver Unsigned' });
     }
 
+    // Off-peak operational control: doors can be locked or premium-gated
+    const { data: offPeak } = await supabase.rpc('evaluate_off_peak_access', {
+      target_tenant: tenant_id,
+      membership_tier: profile.membership_tier || null,
+      at_time: new Date().toISOString()
+    });
+
+    const activeWindow = offPeak && offPeak[0];
+    if (activeWindow && !activeWindow.allowed) {
+        await supabase.from('check_ins').insert({
+            tenant_id,
+            profile_id,
+            device_id: device_id || null,
+            access_method: access_method || 'manual_override',
+            status: 'denied_time'
+        });
+        return res.status(200).json({
+            success: true,
+            status: 'denied_time',
+            reason: `Access restricted: ${activeWindow.window_label}`
+        });
+    }
+
     // Check membership status logic can go here (simplified for now)
 
     // Check if waiver is older than 1 year
@@ -164,6 +187,9 @@ app.use("/api/pos", posRoutes);
 
 const staffRoutes = require("./staff");
 app.use("/api/staff", staffRoutes);
+
+const calendarRoutes = require("./calendar");
+app.use("/api/calendar", calendarRoutes);
 
 app.listen(port, () => {
   console.log(`Backend server running on port ${port}`);
