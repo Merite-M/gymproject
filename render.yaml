@@ -1,11 +1,11 @@
 services:
-  # 1. Render Web Service (Paid, always-on Node.js API backend hosting Express/Fastify, WebSockets, background billing crons, IoT triggers, and aggregators)
+  # 1. Render Web Service (Free, always-on Node.js API backend hosting Express/Fastify, WebSockets, background billing crons, IoT triggers, and aggregators)
   - type: web
     name: gym-backend-core
     env: node
-    plan: starter
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    plan: free
+    buildCommand: cd src/backend && npm install
+    startCommand: cd src/backend && node index.js
     envVars:
       - key: NODE_ENV
         value: production
@@ -14,5 +14,5 @@ services:
   - type: web
     name: gym-frontend-app
     env: static
-    buildCommand: npm install && npm run build
-    staticPublishPath: ./out
+    buildCommand: cd src/frontend && npm install && npm run build
+    staticPublishPath: src/frontend/out
