@@ -238,6 +238,11 @@ export default function POSTerminal() {
             });
             const result = await res.json();
 
+            if (!res.ok) {
+                 alert(`Error closing shift: ${result.error || 'Unknown error'}`);
+                 return;
+            }
+
             if (result.status === 'discrepancy') {
                  alert(`Shift closed with discrepancy. Expected: ${result.expected_cash}, Actual: ${result.actual_cash}`);
             } else {
