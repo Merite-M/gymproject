@@ -82,7 +82,7 @@ export default function POSTerminal() {
                     alert("Not enough stock!");
                     return prev;
                 }
-                return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
+                return prev.map((item: CartItem) => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
             }
             return [...prev, { ...product, quantity: 1 }];
         });
