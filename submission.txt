@@ -8,3 +8,4 @@ Accomplished:
 - Developed the Next.js staff marketing dashboard (`/staff/marketing/page.tsx`).
 - Addressed Review: Removed hardcoded Supabase URLs and dummy keys. Filtered the snapshots query by the authenticated user's `tenant_id` and explicitly only fetching rows where `churn_risk_score >= 80`. Added a client-side de-duplication pass for the UI display.
 - Passed frontend and backend compilation/linting successfully.
+- Fixed Render deployment issue: bound Express to 0.0.0.0 to fix port scan timeout.
