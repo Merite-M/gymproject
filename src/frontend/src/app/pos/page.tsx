@@ -121,7 +121,8 @@ export default function POSTerminal() {
 
     const fetchXReport = async () => {
         if (!tillStatus) return;
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/shift/${tillStatus.id}/x-report`);
+        const { data: _tenant } = await supabase.from('tenants').select('id').limit(1).single();
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/shift/${tillStatus.id}/x-report?tenant_id=${_tenant?.id}`);
         if (res.ok) {
             setShiftReport(await res.json());
         }
@@ -169,26 +170,41 @@ export default function POSTerminal() {
 
     const cartTotal = cart.reduce((sum, item) => sum + (item.sell_price * item.quantity), 0);
 
+
+    const openShift = async () => {
+        const startingCash = prompt("Audit: Please enter current physical till cash balance to open shift");
+        if (!startingCash) return null;
+
+        const { data: tenant } = await supabase.from('tenants').select('id').limit(1).single();
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/shift/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tenant_id: tenant?.id, staff_id: null, starting_cash: parseFloat(startingCash) })
+        });
+
+        if (res.ok) {
+            const shift = await res.json();
+            setTillStatus(shift);
+            alert("Shift Opened successfully.");
+            return shift;
+        }
+        return null;
+    };
+
+
+
     const handleCheckout = async (method: string) => {
         if (cart.length === 0) return;
         if (method === 'member_tab' && !selectedProfile) {
             alert("Please select a member to charge to tab");
             return;
         }
-        if (method === 'cash' && !tillStatus) {
-            const startingCash = prompt("Audit: Please enter current physical till cash balance to open shift");
-            if (!startingCash) return;
-            // Open shift
-            const { data: tenant } = await supabase.from('tenants').select('id').limit(1).single();
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/shift/start`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tenant_id: tenant?.id, staff_id: null, starting_cash: parseFloat(startingCash) })
-            });
-            const shift = await res.json();
-            setTillStatus(shift);
-            alert("Shift Opened. Proceeding with checkout.");
-            return; // Requires them to click checkout again after shift opens
+
+        let currentShift = tillStatus;
+        if (method === 'cash' && !currentShift) {
+            currentShift = await openShift();
+            if (!currentShift) return;
+            // The flow can proceed now that the shift is opened
         }
 
         setIsCheckingOut(true);
@@ -198,12 +214,11 @@ export default function POSTerminal() {
                  tenant_id: tenant?.id,
                  profile_id: selectedProfile || null,
                  method,
-                 shift_id: tillStatus ? tillStatus.id : null,
+                 shift_id: currentShift ? currentShift.id : null,
                  staff_id: null, // Would be current user
                  items: cart.map(item => ({ product_id: item.id, quantity: item.quantity, sell_price: item.sell_price, name: item.name }))
              };
-
-             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/checkout`, {
+const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/checkout`, {
                  method: 'POST',
                  headers: { 'Content-Type': 'application/json' },
                  body: JSON.stringify(payload)
@@ -237,11 +252,6 @@ export default function POSTerminal() {
                  body: JSON.stringify({ shift_id: tillStatus.id, actual_cash: parseFloat(actualCash) })
             });
             const result = await res.json();
-
-            if (!res.ok) {
-                 alert(`Error closing shift: ${result.error || 'Unknown error'}`);
-                 return;
-            }
 
             if (result.status === 'discrepancy') {
                  alert(`Shift closed with discrepancy. Expected: ${result.expected_cash}, Actual: ${result.actual_cash}`);
@@ -502,7 +512,7 @@ export default function POSTerminal() {
                              <div className="text-center">
                                  <p className="text-body-dense text-text-muted mb-4">You need to open a shift to process cash transactions.</p>
                                  <button
-                                     onClick={() => { setShowShiftModal(false); handleCheckout('cash'); }}
+                                     onClick={async () => { await openShift(); }}
                                      className="px-6 py-3 bg-primary text-on-primary font-bold rounded-lg hover:bg-primary/90 transition-colors w-full"
                                  >
                                      Open Shift Now
