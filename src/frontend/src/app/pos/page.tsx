@@ -32,6 +32,7 @@ type Shift = {
 type CartItem = Product & { quantity: number };
 
 export default function POSTerminal() {
+    const [isPosEnabled, setIsPosEnabled] = useState<boolean | null>(null);
     const [products, setProducts] = useState<Product[]>([]);
     const [cart, setCart] = useState<CartItem[]>([]);
     const [categories, setCategories] = useState<string[]>([]);
@@ -44,22 +45,26 @@ export default function POSTerminal() {
     useEffect(() => {
         async function loadData() {
             try {
-               const { data: tenant } = await supabase.from('tenants').select('id').limit(1).single();
+               const { data: tenant } = await supabase.from('tenants').select('id, pos_enabled').limit(1).single();
                if (tenant) {
-                   const tid = tenant.id;
+                   setIsPosEnabled(tenant.pos_enabled);
 
-                   // Fetch Products
-                   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/products?tenant_id=${tid}`);
-                   if (res.ok) {
-                       const data = await res.json();
-                       setProducts(data);
-                       const cats = Array.from(new Set(data.map((p: Product) => p.category)));
-                       setCategories(['ALL', ...cats as string[]]);
+                   if (tenant.pos_enabled) {
+                       const tid = tenant.id;
+
+                       // Fetch Products
+                       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/products?tenant_id=${tid}`);
+                       if (res.ok) {
+                           const data = await res.json();
+                           setProducts(data);
+                           const cats = Array.from(new Set(data.map((p: Product) => p.category)));
+                           setCategories(['ALL', ...cats as string[]]);
+                       }
+
+                       // Fetch Profiles (for Tab search)
+                       const { data: profs } = await supabase.from('profiles').select('id, first_name, last_name').eq('tenant_id', tid);
+                       if (profs) setProfiles(profs);
                    }
-
-                   // Fetch Profiles (for Tab search)
-                   const { data: profs } = await supabase.from('profiles').select('id, first_name, last_name').eq('tenant_id', tid);
-                   if (profs) setProfiles(profs);
                }
             } catch (e) {
                 console.error("Error loading POS data", e);
@@ -67,6 +72,14 @@ export default function POSTerminal() {
         }
         loadData();
     }, []);
+
+    if (isPosEnabled === null) {
+        return <div className="flex h-screen items-center justify-center">Loading POS Terminal...</div>;
+    }
+
+    if (!isPosEnabled) {
+        return <div className="flex h-screen items-center justify-center text-red-600 font-bold text-2xl">POS Feature is currently disabled for this tenant.</div>;
+    }
 
     const filteredProducts = activeCategory === 'ALL' ? products : products.filter(p => p.category === activeCategory);
 
