@@ -165,6 +165,9 @@ app.use("/api/pos", posRoutes);
 const staffRoutes = require("./staff");
 app.use("/api/staff", staffRoutes);
 
+const marketingRoutes = require("./marketing");
+app.use("/api/analytics", marketingRoutes);
+
 app.listen(port, () => {
   console.log(`Backend server running on port ${port}`);
 });
