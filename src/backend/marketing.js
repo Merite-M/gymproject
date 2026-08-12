@@ -19,19 +19,62 @@ router.post('/calculate-churn', async (req, res) => {
     }
 
     try {
-        const { tenant_id } = req.body;
-        if (!tenant_id) {
-            return res.status(400).json({ error: 'tenant_id is required' });
+        // Authentication check
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            return res.status(401).json({ error: 'Missing Authorization header' });
         }
 
-        // Get all members for this tenant
-        const { data: members, error: membersError } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('tenant_id', tenant_id)
-            .eq('role', 'member');
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
-        if (membersError) throw membersError;
+        if (authError || !user) {
+            return res.status(401).json({ error: 'Invalid or expired token' });
+        }
+
+        // Get user profile to determine tenant_id
+        const { data: userProfile, error: profileError } = await supabase
+            .from('profiles')
+            .select('tenant_id, role')
+            .eq('id', user.id)
+            .single();
+
+        if (profileError || !userProfile || !userProfile.tenant_id) {
+            return res.status(403).json({ error: 'Profile or tenant_id not found' });
+        }
+
+        if (userProfile.role !== 'staff' && userProfile.role !== 'admin') {
+            return res.status(403).json({ error: 'Unauthorized role' });
+        }
+
+        const tenant_id = userProfile.tenant_id;
+
+        // Pagination for members
+        let members = [];
+        let hasMore = true;
+        let start = 0;
+        const pageSize = 1000;
+
+        while (hasMore) {
+            const { data: page, error: membersError } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('tenant_id', tenant_id)
+                .eq('role', 'member')
+                .range(start, start + pageSize - 1);
+
+            if (membersError) throw membersError;
+
+            if (page && page.length > 0) {
+                members = members.concat(page);
+                start += pageSize;
+                if (page.length < pageSize) {
+                    hasMore = false;
+                }
+            } else {
+                hasMore = false;
+            }
+        }
 
         let processed = 0;
         let atRisk = 0;
@@ -59,7 +102,7 @@ router.post('/calculate-churn', async (req, res) => {
                 continue;
             }
 
-            const trailingAvg = trailingCheckins.length / 3; // baseline window is 28d -> 7d ago = 3 weeks
+            const trailingAvg = trailingCheckins.length / 4;
 
             // Calculate current week visits (last 7 days)
             const { data: currentCheckins, error: currentError } = await supabase
@@ -76,9 +119,6 @@ router.post('/calculate-churn', async (req, res) => {
 
             const currentVisits = currentCheckins.length;
 
-            // Calculate churn risk
-            // "if a member's current weekly visit frequency drops by more than 60% compared to their trailing 4-week historical baseline"
-
             let dropPercentage = 0;
             let isAtRisk = false;
 
@@ -87,30 +127,27 @@ router.post('/calculate-churn', async (req, res) => {
                 if (dropPercentage > 60) {
                     isAtRisk = true;
                 }
-            } else if (trailingAvg === 0 && currentVisits === 0) {
-                // Not necessarily a sudden drop, they just don't go. But could be high risk.
             }
 
-            // Insert snapshot
-            const churnScore = isAtRisk ? 80 : 20; // Example scoring
+            // Insert snapshot with UPSERT
+            const churnScore = isAtRisk ? 80 : 20;
+            const snapshotDate = new Date().toISOString().split('T')[0];
 
             const { error: snapError } = await supabase
                 .from('analytics_snapshots')
-                .insert({
+                .upsert({
                     tenant_id,
                     profile_id,
-                    snapshot_date: new Date().toISOString().split('T')[0],
+                    snapshot_date: snapshotDate,
                     trailing_4wk_avg_visits: trailingAvg,
                     current_wk_visits: currentVisits,
                     churn_risk_score: churnScore
-                });
+                }, { onConflict: 'tenant_id, profile_id, snapshot_date' });
 
             if (snapError) console.error("Error saving snapshot", snapError);
 
             if (isAtRisk) {
                 atRisk++;
-                // Check if they are already in the retention workflow recently to avoid spam
-                // Simple version: insert into workflow state and log
 
                 // 1. Get the "Low Attendance Retention Flow" workflow for this tenant
                 let { data: workflow } = await supabase
@@ -135,28 +172,40 @@ router.post('/calculate-churn', async (req, res) => {
                 }
 
                 if (workflow) {
-                    // Add member to workflow
-                    await supabase
+                    // Check idempotency for workflows
+                    const { data: existingState } = await supabase
                         .from('member_workflow_state')
-                        .insert({
-                            tenant_id,
-                            profile_id,
-                            workflow_id: workflow.id,
-                            status: 'in_progress'
-                        });
+                        .select('id')
+                        .eq('tenant_id', tenant_id)
+                        .eq('profile_id', profile_id)
+                        .eq('workflow_id', workflow.id)
+                        .eq('status', 'in_progress')
+                        .maybeSingle();
 
-                    // Add staff outreach task to communications_log
-                    await supabase
-                        .from('communications_log')
-                        .insert({
-                            tenant_id,
-                            profile_id,
-                            workflow_id: workflow.id,
-                            channel: 'in_app', // Using in_app to represent staff task/notification in UI
-                            direction: 'outbound',
-                            status: 'pending',
-                            content: `SYSTEM ALERT: Predictive Churn Risk. Member visits dropped by ${dropPercentage.toFixed(0)}%. Personal staff outreach required.`
-                        });
+                    if (!existingState) {
+                        // Add member to workflow
+                        await supabase
+                            .from('member_workflow_state')
+                            .insert({
+                                tenant_id,
+                                profile_id,
+                                workflow_id: workflow.id,
+                                status: 'in_progress'
+                            });
+
+                        // Add staff outreach task to communications_log
+                        await supabase
+                            .from('communications_log')
+                            .insert({
+                                tenant_id,
+                                profile_id,
+                                workflow_id: workflow.id,
+                                channel: 'in_app', // Using in_app to represent staff task/notification in UI
+                                direction: 'outbound',
+                                status: 'pending',
+                                content: `SYSTEM ALERT: Predictive Churn Risk. Member visits dropped by ${dropPercentage.toFixed(0)}%. Personal staff outreach required.`
+                            });
+                    }
                 }
             }
 

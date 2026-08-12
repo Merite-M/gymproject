@@ -21,6 +21,26 @@ export default function MarketingAnalytics() {
 
   const fetchSnapshots = async () => {
     try {
+      // 1. Get authenticated user
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        throw new Error("Not authenticated");
+      }
+
+      // 2. Get user's tenant_id
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.tenant_id) {
+        throw new Error("Could not determine tenant");
+      }
+
+      const tenant_id = profile.tenant_id;
+
+      // 3. Fetch only high-risk snapshots for this tenant
       const { data, error } = await supabase
         .from("analytics_snapshots")
         .select(`
@@ -32,13 +52,25 @@ export default function MarketingAnalytics() {
             phone
           )
         `)
-        .order("created_at", { ascending: false });
+        .eq('tenant_id', tenant_id)
+        .gte('churn_risk_score', 80)
+        .order("snapshot_date", { ascending: false });
 
       if (error) {
         throw error;
       }
 
-      setSnapshots(data || []);
+      // In case of duplicates per member from previous runs, we can filter for unique profile_ids
+      const uniqueProfiles = new Map();
+      if (data) {
+          for (const item of data) {
+              if (!uniqueProfiles.has(item.profile_id)) {
+                  uniqueProfiles.set(item.profile_id, item);
+              }
+          }
+      }
+
+      setSnapshots(Array.from(uniqueProfiles.values()));
     } catch (err: any) {
       setError(err.message);
     } finally {
