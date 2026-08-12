@@ -165,6 +165,11 @@ app.use("/api/pos", posRoutes);
 const staffRoutes = require("./staff");
 app.use("/api/staff", staffRoutes);
 
+
+const calendarRoutes = require("./calendar");
+app.use("/api/calendar", calendarRoutes);
+
 app.listen(port, () => {
+
   console.log(`Backend server running on port ${port}`);
 });
