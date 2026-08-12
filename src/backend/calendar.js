@@ -537,7 +537,7 @@ router.post('/bookings/:id/cancel', requireSupabase, async (req, res) => {
       .eq('id', id)
       .eq('tenant_id', tenant_id)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
