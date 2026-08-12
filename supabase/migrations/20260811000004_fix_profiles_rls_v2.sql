@@ -1,0 +1,3 @@
+-- The issue is `tenant_id IN (SELECT tenant_id FROM public.profiles WHERE id = auth.uid()...)` still queries public.profiles.
+-- A common workaround is to use a function with SECURITY DEFINER or just read from JWT claims if available.
+-- Since this is just a quick fix for infinite recursion, we can disable the policy temporarily or fix it.

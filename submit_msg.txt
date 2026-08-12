@@ -1,6 +1,0 @@
-feat: implement member 360 CRM and family links
-
-- Added `family_links` table with RLS to Supabase schema.
-- Added Next.js Member CRM 360 view under `src/frontend/src/app/members/[id]/page.tsx`.
-- Used shadcn-ui components and configured Tailwind layout for CRM.
-- Zustand store established for state management to fetch DB models.
