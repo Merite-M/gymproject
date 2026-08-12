@@ -365,7 +365,13 @@ DECLARE
     live_bookings INTEGER;
     next_entry public.waitlists%ROWTYPE;
 BEGIN
-    freed_schedule := COALESCE(OLD.schedule_id, NEW.schedule_id);
+    IF TG_TABLE_NAME = 'class_schedules' THEN
+        freed_schedule := COALESCE(NEW.id, OLD.id);
+    ELSIF TG_OP = 'DELETE' THEN
+        freed_schedule := OLD.schedule_id;
+    ELSE
+        freed_schedule := NEW.schedule_id;
+    END IF;
 
     SELECT capacity INTO slot_capacity
     FROM public.class_schedules
