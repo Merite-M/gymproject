@@ -25,7 +25,7 @@ interface CheckIn {
 
 export default function MissionControlMonitor() {
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
-
+  const tenantId = '00000000-0000-0000-0000-000000000000'; // Default or context
 
   useEffect(() => {
     // 1. Initial Fetch
@@ -36,6 +36,7 @@ export default function MissionControlMonitor() {
           *,
           profiles:profile_id (first_name, last_name, avatar_url)
         `)
+        .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
         .limit(20);
 
@@ -51,7 +52,7 @@ export default function MissionControlMonitor() {
       .channel('public:check_ins')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'check_ins' },
+        { event: 'INSERT', schema: 'public', table: 'check_ins', filter: `tenant_id=eq.${tenantId}` },
         async (payload) => {
           const newCheckIn = payload.new as CheckIn;
           // Fetch associated profile data for the new check-in
