@@ -267,4 +267,80 @@ router.post('/shift/end', async (req, res) => {
     }
 });
 
+
+// Fetch member tab balance
+router.get('/member_tab/:profile_id', async (req, res) => {
+  if (!supabase) return res.status(500).json({error: "Supabase config missing"});
+  try {
+    const { profile_id } = req.params;
+    const { tenant_id } = req.query;
+
+    if (!profile_id || !tenant_id) {
+       return res.status(400).json({ error: 'Missing profile_id or tenant_id' });
+    }
+
+    const { data, error } = await supabase
+      .from('member_tabs')
+      .select('balance')
+      .eq('profile_id', profile_id)
+      .eq('tenant_id', tenant_id)
+      .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 is no rows returned
+        throw error;
+    }
+
+    res.json({ balance: data ? parseFloat(data.balance) : 0 });
+  } catch (error) {
+    console.error("Tab fetch error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Shift X-Report
+router.get('/shift/:shift_id/x-report', async (req, res) => {
+    if (!supabase) return res.status(500).json({error: "Supabase config missing"});
+    try {
+        const { shift_id } = req.params;
+
+        const { data: shift, error: shiftError } = await supabase
+            .from('shift_ledgers')
+            .select('*')
+            .eq('id', shift_id)
+            .single();
+
+        if (shiftError) throw shiftError;
+
+        const { data: payments, error: paymentsError } = await supabase
+            .from('payments')
+            .select('amount, method')
+            .eq('shift_id', shift_id);
+
+        if (paymentsError) throw paymentsError;
+
+        const totals = {
+            cash: 0,
+            card: 0,
+            momo: 0,
+            member_tab: 0,
+            bank_transfer: 0
+        };
+
+        payments.forEach(p => {
+            if (totals[p.method] !== undefined) {
+                totals[p.method] += parseFloat(p.amount);
+            }
+        });
+
+        res.json({
+            shift,
+            totals,
+            expected_cash: parseFloat(shift.expected_cash)
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
 module.exports = router;

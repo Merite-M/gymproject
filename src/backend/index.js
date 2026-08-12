@@ -97,6 +97,7 @@ app.post('/api/checkin', async (req, res) => {
        return res.status(500).json({ error: 'Supabase not configured' });
     }
 
+
     // Check profile
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -108,6 +109,39 @@ app.post('/api/checkin', async (req, res) => {
     if (profileError || !profile) {
        return res.status(404).json({ error: 'Profile not found' });
     }
+
+    if (profile.status === 'debtor') {
+        await supabase.from('check_ins').insert({
+            tenant_id,
+            profile_id,
+            device_id: device_id || null,
+            access_method: access_method || 'manual_override',
+            status: 'denied_debt'
+        });
+        return res.status(200).json({ success: true, status: 'denied_debt', reason: 'Account locked due to outstanding debt' });
+    }
+
+    // Check member tab balance
+    const { data: tab } = await supabase
+        .from('member_tabs')
+        .select('balance')
+        .eq('profile_id', profile_id)
+        .eq('tenant_id', tenant_id)
+        .single();
+
+    if (tab && parseFloat(tab.balance) > 0) {
+        // Here we could either deny entry or issue a warning based on tenant policy.
+        // For now, let's issue a warning.
+        await supabase.from('check_ins').insert({
+            tenant_id,
+            profile_id,
+            device_id: device_id || null,
+            access_method: access_method || 'manual_override',
+            status: 'warning'
+        });
+        return res.status(200).json({ success: true, status: 'warning', reason: `Outstanding tab balance: ${parseFloat(tab.balance).toFixed(2)}` });
+    }
+
 
     if (!profile.waiver_signed) {
         // Record denied checkin
