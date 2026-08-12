@@ -59,7 +59,7 @@ router.post('/calculate-churn', async (req, res) => {
                 continue;
             }
 
-            const trailingAvg = trailingCheckins.length / 4; // average per week over 4 weeks (Wait, the first 3 weeks of the 4 weeks? No, past 4 weeks, but we compare to this week. Let's do 4 weeks total trailing)
+            const trailingAvg = trailingCheckins.length / 3; // baseline window is 28d -> 7d ago = 3 weeks
 
             // Calculate current week visits (last 7 days)
             const { data: currentCheckins, error: currentError } = await supabase
