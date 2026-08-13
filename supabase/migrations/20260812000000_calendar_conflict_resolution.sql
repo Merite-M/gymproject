@@ -55,7 +55,7 @@ BEGIN
         ORDER BY joined_at ASC
         LIMIT 1;
 
-        IF next_waitlist_entry IS NOT NULL THEN
+        IF FOUND THEN
             -- Update waitlist status to promoted
             UPDATE public.waitlists
             SET status = 'promoted'
