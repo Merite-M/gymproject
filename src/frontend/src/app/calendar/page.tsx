@@ -387,7 +387,7 @@ export default function CalendarPage() {
                         </div>
                         <div className="bg-slate-50 border-t border-slate-200 p-4 flex justify-end space-x-3">
                             <Button variant="ghost" onClick={() => setShowConflictModal(false)}>Cancel Action</Button>
-                            <Button variant="destructive" onClick={() => saveClassSchedule(formData)}>Force Overwrite (Admin Only)</Button>
+                            <Button variant="destructive" onClick={() => { setShowConflictModal(false); setConflictDetails(null); saveClassSchedule(formData); }}>Force Overwrite (Admin Only)</Button>
                         </div>
                     </div>
                 </div>
