@@ -51,7 +51,7 @@ router.post('/validate-schedule', async (req, res) => {
                     .eq('is_cancelled', false)
                     .or(`and(start_time.lte.${end_time},end_time.gt.${start_time}),and(start_time.lt.${end_time},end_time.gte.${start_time})`);
 
-                const busyTrainerIds = busyTrainers?.map(t => t.trainer_id) || [];
+                const busyTrainerIds = (busyTrainers?.map(t => t.trainer_id) || []).filter(Boolean);
 
                 let availableTrainersQuery = supabase
                     .from('profiles')
