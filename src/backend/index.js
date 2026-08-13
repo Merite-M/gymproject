@@ -181,6 +181,9 @@ app.use("/api/pos", posRoutes);
 const staffRoutes = require("./staff");
 app.use("/api/staff", staffRoutes);
 
-app.listen(port, () => {
+const marketingRoutes = require("./marketing");
+app.use("/api/analytics", marketingRoutes);
+
+app.listen(port, '0.0.0.0', () => {
   console.log(`Backend server running on port ${port}`);
 });
