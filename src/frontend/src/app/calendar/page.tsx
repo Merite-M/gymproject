@@ -74,6 +74,11 @@ export default function CalendarPage() {
 
     const [currentTenantId, setCurrentTenantId] = useState<string>('');
     const [calendarEnabled, setCalendarEnabled] = useState<boolean | null>(null);
+    const [waitlistEnabled, setWaitlistEnabled] = useState<boolean>(false);
+    const [currentUserId, setCurrentUserId] = useState<string>('');
+    const [selectedClass, setSelectedClass] = useState<any>(null);
+    const [memberBookings, setMemberBookings] = useState<any[]>([]);
+    const [waitlistData, setWaitlistData] = useState<any[]>([]);
 
     useEffect(() => {
         const getUser = async () => {
@@ -83,6 +88,7 @@ export default function CalendarPage() {
                     setCalendarEnabled(false);
                     return;
                 }
+                setCurrentUserId(user.id);
                 const { data, error: profileError } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single();
                 if (profileError || !data) {
                     setCalendarEnabled(false);
@@ -90,7 +96,7 @@ export default function CalendarPage() {
                 }
 
                 setCurrentTenantId(data.tenant_id);
-                const { data: tenantData, error: tenantError } = await supabase.from('tenants').select('calendar_enabled').eq('id', data.tenant_id).single();
+                const { data: tenantData, error: tenantError } = await supabase.from('tenants').select('calendar_enabled, waitlist_enabled').eq('id', data.tenant_id).single();
 
                 if (tenantError || !tenantData) {
                     setCalendarEnabled(false);
@@ -109,6 +115,40 @@ export default function CalendarPage() {
         fetchResources();
     }, []);
 
+
+
+    useEffect(() => {
+        if (currentTenantId && currentUserId) {
+            fetchMemberBookings(currentTenantId, currentUserId);
+            fetchWaitlistData(currentTenantId, currentUserId);
+        }
+    }, [currentTenantId, currentUserId]);
+
+    const fetchMemberBookings = async (tenantId: string, profileId: string) => {
+        const { data } = await supabase
+            .from('class_bookings')
+            .select('*')
+            .eq('tenant_id', tenantId)
+            .eq('profile_id', profileId)
+            .in('status', ['booked', 'checked_in']);
+        if (data) setMemberBookings(data);
+    };
+
+    const fetchWaitlistData = async (tenantId: string, profileId: string) => {
+        const { data } = await supabase
+            .from('waitlists')
+            .select('*')
+            .eq('tenant_id', tenantId)
+            .eq('profile_id', profileId)
+            .eq('status', 'waiting');
+        if (data) setWaitlistData(data);
+    };
+
+    const fetchBookingsCount = async () => {
+        // Dummy implementation to re-fetch schedules which could contain the counts
+        fetchSchedules();
+    };
+
     const fetchSchedules = async () => {
         setLoading(true);
         // We'll mock the data for now since we don't have real data populated
@@ -120,8 +160,9 @@ export default function CalendarPage() {
         try {
             const { data, error } = await supabase
                 .from('class_schedules')
-                .select('*, trainer:profiles(first_name, last_name), facility:facilities(name, max_capacity)')
-                .eq('is_cancelled', false);
+                .select('*, trainer:profiles(first_name, last_name), facility:facilities(name, max_capacity), class_bookings(count)')
+                .eq('is_cancelled', false)
+                .eq('class_bookings.status', 'booked');
 
             if (data && data.length > 0) {
                  setSchedules(data);
@@ -150,7 +191,7 @@ export default function CalendarPage() {
 
         // 1. Validate schedule via backend API
         try {
-            const response = await fetch('/api/calendar/validate-schedule', {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/calendar/validate-schedule`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -205,6 +246,79 @@ export default function CalendarPage() {
             setShowScheduleForm(false);
             setFormData({ title: '', trainer_id: '', facility_id: '', start_time: '', end_time: '', capacity_override: '' });
             fetchSchedules();
+        }
+    };
+
+
+    const handleJoinWaitlist = async (cls: any) => {
+        if (!currentUserId || !currentTenantId) return;
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/calendar/join-waitlist`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+            },
+            body: JSON.stringify({
+                tenant_id: currentTenantId,
+                schedule_id: cls.id,
+                profile_id: currentUserId
+            })
+        });
+        if (res.ok) {
+            alert('Joined waitlist');
+            fetchWaitlistData(currentTenantId, currentUserId);
+            setSelectedClass(null);
+        } else {
+            alert('Error joining waitlist');
+        }
+    };
+
+    const handleCancelBooking = async (cls: any) => {
+        if (!currentUserId || !currentTenantId) return;
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/calendar/cancel-booking`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+            },
+            body: JSON.stringify({
+                tenant_id: currentTenantId,
+                schedule_id: cls.id,
+                profile_id: currentUserId
+            })
+        });
+        if (res.ok) {
+            alert('Booking cancelled');
+            fetchMemberBookings(currentTenantId, currentUserId);
+            fetchSchedules();
+            setSelectedClass(null);
+        } else {
+            alert('Error cancelling booking');
+        }
+    };
+
+    const handleBookClass = async (cls: any) => {
+        if (!currentUserId || !currentTenantId) return;
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/calendar/book`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+            },
+            body: JSON.stringify({
+                tenant_id: currentTenantId,
+                schedule_id: cls.id,
+                profile_id: currentUserId
+            })
+        });
+        if (res.ok) {
+            alert('Booked successfully');
+            fetchMemberBookings(currentTenantId, currentUserId);
+            fetchSchedules();
+            setSelectedClass(null);
+        } else {
+            const data = await res.json();
+            alert(`Error booking class: ${data.error}`);
         }
     };
 
@@ -330,7 +444,7 @@ export default function CalendarPage() {
 
                                             if (clsDayIdx === dayIdx && timeStr === time) {
                                                 return (
-                                                    <div key={cls.id} className={`absolute top-1 left-1 right-1 z-10 rounded-md p-2 border shadow-sm bg-purple-50 border-purple-200 h-[40px] flex items-center justify-between overflow-hidden group cursor-pointer hover:shadow-md transition-shadow`}>
+                                                    <div key={cls.id} onClick={() => setSelectedClass(cls)} className={`absolute top-1 left-1 right-1 z-10 rounded-md p-2 border shadow-sm bg-purple-50 border-purple-200 h-[40px] flex items-center justify-between overflow-hidden group cursor-pointer hover:shadow-md transition-shadow`}>
                                                         <div>
                                                             <div className="text-xs font-bold text-slate-900 truncate">{cls.title}</div>
                                                             <div className="text-[10px] text-slate-600 flex items-center truncate">
@@ -338,7 +452,7 @@ export default function CalendarPage() {
                                                             </div>
                                                         </div>
                                                         <div className="text-[10px] font-semibold bg-white px-1.5 py-0.5 rounded-sm border border-slate-200">
-                                                            0/{cls.capacity_override || 20}
+                                                            {cls.class_bookings?.[0]?.count || 0}/{cls.capacity_override || cls.facility?.max_capacity || 20}
                                                         </div>
                                                     </div>
                                                 )
@@ -443,6 +557,45 @@ export default function CalendarPage() {
                     </div>
                 </div>
             )}
+
+            {selectedClass && (
+                <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative">
+                        <button onClick={() => setSelectedClass(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                            <X className="w-5 h-5" />
+                        </button>
+                        <h2 className="text-xl font-bold mb-4">{selectedClass.title}</h2>
+                        <div className="space-y-4">
+                            <p className="text-sm"><strong>Trainer:</strong> {selectedClass.trainer?.first_name} {selectedClass.trainer?.last_name}</p>
+                            <p className="text-sm"><strong>Facility:</strong> {selectedClass.facility?.name}</p>
+                            <p className="text-sm"><strong>Capacity:</strong> {selectedClass.class_bookings?.[0]?.count || 0}/{selectedClass.capacity_override || selectedClass.facility?.max_capacity || 20}</p>
+
+                            <div className="flex justify-end pt-4 space-x-2">
+                                {memberBookings.some(b => b.schedule_id === selectedClass.id) ? (
+                                    <Button variant="destructive" onClick={() => handleCancelBooking(selectedClass)}>Cancel Booking</Button>
+                                ) : (
+                                    <>
+                                        {((selectedClass.class_bookings?.[0]?.count || 0) >= (selectedClass.capacity_override || selectedClass.facility?.max_capacity || 20)) ? (
+                                            waitlistEnabled ? (
+                                                waitlistData.some(w => w.schedule_id === selectedClass.id) ? (
+                                                    <Button disabled variant="outline">On Waitlist</Button>
+                                                ) : (
+                                                    <Button onClick={() => handleJoinWaitlist(selectedClass)}>Join Waitlist</Button>
+                                                )
+                                            ) : (
+                                                <Button disabled variant="outline">Class Full</Button>
+                                            )
+                                        ) : (
+                                            <Button onClick={() => handleBookClass(selectedClass)}>Book Class</Button>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 }
