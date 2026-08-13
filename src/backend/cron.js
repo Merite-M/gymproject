@@ -1,5 +1,4 @@
 const cron = require('node-cron');
-const fetch = require('node-fetch');
 
 function initCron(supabase) {
     if (!supabase) {
