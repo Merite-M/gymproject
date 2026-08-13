@@ -231,17 +231,48 @@ router.post('/cancel-booking', authMiddleware, async (req, res) => {
             return res.status(400).json({ error: 'Missing tenant_id, schedule_id, or profile_id' });
         }
 
+        if (req.user.id !== profile_id) {
+            return res.status(403).json({ error: 'Unauthorized to cancel this booking' });
+        }
+
         // 1. Update booking status to cancelled
-        const { error: cancelError } = await supabase
+        const { data: cancelledData, error: cancelError } = await supabase
             .from('class_bookings')
             .update({ status: 'cancelled' })
             .eq('schedule_id', schedule_id)
             .eq('profile_id', profile_id)
             .eq('tenant_id', tenant_id)
-            .in('status', ['booked', 'checked_in']);
+            .in('status', ['booked', 'checked_in'])
+            .select();
 
         if (cancelError) {
             return res.status(500).json({ error: 'Failed to cancel booking' });
+        }
+
+        if (!cancelledData || cancelledData.length === 0) {
+            return res.status(404).json({ error: 'Active booking not found' });
+        }
+
+        // Check if there is capacity (maybe we cancelled something that didn't free up space? Just recount to be sure)
+        const { data: schedule } = await supabase
+            .from('class_schedules')
+            .select('capacity_override, facility:facilities(max_capacity), title')
+            .eq('id', schedule_id)
+            .eq('tenant_id', tenant_id)
+            .single();
+
+        const capacity = schedule?.capacity_override || (schedule?.facility && schedule.facility.max_capacity) || 0;
+
+        const { count } = await supabase
+            .from('class_bookings')
+            .select('*', { count: 'exact', head: true })
+            .eq('schedule_id', schedule_id)
+            .eq('tenant_id', tenant_id)
+            .in('status', ['booked', 'checked_in']);
+
+        if (capacity > 0 && count >= capacity) {
+            // Still full, don't promote waitlist
+            return res.status(200).json({ success: true, message: 'Booking cancelled (no waitlist promotion due to capacity)' });
         }
 
         // 2. Check for waitlisted members
@@ -268,7 +299,7 @@ router.post('/cancel-booking', authMiddleware, async (req, res) => {
 
             if (!promoteError) {
                 // Add to bookings
-                await supabase
+                const { error: insertError } = await supabase
                     .from('class_bookings')
                     .insert({
                         tenant_id,
@@ -277,32 +308,34 @@ router.post('/cancel-booking', authMiddleware, async (req, res) => {
                         status: 'booked'
                     });
 
-                // Fetch schedule and profile info for notification
-                const { data: scheduleInfo } = await supabase
-                    .from('class_schedules')
-                    .select('title')
-                    .eq('id', schedule_id)
-                    .single();
-
-                const { data: profileInfo } = await supabase
-                    .from('profiles')
-                    .select('email, phone')
-                    .eq('id', waitlistRecord.profile_id)
-                    .single();
-
-                // Queue notification
-                if (scheduleInfo && profileInfo) {
+                if (insertError) {
+                    console.error("Failed to insert booking for promoted waitlist member, rolling back waitlist status", insertError);
+                    // Rollback
                     await supabase
-                        .from('notification_queue')
-                        .insert({
-                            tenant_id,
-                            profile_id: waitlistRecord.profile_id,
-                            channel: profileInfo.email ? 'email' : 'sms',
-                            recipient: profileInfo.email || profileInfo.phone || 'unknown',
-                            subject: 'Waitlist Promotion',
-                            content: `You have been promoted from the waitlist and are now booked for "${scheduleInfo.title}".`,
-                            status: 'pending'
-                        });
+                        .from('waitlists')
+                        .update({ status: 'waiting' })
+                        .eq('id', waitlistRecord.id);
+                } else {
+                    const { data: profileInfo } = await supabase
+                        .from('profiles')
+                        .select('email, phone')
+                        .eq('id', waitlistRecord.profile_id)
+                        .single();
+
+                    // Queue notification
+                    if (schedule && profileInfo) {
+                        await supabase
+                            .from('notification_queue')
+                            .insert({
+                                tenant_id,
+                                profile_id: waitlistRecord.profile_id,
+                                channel: profileInfo.email ? 'email' : 'sms',
+                                recipient: profileInfo.email || profileInfo.phone || 'unknown',
+                                subject: 'Waitlist Promotion',
+                                content: `You have been promoted from the waitlist and are now booked for "${schedule.title}".`,
+                                status: 'pending'
+                            });
+                    }
                 }
             }
         }
@@ -327,6 +360,10 @@ router.post('/join-waitlist', authMiddleware, async (req, res) => {
             return res.status(400).json({ error: 'Missing tenant_id, schedule_id, or profile_id' });
         }
 
+        if (req.user.id !== profile_id) {
+            return res.status(403).json({ error: 'Unauthorized to join waitlist for this profile' });
+        }
+
         // Check if tenant has waitlist enabled
         const { data: tenant, error: tenantError } = await supabase
             .from('tenants')
@@ -336,6 +373,49 @@ router.post('/join-waitlist', authMiddleware, async (req, res) => {
 
         if (tenantError || !tenant?.waitlist_enabled) {
             return res.status(400).json({ error: 'Waitlist is not enabled for this tenant' });
+        }
+
+        // Verify class is actually full
+        const { data: schedule, error: scheduleError } = await supabase
+            .from('class_schedules')
+            .select('capacity_override, facility:facilities(max_capacity)')
+            .eq('id', schedule_id)
+            .eq('tenant_id', tenant_id)
+            .single();
+
+        if (scheduleError || !schedule) {
+            return res.status(404).json({ error: 'Class schedule not found' });
+        }
+
+        const capacity = schedule.capacity_override || (schedule.facility && schedule.facility.max_capacity) || 0;
+
+        const { count, error: countError } = await supabase
+            .from('class_bookings')
+            .select('*', { count: 'exact', head: true })
+            .eq('schedule_id', schedule_id)
+            .eq('tenant_id', tenant_id)
+            .in('status', ['booked', 'checked_in']);
+
+        if (countError) {
+            return res.status(500).json({ error: 'Failed to check class capacity' });
+        }
+
+        if (capacity > 0 && count < capacity) {
+            return res.status(400).json({ error: 'Class is not full, you can book directly' });
+        }
+
+        // Verify user doesn't already hold an active booking
+        const { data: activeBooking } = await supabase
+            .from('class_bookings')
+            .select('id')
+            .eq('schedule_id', schedule_id)
+            .eq('profile_id', profile_id)
+            .eq('tenant_id', tenant_id)
+            .in('status', ['booked', 'checked_in'])
+            .single();
+
+        if (activeBooking) {
+             return res.status(400).json({ error: 'You already hold an active booking for this class' });
         }
 
         // Check if already on waitlist

@@ -116,6 +116,14 @@ export default function CalendarPage() {
     }, []);
 
 
+
+    useEffect(() => {
+        if (currentTenantId && currentUserId) {
+            fetchMemberBookings(currentTenantId, currentUserId);
+            fetchWaitlistData(currentTenantId, currentUserId);
+        }
+    }, [currentTenantId, currentUserId]);
+
     const fetchMemberBookings = async (tenantId: string, profileId: string) => {
         const { data } = await supabase
             .from('class_bookings')
@@ -154,7 +162,7 @@ export default function CalendarPage() {
                 .from('class_schedules')
                 .select('*, trainer:profiles(first_name, last_name), facility:facilities(name, max_capacity), class_bookings(count)')
                 .eq('is_cancelled', false)
-                .in('class_bookings.status', ['booked', 'checked_in']);
+                .eq('class_bookings.status', 'booked');
 
             if (data && data.length > 0) {
                  setSchedules(data);
@@ -183,7 +191,7 @@ export default function CalendarPage() {
 
         // 1. Validate schedule via backend API
         try {
-            const response = await fetch('/api/calendar/validate-schedule', {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/calendar/validate-schedule`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
