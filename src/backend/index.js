@@ -97,6 +97,8 @@ app.post('/api/checkin', async (req, res) => {
        return res.status(500).json({ error: 'Supabase not configured' });
     }
 
+
+
     // Check profile
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -109,34 +111,42 @@ app.post('/api/checkin', async (req, res) => {
        return res.status(404).json({ error: 'Profile not found' });
     }
 
-    if (!profile.waiver_signed) {
-        // Record denied checkin
-        await supabase.from('check_ins').insert({
-            tenant_id,
-            profile_id,
-            device_id: device_id || null,
-            access_method: access_method || 'manual_override',
-            status: 'warning' // Or a specific denied status, let's use warning as per spec 'Liability Waiver Unsigned'
-        });
-        return res.status(200).json({ success: true, status: 'warning', reason: 'Liability Waiver Unsigned' });
+    let finalStatus = 'approved';
+    let reasons = [];
+
+    if (profile.status === 'debtor') {
+        finalStatus = 'denied_debt';
+        reasons.push('Account locked due to outstanding debt');
     }
 
-    // Check membership status logic can go here (simplified for now)
+    // Check member tab balance
+    const { data: tab } = await supabase
+        .from('member_tabs')
+        .select('balance')
+        .eq('profile_id', profile_id)
+        .eq('tenant_id', tenant_id)
+        .single();
+
+    if (tab && parseFloat(tab.balance) > 0) {
+        if (finalStatus === 'approved') finalStatus = 'warning';
+        reasons.push(`Outstanding tab balance: ${parseFloat(tab.balance).toFixed(2)}`);
+    }
+
+    if (!profile.waiver_signed) {
+        if (finalStatus === 'approved') finalStatus = 'warning';
+        reasons.push('Liability Waiver Unsigned');
+    }
 
     // Check if waiver is older than 1 year
-    const waiverDate = new Date(profile.waiver_signed_at);
-    const oneYearAgo = new Date();
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    if (profile.waiver_signed_at) {
+        const waiverDate = new Date(profile.waiver_signed_at);
+        const oneYearAgo = new Date();
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
-    if (waiverDate < oneYearAgo) {
-        await supabase.from('check_ins').insert({
-            tenant_id,
-            profile_id,
-            device_id: device_id || null,
-            access_method: access_method || 'manual_override',
-            status: 'warning'
-        });
-        return res.status(200).json({ success: true, status: 'warning', reason: 'Liability Waiver Expired (Needs Renewal)' });
+        if (waiverDate < oneYearAgo) {
+            if (finalStatus === 'approved') finalStatus = 'warning';
+            reasons.push('Liability Waiver Expired (Needs Renewal)');
+        }
     }
 
     const { data: checkin, error: checkinError } = await supabase.from('check_ins').insert({
@@ -144,16 +154,22 @@ app.post('/api/checkin', async (req, res) => {
         profile_id,
         device_id: device_id || null,
         access_method: access_method || 'manual_override',
-        status: 'approved'
+        status: finalStatus
     }).select();
 
     if (checkinError) {
         return res.status(500).json({ error: checkinError.message });
     }
 
-    res.status(200).json({ success: true, status: 'approved', checkin: checkin[0] });
+    res.status(200).json({
+        success: true,
+        status: finalStatus,
+        checkin: checkin[0],
+        reason: reasons.length > 0 ? reasons.join('; ') : undefined
+    });
 
   } catch (error) {
+
      console.error("Checkin error:", error);
      res.status(500).json({ error: 'Internal server error' });
   }
