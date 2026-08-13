@@ -33,7 +33,8 @@ router.post('/validate-schedule', async (req, res) => {
                 .eq('tenant_id', tenant_id)
                 .eq('trainer_id', trainer_id)
                 .eq('is_cancelled', false)
-                .or(`and(start_time.lte.${end_time},end_time.gt.${start_time}),and(start_time.lt.${end_time},end_time.gte.${start_time})`);
+                .lt('start_time', end_time)
+                .gt('end_time', start_time);
 
             if (trainerError) {
                 return res.status(500).json({ error: trainerError.message });
