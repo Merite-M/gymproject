@@ -1,4 +1,6 @@
-const express = require('express');
+const fs = require('fs');
+
+const content = `const express = require('express');
 const router = express.Router();
 const { createClient } = require('@supabase/supabase-js');
 
@@ -56,7 +58,7 @@ router.post('/validate-schedule', async (req, res) => {
                 .eq('tenant_id', tenant_id)
                 .eq('trainer_id', trainer_id)
                 .eq('is_cancelled', false)
-                .or(`and(start_time.lte.${end_time},end_time.gt.${start_time}),and(start_time.lt.${end_time},end_time.gte.${start_time})`);
+                .or(\`and(start_time.lte.\${end_time},end_time.gt.\${start_time}),and(start_time.lt.\${end_time},end_time.gte.\${start_time})\`);
 
             if (trainerError) {
                 return res.status(500).json({ error: trainerError.message });
@@ -71,7 +73,7 @@ router.post('/validate-schedule', async (req, res) => {
                     .select('trainer_id')
                     .eq('tenant_id', tenant_id)
                     .eq('is_cancelled', false)
-                    .or(`and(start_time.lte.${end_time},end_time.gt.${start_time}),and(start_time.lt.${end_time},end_time.gte.${start_time})`);
+                    .or(\`and(start_time.lte.\${end_time},end_time.gt.\${start_time}),and(start_time.lt.\${end_time},end_time.gte.\${start_time})\`);
 
                 const busyTrainerIds = busyTrainers?.map(t => t.trainer_id) || [];
 
@@ -82,7 +84,7 @@ router.post('/validate-schedule', async (req, res) => {
                     .in('role', ['trainer', 'staff']);
 
                 if (busyTrainerIds.length > 0) {
-                    availableTrainersQuery = availableTrainersQuery.not('id', 'in', `(${busyTrainerIds.join(',')})`);
+                    availableTrainersQuery = availableTrainersQuery.not('id', 'in', \`(\${busyTrainerIds.join(',')})\`);
                 }
 
                 const { data: availableTrainers, error: availableTrainersError } = await availableTrainersQuery;
@@ -101,7 +103,7 @@ router.post('/validate-schedule', async (req, res) => {
                 .eq('tenant_id', tenant_id)
                 .eq('facility_id', facility_id)
                 .eq('is_cancelled', false)
-                .or(`and(start_time.lte.${end_time},end_time.gt.${start_time}),and(start_time.lt.${end_time},end_time.gte.${start_time})`);
+                .or(\`and(start_time.lte.\${end_time},end_time.gt.\${start_time}),and(start_time.lt.\${end_time},end_time.gte.\${start_time})\`);
 
             if (facilityError) {
                 return res.status(500).json({ error: facilityError.message });
@@ -116,7 +118,7 @@ router.post('/validate-schedule', async (req, res) => {
                     .select('facility_id')
                     .eq('tenant_id', tenant_id)
                     .eq('is_cancelled', false)
-                    .or(`and(start_time.lte.${end_time},end_time.gt.${start_time}),and(start_time.lt.${end_time},end_time.gte.${start_time})`);
+                    .or(\`and(start_time.lte.\${end_time},end_time.gt.\${start_time}),and(start_time.lt.\${end_time},end_time.gte.\${start_time})\`);
 
                 const busyFacilityIds = busyFacilities?.map(f => f.facility_id) || [];
 
@@ -126,7 +128,7 @@ router.post('/validate-schedule', async (req, res) => {
                     .eq('tenant_id', tenant_id);
 
                 if (busyFacilityIds.length > 0) {
-                    availableFacilitiesQuery = availableFacilitiesQuery.not('id', 'in', `(${busyFacilityIds.join(',')})`);
+                    availableFacilitiesQuery = availableFacilitiesQuery.not('id', 'in', \`(\${busyFacilityIds.join(',')})\`);
                 }
 
                 const { data: availableFacilities, error: availableFacilitiesError } = await availableFacilitiesQuery;
@@ -164,10 +166,10 @@ router.post('/book', authMiddleware, async (req, res) => {
         // 1. Fetch schedule to find capacity
         const { data: schedule, error: scheduleError } = await supabase
             .from('class_schedules')
-            .select(`
+            .select(\`
                 capacity_override,
                 facility:facilities(max_capacity)
-            `)
+            \`)
             .eq('id', schedule_id)
             .eq('tenant_id', tenant_id)
             .single();
@@ -262,7 +264,7 @@ router.put('/reassign-trainer', authMiddleware, async (req, res) => {
             .eq('tenant_id', tenant_id)
             .eq('trainer_id', new_trainer_id)
             .eq('is_cancelled', false)
-            .or(`and(start_time.lte.${currentSchedule.end_time},end_time.gt.${currentSchedule.start_time}),and(start_time.lt.${currentSchedule.end_time},end_time.gte.${currentSchedule.start_time})`);
+            .or(\`and(start_time.lte.\${currentSchedule.end_time},end_time.gt.\${currentSchedule.start_time}),and(start_time.lt.\${currentSchedule.end_time},end_time.gte.\${currentSchedule.start_time})\`);
 
         if (conflictError) {
             return res.status(500).json({ error: conflictError.message });
@@ -305,7 +307,7 @@ router.put('/reassign-trainer', authMiddleware, async (req, res) => {
                     channel: 'email',
                     recipient: recipientEmail,
                     subject: 'Trainer Change Notification',
-                    content: `The trainer for your class "${currentSchedule.title}" has been reassigned.`,
+                    content: \`The trainer for your class "\${currentSchedule.title}" has been reassigned.\`,
                     status: 'pending'
                 };
             });
@@ -327,4 +329,6 @@ router.put('/reassign-trainer', authMiddleware, async (req, res) => {
     }
 });
 
-module.exports = router;
+module.exports = router;`;
+fs.writeFileSync('src/backend/calendar.js', content);
+console.log("Rewrote src/backend/calendar.js");
