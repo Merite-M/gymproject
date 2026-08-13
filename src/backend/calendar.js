@@ -218,6 +218,161 @@ router.post('/book', authMiddleware, async (req, res) => {
     }
 });
 
+
+router.post('/cancel-booking', authMiddleware, async (req, res) => {
+    try {
+        if (!supabase) {
+            return res.status(500).json({ error: 'Supabase not configured' });
+        }
+
+        const { tenant_id, schedule_id, profile_id } = req.body;
+
+        if (!tenant_id || !schedule_id || !profile_id) {
+            return res.status(400).json({ error: 'Missing tenant_id, schedule_id, or profile_id' });
+        }
+
+        // 1. Update booking status to cancelled
+        const { error: cancelError } = await supabase
+            .from('class_bookings')
+            .update({ status: 'cancelled' })
+            .eq('schedule_id', schedule_id)
+            .eq('profile_id', profile_id)
+            .eq('tenant_id', tenant_id)
+            .in('status', ['booked', 'checked_in']);
+
+        if (cancelError) {
+            return res.status(500).json({ error: 'Failed to cancel booking' });
+        }
+
+        // 2. Check for waitlisted members
+        const { data: waitlistRecord, error: waitlistError } = await supabase
+            .from('waitlists')
+            .select('*')
+            .eq('schedule_id', schedule_id)
+            .eq('tenant_id', tenant_id)
+            .eq('status', 'waiting')
+            .order('joined_at', { ascending: true })
+            .limit(1)
+            .single();
+
+        if (waitlistError && waitlistError.code !== 'PGRST116') { // PGRST116 is not found
+            console.error("Waitlist check error:", waitlistError);
+        }
+
+        if (waitlistRecord) {
+            // Promote member
+            const { error: promoteError } = await supabase
+                .from('waitlists')
+                .update({ status: 'promoted' })
+                .eq('id', waitlistRecord.id);
+
+            if (!promoteError) {
+                // Add to bookings
+                await supabase
+                    .from('class_bookings')
+                    .insert({
+                        tenant_id,
+                        schedule_id,
+                        profile_id: waitlistRecord.profile_id,
+                        status: 'booked'
+                    });
+
+                // Fetch schedule and profile info for notification
+                const { data: scheduleInfo } = await supabase
+                    .from('class_schedules')
+                    .select('title')
+                    .eq('id', schedule_id)
+                    .single();
+
+                const { data: profileInfo } = await supabase
+                    .from('profiles')
+                    .select('email, phone')
+                    .eq('id', waitlistRecord.profile_id)
+                    .single();
+
+                // Queue notification
+                if (scheduleInfo && profileInfo) {
+                    await supabase
+                        .from('notification_queue')
+                        .insert({
+                            tenant_id,
+                            profile_id: waitlistRecord.profile_id,
+                            channel: profileInfo.email ? 'email' : 'sms',
+                            recipient: profileInfo.email || profileInfo.phone || 'unknown',
+                            subject: 'Waitlist Promotion',
+                            content: `You have been promoted from the waitlist and are now booked for "${scheduleInfo.title}".`,
+                            status: 'pending'
+                        });
+                }
+            }
+        }
+
+        res.status(200).json({ success: true, message: 'Booking cancelled' });
+
+    } catch (error) {
+        console.error("Cancel booking error:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+router.post('/join-waitlist', authMiddleware, async (req, res) => {
+    try {
+        if (!supabase) {
+            return res.status(500).json({ error: 'Supabase not configured' });
+        }
+
+        const { tenant_id, schedule_id, profile_id } = req.body;
+
+        if (!tenant_id || !schedule_id || !profile_id) {
+            return res.status(400).json({ error: 'Missing tenant_id, schedule_id, or profile_id' });
+        }
+
+        // Check if tenant has waitlist enabled
+        const { data: tenant, error: tenantError } = await supabase
+            .from('tenants')
+            .select('waitlist_enabled')
+            .eq('id', tenant_id)
+            .single();
+
+        if (tenantError || !tenant?.waitlist_enabled) {
+            return res.status(400).json({ error: 'Waitlist is not enabled for this tenant' });
+        }
+
+        // Check if already on waitlist
+        const { data: existing, error: existingError } = await supabase
+            .from('waitlists')
+            .select('id')
+            .eq('schedule_id', schedule_id)
+            .eq('profile_id', profile_id)
+            .eq('tenant_id', tenant_id)
+            .eq('status', 'waiting')
+            .single();
+
+        if (existing) {
+            return res.status(400).json({ error: 'Already on the waitlist' });
+        }
+
+        const { error: insertError } = await supabase
+            .from('waitlists')
+            .insert({
+                tenant_id,
+                schedule_id,
+                profile_id,
+                status: 'waiting'
+            });
+
+        if (insertError) {
+            return res.status(500).json({ error: 'Failed to join waitlist' });
+        }
+
+        res.status(200).json({ success: true, message: 'Joined waitlist' });
+
+    } catch (error) {
+        console.error("Join waitlist error:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 router.put('/reassign-trainer', authMiddleware, async (req, res) => {
     try {
         if (!supabase) {
