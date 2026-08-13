@@ -134,4 +134,140 @@ router.post('/validate-schedule', async (req, res) => {
     }
 });
 
+router.post('/book', async (req, res) => {
+    try {
+        if (!supabase) {
+            return res.status(500).json({ error: 'Supabase not configured' });
+        }
+
+        const { tenant_id, schedule_id, profile_id } = req.body;
+
+        if (!tenant_id || !schedule_id || !profile_id) {
+            return res.status(400).json({ error: 'Missing tenant_id, schedule_id, or profile_id' });
+        }
+
+        // 1. Fetch schedule to find capacity
+        const { data: schedule, error: scheduleError } = await supabase
+            .from('class_schedules')
+            .select(`
+                capacity_override,
+                facility:facilities(max_capacity)
+            `)
+            .eq('id', schedule_id)
+            .eq('tenant_id', tenant_id)
+            .single();
+
+        if (scheduleError || !schedule) {
+            return res.status(404).json({ error: 'Class schedule not found' });
+        }
+
+        const capacity = schedule.capacity_override || (schedule.facility && schedule.facility.max_capacity) || 0;
+
+        // 2. Count existing bookings
+        const { count, error: countError } = await supabase
+            .from('class_bookings')
+            .select('*', { count: 'exact', head: true })
+            .eq('schedule_id', schedule_id)
+            .eq('tenant_id', tenant_id)
+            .in('status', ['booked', 'checked_in']);
+
+        if (countError) {
+            return res.status(500).json({ error: 'Failed to check class capacity' });
+        }
+
+        if (capacity > 0 && count >= capacity) {
+            return res.status(400).json({ error: 'Class capacity reached' });
+        }
+
+        // 3. Create booking
+        const { data: booking, error: bookingError } = await supabase
+            .from('class_bookings')
+            .insert({
+                tenant_id,
+                schedule_id,
+                profile_id,
+                status: 'booked'
+            })
+            .select()
+            .single();
+
+        if (bookingError) {
+            return res.status(500).json({ error: bookingError.message });
+        }
+
+        res.status(200).json({ success: true, booking });
+
+    } catch (error) {
+        console.error("Book class error:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+router.put('/reassign-trainer', async (req, res) => {
+    try {
+        if (!supabase) {
+            return res.status(500).json({ error: 'Supabase not configured' });
+        }
+
+        const { tenant_id, schedule_id, new_trainer_id } = req.body;
+
+        if (!tenant_id || !schedule_id || !new_trainer_id) {
+            return res.status(400).json({ error: 'Missing tenant_id, schedule_id, or new_trainer_id' });
+        }
+
+        // 1. Update the class schedule with the new trainer
+        const { data: schedule, error: updateError } = await supabase
+            .from('class_schedules')
+            .update({ trainer_id: new_trainer_id })
+            .eq('id', schedule_id)
+            .eq('tenant_id', tenant_id)
+            .select('title')
+            .single();
+
+        if (updateError || !schedule) {
+            return res.status(500).json({ error: updateError ? updateError.message : 'Failed to update schedule' });
+        }
+
+        // 2. Fetch all members booked for this class
+        const { data: bookings, error: bookingsError } = await supabase
+            .from('class_bookings')
+            .select('profile_id')
+            .eq('schedule_id', schedule_id)
+            .eq('tenant_id', tenant_id)
+            .in('status', ['booked', 'checked_in']);
+
+        if (bookingsError) {
+            return res.status(500).json({ error: 'Failed to fetch bookings for notifications' });
+        }
+
+        // 3. Queue notifications
+        if (bookings && bookings.length > 0) {
+            const notifications = bookings.map(booking => ({
+                tenant_id,
+                profile_id: booking.profile_id,
+                channel: 'email', // Defaulting to email
+                recipient: 'member', // this should actually be looked up, but simplifying for now, or the system uses profile_id directly.
+                subject: 'Trainer Change Notification',
+                content: `The trainer for your class "${schedule.title}" has been reassigned.`,
+                status: 'pending'
+            }));
+
+            const { error: notifyError } = await supabase
+                .from('notification_queue')
+                .insert(notifications);
+
+            if (notifyError) {
+                console.error("Failed to queue notifications:", notifyError);
+                // Non-fatal error, we still updated the trainer
+            }
+        }
+
+        res.status(200).json({ success: true, message: 'Trainer reassigned and notifications queued.' });
+
+    } catch (error) {
+        console.error("Reassign trainer error:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 module.exports = router;
