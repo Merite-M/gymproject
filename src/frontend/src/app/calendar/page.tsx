@@ -154,7 +154,7 @@ export default function CalendarPage() {
                 .from('class_schedules')
                 .select('*, trainer:profiles(first_name, last_name), facility:facilities(name, max_capacity), class_bookings(count)')
                 .eq('is_cancelled', false)
-                .eq('class_bookings.status', 'booked');
+                .in('class_bookings.status', ['booked', 'checked_in']);
 
             if (data && data.length > 0) {
                  setSchedules(data);
