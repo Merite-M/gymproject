@@ -9,8 +9,8 @@ interface HoldRequest {
   profile_id: string;
   hold_reason: 'medical' | 'travel' | 'financial' | 'other';
   start_date: string;
-  end_date: string;
-  notes?: string;
+  end_date?: string;
+  notes?: string | null;
   created_by: string;
 }
 
@@ -96,7 +96,7 @@ export default function HoldManagement({
         profile_id: profileId,
         hold_reason: formData.hold_reason as 'medical' | 'travel' | 'financial' | 'other',
         start_date: formData.start_date,
-        end_date: formData.end_date || null,
+        end_date: formData.end_date || undefined,
         notes: formData.notes || null,
         created_by: currentUserId
       };

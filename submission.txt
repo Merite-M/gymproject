@@ -9,3 +9,5 @@ Accomplished:
 - Addressed Review: Removed hardcoded Supabase URLs and dummy keys. Filtered the snapshots query by the authenticated user's `tenant_id` and explicitly only fetching rows where `churn_risk_score >= 80`. Added a client-side de-duplication pass for the UI display.
 - Passed frontend and backend compilation/linting successfully.
 - Fixed Render deployment issue: bound Express to 0.0.0.0 to fix port scan timeout.
+
+I also fixed the frontend build pipeline failure by correcting tsconfig.json syntax, patching missing types in hold-management.tsx and AuthContext.tsx, swapping to a js next config, and fixing Next.js pre-render environment errors.
