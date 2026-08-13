@@ -41,8 +41,12 @@ export default function POSTerminal() {
     const [activeCategory, setActiveCategory] = useState<string>('ALL');
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const [selectedProfile, setSelectedProfile] = useState<string>('');
+    const [memberTabBalance, setMemberTabBalance] = useState<number>(0);
     const [tillStatus, setTillStatus] = useState<Shift | null>(null); // For cash till challenge
     const [isCheckingOut, setIsCheckingOut] = useState(false);
+    const [showShiftModal, setShowShiftModal] = useState<boolean>(false);
+    const [shiftReport, setShiftReport] = useState<any>(null);
+    const [actualCash, setActualCash] = useState<string>('');
 
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -94,6 +98,43 @@ export default function POSTerminal() {
       };
     }, []);
 
+
+    useEffect(() => {
+        const fetchTabBalance = async () => {
+            if (selectedProfile) {
+                const { data: tenant } = await supabase.from('tenants').select('id').limit(1).single();
+                if (tenant) {
+                    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/member_tab/${selectedProfile}?tenant_id=${tenant.id}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        setMemberTabBalance(data.balance);
+                    }
+                }
+            } else {
+                setMemberTabBalance(0);
+            }
+        };
+        fetchTabBalance();
+    }, [selectedProfile]);
+
+
+
+    const fetchXReport = async () => {
+        if (!tillStatus) return;
+        const { data: _tenant } = await supabase.from('tenants').select('id').limit(1).single();
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/shift/${tillStatus.id}/x-report?tenant_id=${_tenant?.id}`);
+        if (res.ok) {
+            setShiftReport(await res.json());
+        }
+    };
+
+    useEffect(() => {
+        if (showShiftModal && tillStatus) {
+            fetchXReport();
+        }
+    }, [showShiftModal, tillStatus]);
+
+
     const filteredProducts = activeCategory === 'ALL' ? products : products.filter(p => p.category === activeCategory);
 
     const addToCart = (product: Product) => {
@@ -129,26 +170,41 @@ export default function POSTerminal() {
 
     const cartTotal = cart.reduce((sum, item) => sum + (item.sell_price * item.quantity), 0);
 
+
+    const openShift = async () => {
+        const startingCash = prompt("Audit: Please enter current physical till cash balance to open shift");
+        if (!startingCash) return null;
+
+        const { data: tenant } = await supabase.from('tenants').select('id').limit(1).single();
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/shift/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tenant_id: tenant?.id, staff_id: null, starting_cash: parseFloat(startingCash) })
+        });
+
+        if (res.ok) {
+            const shift = await res.json();
+            setTillStatus(shift);
+            alert("Shift Opened successfully.");
+            return shift;
+        }
+        return null;
+    };
+
+
+
     const handleCheckout = async (method: string) => {
         if (cart.length === 0) return;
         if (method === 'member_tab' && !selectedProfile) {
             alert("Please select a member to charge to tab");
             return;
         }
-        if (method === 'cash' && !tillStatus) {
-            const startingCash = prompt("Audit: Please enter current physical till cash balance to open shift");
-            if (!startingCash) return;
-            // Open shift
-            const { data: tenant } = await supabase.from('tenants').select('id').limit(1).single();
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/shift/start`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tenant_id: tenant?.id, staff_id: null, starting_cash: parseFloat(startingCash) })
-            });
-            const shift = await res.json();
-            setTillStatus(shift);
-            alert("Shift Opened. Proceeding with checkout.");
-            return; // Requires them to click checkout again after shift opens
+
+        let currentShift = tillStatus;
+        if (method === 'cash' && !currentShift) {
+            currentShift = await openShift();
+            if (!currentShift) return;
+            // The flow can proceed now that the shift is opened
         }
 
         setIsCheckingOut(true);
@@ -158,12 +214,11 @@ export default function POSTerminal() {
                  tenant_id: tenant?.id,
                  profile_id: selectedProfile || null,
                  method,
-                 shift_id: tillStatus ? tillStatus.id : null,
+                 shift_id: currentShift ? currentShift.id : null,
                  staff_id: null, // Would be current user
                  items: cart.map(item => ({ product_id: item.id, quantity: item.quantity, sell_price: item.sell_price, name: item.name }))
              };
-
-             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/checkout`, {
+const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/checkout`, {
                  method: 'POST',
                  headers: { 'Content-Type': 'application/json' },
                  body: JSON.stringify(payload)
@@ -186,6 +241,34 @@ export default function POSTerminal() {
         }
         setIsCheckingOut(false);
     };
+
+
+    const handleCloseShift = async () => {
+        if (!tillStatus || !actualCash) return;
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/shift/end`, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({ shift_id: tillStatus.id, actual_cash: parseFloat(actualCash) })
+            });
+            const result = await res.json();
+
+            if (result.status === 'discrepancy') {
+                 alert(`Shift closed with discrepancy. Expected: ${result.expected_cash}, Actual: ${result.actual_cash}`);
+            } else {
+                 alert('Shift closed successfully.');
+            }
+
+            setTillStatus(null);
+            setShowShiftModal(false);
+            setShiftReport(null);
+            setActualCash('');
+        } catch (error) {
+            console.error(error);
+            alert("Error closing shift");
+        }
+    };
+
 
     if (isPosEnabled === null) {
         return <div className="flex h-screen items-center justify-center font-body-base bg-canvas-bg text-primary">Loading POS Terminal...</div>;
@@ -252,6 +335,13 @@ export default function POSTerminal() {
               <h2 className="text-headline-md font-bold text-primary tracking-tight">Point of Sale</h2>
             </div>
             <div className="flex items-center gap-4">
+              <button
+                  onClick={() => setShowShiftModal(true)}
+                  className="px-4 py-2 bg-surface-container border border-border-hairline rounded-lg text-body-dense font-medium text-primary hover:bg-surface-muted transition-colors flex items-center gap-2"
+              >
+                  <span className="material-symbols-outlined text-[18px]">point_of_sale</span>
+                  {tillStatus ? 'Till Management' : 'Open Till'}
+              </button>
               <div className="flex items-center gap-2 border-l border-border-hairline pl-4 ml-2">
                 <button className="text-text-muted hover:text-on-surface transition-colors p-1.5 rounded-full hover:bg-surface-muted">
                   <span className="material-symbols-outlined">notifications</span>
@@ -321,6 +411,14 @@ export default function POSTerminal() {
                     </select>
                   </div>
                 </div>
+                {selectedProfile && (
+                  <div className="mt-3 p-3 bg-surface-container-lowest rounded-lg border border-border-hairline flex justify-between items-center">
+                      <span className="text-body-dense font-medium text-text-muted">Account Tab Balance:</span>
+                      <span className={`font-mono-id font-bold ${memberTabBalance > 0 ? 'text-danger-crimson' : 'text-primary'}`}>
+                          ${memberTabBalance.toFixed(2)}
+                      </span>
+                  </div>
+                )}
               </div>
 
               {/* Cart Items */}
@@ -396,7 +494,84 @@ export default function POSTerminal() {
               </div>
             </div>
           </div>
-        </div>
+
+        {/* Shift Management Modal */}
+        {showShiftModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                <div className="bg-surface rounded-xl shadow-xl border border-border-hairline w-full max-w-md overflow-hidden">
+                    <div className="px-6 py-4 border-b border-border-hairline flex justify-between items-center bg-canvas-bg">
+                        <h3 className="font-bold text-primary text-body-base">
+                            {tillStatus ? 'Shift Management (X-Report)' : 'Open New Shift'}
+                        </h3>
+                        <button onClick={() => setShowShiftModal(false)} className="text-text-muted hover:text-primary">
+                            <span className="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+                    <div className="p-6">
+                        {!tillStatus ? (
+                             <div className="text-center">
+                                 <p className="text-body-dense text-text-muted mb-4">You need to open a shift to process cash transactions.</p>
+                                 <button
+                                     onClick={async () => { await openShift(); }}
+                                     className="px-6 py-3 bg-primary text-on-primary font-bold rounded-lg hover:bg-primary/90 transition-colors w-full"
+                                 >
+                                     Open Shift Now
+                                 </button>
+                             </div>
+                        ) : (
+                             <div>
+                                 {shiftReport ? (
+                                     <div className="space-y-4">
+                                         <div className="grid grid-cols-2 gap-4">
+                                             <div className="p-3 bg-canvas-bg rounded-lg border border-border-hairline">
+                                                 <p className="text-[11px] font-bold text-text-muted uppercase tracking-widest mb-1">Cash Sales</p>
+                                                 <p className="font-mono-id font-bold text-primary">${(shiftReport.totals?.cash || 0).toFixed(2)}</p>
+                                             </div>
+                                             <div className="p-3 bg-canvas-bg rounded-lg border border-border-hairline">
+                                                 <p className="text-[11px] font-bold text-text-muted uppercase tracking-widest mb-1">MoMo Sales</p>
+                                                 <p className="font-mono-id font-bold text-primary">${(shiftReport.totals?.momo || 0).toFixed(2)}</p>
+                                             </div>
+                                             <div className="p-3 bg-canvas-bg rounded-lg border border-border-hairline">
+                                                 <p className="text-[11px] font-bold text-text-muted uppercase tracking-widest mb-1">Tab Charges</p>
+                                                 <p className="font-mono-id font-bold text-primary">${(shiftReport.totals?.member_tab || 0).toFixed(2)}</p>
+                                             </div>
+                                             <div className="p-3 bg-surface-muted rounded-lg border border-border-hairline">
+                                                 <p className="text-[11px] font-bold text-text-muted uppercase tracking-widest mb-1">Expected Cash In Till</p>
+                                                 <p className="font-mono-id font-bold text-primary text-lg">${(shiftReport.expected_cash || 0).toFixed(2)}</p>
+                                             </div>
+                                         </div>
+
+                                         <div className="pt-4 border-t border-border-hairline mt-4">
+                                             <p className="font-bold text-primary mb-2 text-sm">Z-Report: Close Shift</p>
+                                             <div className="flex gap-2">
+                                                 <input
+                                                     type="number"
+                                                     placeholder="Counted Cash ($)"
+                                                     value={actualCash}
+                                                     onChange={e => setActualCash(e.target.value)}
+                                                     className="flex-1 bg-surface-container-lowest border border-border-hairline rounded-lg px-3 py-2 text-body-base text-primary font-mono-id"
+                                                 />
+                                                 <button
+                                                     disabled={!actualCash}
+                                                     onClick={handleCloseShift}
+                                                     className="px-4 py-2 bg-danger-crimson text-white font-bold rounded-lg hover:bg-danger-crimson/90 transition-colors disabled:opacity-50"
+                                                 >
+                                                     Close Till
+                                                 </button>
+                                             </div>
+                                         </div>
+                                     </div>
+                                 ) : (
+                                     <p className="text-center text-text-muted">Loading report...</p>
+                                 )}
+                             </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
+
+      </div>
       </div>
     );
 }
