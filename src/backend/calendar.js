@@ -10,6 +10,21 @@ if (supabaseUrl && supabaseKey) {
   supabase = createClient(supabaseUrl, supabaseKey);
 }
 
+// Basic auth middleware
+const authMiddleware = async (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: 'Missing Authorization header' });
+    }
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+};
+
 router.post('/validate-schedule', async (req, res) => {
     try {
         if (!supabase) {
@@ -130,6 +145,184 @@ router.post('/validate-schedule', async (req, res) => {
 
     } catch (error) {
         console.error("Validate schedule error:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+router.post('/book', authMiddleware, async (req, res) => {
+    try {
+        if (!supabase) {
+            return res.status(500).json({ error: 'Supabase not configured' });
+        }
+
+        const { tenant_id, schedule_id, profile_id } = req.body;
+
+        if (!tenant_id || !schedule_id || !profile_id) {
+            return res.status(400).json({ error: 'Missing tenant_id, schedule_id, or profile_id' });
+        }
+
+        // 1. Fetch schedule to find capacity
+        const { data: schedule, error: scheduleError } = await supabase
+            .from('class_schedules')
+            .select(`
+                capacity_override,
+                facility:facilities(max_capacity)
+            `)
+            .eq('id', schedule_id)
+            .eq('tenant_id', tenant_id)
+            .single();
+
+        if (scheduleError || !schedule) {
+            return res.status(404).json({ error: 'Class schedule not found' });
+        }
+
+        const capacity = schedule.capacity_override || (schedule.facility && schedule.facility.max_capacity) || 0;
+
+        // 2. Count existing bookings
+        const { count, error: countError } = await supabase
+            .from('class_bookings')
+            .select('*', { count: 'exact', head: true })
+            .eq('schedule_id', schedule_id)
+            .eq('tenant_id', tenant_id)
+            .in('status', ['booked', 'checked_in']);
+
+        if (countError) {
+            return res.status(500).json({ error: 'Failed to check class capacity' });
+        }
+
+        if (capacity > 0 && count >= capacity) {
+            return res.status(400).json({ error: 'Class capacity reached' });
+        }
+
+        // 3. Create booking
+        const { data: booking, error: bookingError } = await supabase
+            .from('class_bookings')
+            .insert({
+                tenant_id,
+                schedule_id,
+                profile_id,
+                status: 'booked'
+            })
+            .select()
+            .single();
+
+        if (bookingError) {
+            return res.status(500).json({ error: bookingError.message });
+        }
+
+        res.status(200).json({ success: true, booking });
+
+    } catch (error) {
+        console.error("Book class error:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+router.put('/reassign-trainer', authMiddleware, async (req, res) => {
+    try {
+        if (!supabase) {
+            return res.status(500).json({ error: 'Supabase not configured' });
+        }
+
+        const { tenant_id, schedule_id, new_trainer_id } = req.body;
+
+        if (!tenant_id || !schedule_id || !new_trainer_id) {
+            return res.status(400).json({ error: 'Missing tenant_id, schedule_id, or new_trainer_id' });
+        }
+
+        // 1. Check if the schedule exists
+        const { data: currentSchedule, error: getError } = await supabase
+            .from('class_schedules')
+            .select('start_time, end_time, title')
+            .eq('id', schedule_id)
+            .eq('tenant_id', tenant_id)
+            .single();
+
+        if (getError || !currentSchedule) {
+            return res.status(404).json({ error: 'Class schedule not found' });
+        }
+
+        // 2. Verify new_trainer_id is a valid trainer/staff in same tenant
+        const { data: trainerProfile, error: trainerError } = await supabase
+            .from('profiles')
+            .select('id, role')
+            .eq('id', new_trainer_id)
+            .eq('tenant_id', tenant_id)
+            .in('role', ['trainer', 'staff'])
+            .single();
+
+        if (trainerError || !trainerProfile) {
+            return res.status(400).json({ error: 'Invalid trainer profile' });
+        }
+
+        // 3. Check for overlap
+        const { data: trainerConflicts, error: conflictError } = await supabase
+            .from('class_schedules')
+            .select('id, title')
+            .eq('tenant_id', tenant_id)
+            .eq('trainer_id', new_trainer_id)
+            .eq('is_cancelled', false)
+            .or(`and(start_time.lte.${currentSchedule.end_time},end_time.gt.${currentSchedule.start_time}),and(start_time.lt.${currentSchedule.end_time},end_time.gte.${currentSchedule.start_time})`);
+
+        if (conflictError) {
+            return res.status(500).json({ error: conflictError.message });
+        }
+
+        if (trainerConflicts && trainerConflicts.length > 0) {
+            return res.status(409).json({ error: 'Trainer is already booked during this time', conflicts: trainerConflicts });
+        }
+
+        // 4. Update the class schedule with the new trainer
+        const { error: updateError } = await supabase
+            .from('class_schedules')
+            .update({ trainer_id: new_trainer_id })
+            .eq('id', schedule_id)
+            .eq('tenant_id', tenant_id);
+
+        if (updateError) {
+            return res.status(500).json({ error: 'Failed to update schedule' });
+        }
+
+        // 5. Fetch all members booked for this class along with their emails
+        const { data: bookings, error: bookingsError } = await supabase
+            .from('class_bookings')
+            .select('profile_id, profiles!inner(email)')
+            .eq('schedule_id', schedule_id)
+            .eq('tenant_id', tenant_id)
+            .in('status', ['booked', 'checked_in']);
+
+        if (bookingsError) {
+            return res.status(500).json({ error: 'Failed to fetch bookings for notifications' });
+        }
+
+        // 6. Queue notifications using the actual email
+        if (bookings && bookings.length > 0) {
+            const notifications = bookings.map(booking => {
+                const recipientEmail = (booking.profiles && booking.profiles.email) || 'admin@gym.com';
+                return {
+                    tenant_id,
+                    profile_id: booking.profile_id,
+                    channel: 'email',
+                    recipient: recipientEmail,
+                    subject: 'Trainer Change Notification',
+                    content: `The trainer for your class "${currentSchedule.title}" has been reassigned.`,
+                    status: 'pending'
+                };
+            });
+
+            const { error: notifyError } = await supabase
+                .from('notification_queue')
+                .insert(notifications);
+
+            if (notifyError) {
+                console.error("Failed to queue notifications:", notifyError);
+            }
+        }
+
+        res.status(200).json({ success: true, message: 'Trainer reassigned and notifications queued.' });
+
+    } catch (error) {
+        console.error("Reassign trainer error:", error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

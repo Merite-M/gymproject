@@ -73,13 +73,32 @@ export default function CalendarPage() {
     const [facilities, setFacilities] = useState<any[]>([]);
 
     const [currentTenantId, setCurrentTenantId] = useState<string>('');
+    const [calendarEnabled, setCalendarEnabled] = useState<boolean | null>(null);
 
     useEffect(() => {
         const getUser = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                const { data } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single();
-                if (data) setCurrentTenantId(data.tenant_id);
+            try {
+                const { data: { user }, error: authError } = await supabase.auth.getUser();
+                if (authError || !user) {
+                    setCalendarEnabled(false);
+                    return;
+                }
+                const { data, error: profileError } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single();
+                if (profileError || !data) {
+                    setCalendarEnabled(false);
+                    return;
+                }
+
+                setCurrentTenantId(data.tenant_id);
+                const { data: tenantData, error: tenantError } = await supabase.from('tenants').select('calendar_enabled').eq('id', data.tenant_id).single();
+
+                if (tenantError || !tenantData) {
+                    setCalendarEnabled(false);
+                } else {
+                    setCalendarEnabled(tenantData.calendar_enabled);
+                }
+            } catch (error) {
+                setCalendarEnabled(false);
             }
         };
         getUser();
@@ -203,6 +222,27 @@ export default function CalendarPage() {
 
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const timeSlots = ['06:00 AM', '07:00 AM', '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM', '06:00 PM', '07:00 PM', '08:00 PM'];
+
+    if (calendarEnabled === null) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-slate-50">
+                <div className="w-8 h-8 border-4 border-slate-900 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+        );
+    }
+
+    if (calendarEnabled === false) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 text-slate-900 font-sans p-6">
+                <AlertTriangle className="w-12 h-12 text-yellow-500 mb-4" />
+                <h1 className="text-2xl font-bold mb-2">Calendar Feature is Disabled</h1>
+                <p className="text-slate-600 text-center max-w-md">
+                    The class scheduling and calendar features are currently disabled for this tenant.
+                    Please contact an administrator to enable them in the tenant settings.
+                </p>
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col min-h-screen bg-slate-50 text-slate-900 font-sans">
