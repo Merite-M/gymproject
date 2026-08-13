@@ -138,6 +138,20 @@ app.post('/api/checkin', async (req, res) => {
         reasons.push('Liability Waiver Unsigned');
     }
 
+    // Check for active membership holds
+    const { data: activeHold } = await supabase
+        .from('membership_holds')
+        .select('*')
+        .eq('profile_id', profile_id)
+        .eq('tenant_id', tenant_id)
+        .eq('status', 'active')
+        .single();
+
+    if (activeHold) {
+        if (finalStatus === 'approved') finalStatus = 'warning';
+        reasons.push(`Membership on hold until ${activeHold.end_date || 'indefinitely'}`);
+    }
+
     // Check if waiver is older than 1 year
     if (profile.waiver_signed_at) {
         const waiverDate = new Date(profile.waiver_signed_at);
@@ -191,6 +205,8 @@ app.use("/api/pos", posRoutes);
 const staffRoutes = require("./staff");
 app.use("/api/staff", staffRoutes);
 
+const membershipHoldsRoutes = require("./membership_holds");
+app.use("/api/membership-holds", membershipHoldsRoutes);
 
 const calendarRoutes = require("./calendar");
 

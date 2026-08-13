@@ -11,6 +11,9 @@ interface MemberState {
   loading: boolean;
   error: string | null;
   fetchMemberData: (profileId: string) => Promise<void>;
+  createHoldRequest: (holdData: any) => Promise<void>;
+  updateHold: (holdId: string, updateData: any) => Promise<void>;
+  deleteHold: (holdId: string) => Promise<void>;
 }
 
 export const useMemberStore = create<MemberState>((set) => ({
@@ -62,6 +65,66 @@ export const useMemberStore = create<MemberState>((set) => ({
       });
     } catch (err: any) {
       set({ error: err.message, loading: false });
+    }
+  },
+  createHoldRequest: async (holdData: any) => {
+    set({ loading: true, error: null });
+    try {
+      const { data, error } = await supabase
+        .from("membership_holds")
+        .insert(holdData)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      set((state) => ({
+        holds: [...state.holds, data],
+        loading: false,
+      }));
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+      throw err;
+    }
+  },
+  updateHold: async (holdId: string, updateData: any) => {
+    set({ loading: true, error: null });
+    try {
+      const { data, error } = await supabase
+        .from("membership_holds")
+        .update(updateData)
+        .eq("id", holdId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      set((state) => ({
+        holds: state.holds.map((h) => (h.id === holdId ? data : h)),
+        loading: false,
+      }));
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+      throw err;
+    }
+  },
+  deleteHold: async (holdId: string) => {
+    set({ loading: true, error: null });
+    try {
+      const { error } = await supabase
+        .from("membership_holds")
+        .delete()
+        .eq("id", holdId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        holds: state.holds.filter((h) => h.id !== holdId),
+        loading: false,
+      }));
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+      throw err;
     }
   },
 }));

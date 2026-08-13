@@ -21,6 +21,7 @@ import {
   Mail,
   Phone,
   MoreVertical,
+  PauseCircle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -31,6 +32,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import HoldManagement from "@/components/hold-management";
+import HoldList from "@/components/hold-list";
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -52,6 +55,9 @@ export default function MemberProfileClient({
   const [checkIns, setCheckIns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showHoldModal, setShowHoldModal] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [tenantId, setTenantId] = useState<string>('');
 
   // Hardcoded for structural replication
   const mockOtherMembers = [
@@ -93,6 +99,21 @@ export default function MemberProfileClient({
           .order("created_at", { ascending: false })
           .limit(5);
 
+        // Get current user and tenant
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setCurrentUser(user);
+          // Get tenant from profile
+          const { data: userProfile } = await supabase
+            .from("profiles")
+            .select("tenant_id, role")
+            .eq("id", user.id)
+            .single();
+          if (userProfile) {
+            setTenantId(userProfile.tenant_id);
+          }
+        }
+
         setProfile(profileData as any);
         setMemberships(memData || []);
         setHolds(holdData || []);
@@ -106,6 +127,72 @@ export default function MemberProfileClient({
     };
     fetchMemberData();
   }, [resolvedParams.id]);
+
+  const handleHoldSubmit = async (holdRequest: any) => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/membership-holds`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(holdRequest),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Refresh holds
+        const { data: holdData } = await supabase
+          .from("membership_holds")
+          .select("*")
+          .eq("profile_id", resolvedParams.id);
+        setHolds(holdData || []);
+        setShowHoldModal(false);
+      } else {
+        throw new Error(data.error || 'Failed to submit hold request');
+      }
+    } catch (err: any) {
+      console.error('Hold submission error:', err);
+      throw err;
+    }
+  };
+
+  const handleHoldAction = async (holdId: string, action: 'approve' | 'deny' | 'end' | 'cancel') => {
+    try {
+      const updateData: any = {
+        tenant_id: tenantId,
+        status: action === 'approve' ? 'approved' : action === 'deny' ? 'denied' : action === 'end' ? 'ended' : 'cancelled',
+      };
+
+      if (action === 'approve' || action === 'deny') {
+        updateData.approved_by = currentUser?.id;
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/membership-holds/${holdId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Refresh holds
+        const { data: holdData } = await supabase
+          .from("membership_holds")
+          .select("*")
+          .eq("profile_id", resolvedParams.id);
+        setHolds(holdData || []);
+      } else {
+        throw new Error(data.error || 'Failed to update hold');
+      }
+    } catch (err: any) {
+      console.error('Hold action error:', err);
+      alert(err.message || 'Failed to update hold');
+    }
+  };
 
   if (loading) {
     return (
@@ -281,6 +368,7 @@ export default function MemberProfileClient({
               <Tabs defaultValue="memberships" className="w-full">
                 <TabsList className="flex gap-8 mb-[-1px] w-full justify-start h-auto bg-transparent border-0 p-0 rounded-none">
                   <TabsTrigger value="memberships" className="py-3 px-0 border-b-2 rounded-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=inactive]:border-transparent data-[state=inactive]:text-text-muted text-body-base font-medium transition-colors bg-transparent data-[state=active]:shadow-none data-[state=active]:bg-transparent">Memberships</TabsTrigger>
+                  <TabsTrigger value="holds" className="py-3 px-0 border-b-2 rounded-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=inactive]:border-transparent data-[state=inactive]:text-text-muted text-body-base font-medium transition-colors bg-transparent data-[state=active]:shadow-none data-[state=active]:bg-transparent">Holds & Cancellations</TabsTrigger>
                   <TabsTrigger value="billing" className="py-3 px-0 border-b-2 rounded-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=inactive]:border-transparent data-[state=inactive]:text-text-muted text-body-base font-medium transition-colors bg-transparent data-[state=active]:shadow-none data-[state=active]:bg-transparent">Billing</TabsTrigger>
                   <TabsTrigger value="activity" className="py-3 px-0 border-b-2 rounded-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=inactive]:border-transparent data-[state=inactive]:text-text-muted text-body-base font-medium transition-colors bg-transparent data-[state=active]:shadow-none data-[state=active]:bg-transparent">Activity</TabsTrigger>
                   <TabsTrigger value="family" className="py-3 px-0 border-b-2 rounded-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=inactive]:border-transparent data-[state=inactive]:text-text-muted text-body-base font-medium transition-colors bg-transparent data-[state=active]:shadow-none data-[state=active]:bg-transparent">Family & Links</TabsTrigger>
@@ -319,7 +407,13 @@ export default function MemberProfileClient({
                         </div>
                       </div>
                       <div className="px-6 py-4 bg-surface flex gap-3 border-t border-border-hairline">
-                        <button className="px-4 py-2 bg-surface-container-lowest border border-border-hairline text-primary rounded-lg text-body-dense font-semibold hover:bg-surface-muted transition-colors shadow-sm flex items-center gap-2"><span className="material-symbols-outlined text-[18px]">pause_circle</span> Place on Hold</button>
+                        <button 
+                          onClick={() => setShowHoldModal(true)}
+                          className="px-4 py-2 bg-surface-container-lowest border border-border-hairline text-primary rounded-lg text-body-dense font-semibold hover:bg-surface-muted transition-colors shadow-sm flex items-center gap-2"
+                        >
+                          <PauseCircle className="w-4 h-4" />
+                          Place on Hold
+                        </button>
                         <button className="px-4 py-2 bg-surface-container-lowest border border-border-hairline text-primary rounded-lg text-body-dense font-semibold hover:bg-surface-muted transition-colors shadow-sm flex items-center gap-2"><span className="material-symbols-outlined text-[18px]">upgrade</span> Upgrade Plan</button>
                         <div className="flex-1"></div>
                         <button className="px-4 py-2 text-danger-crimson hover:bg-danger-soft/50 rounded-lg text-body-dense font-semibold transition-colors">Cancel Membership</button>
@@ -352,6 +446,34 @@ export default function MemberProfileClient({
                           </div>
                           <button className="px-3 py-1.5 bg-surface-container-lowest border border-border-hairline text-primary rounded-md text-body-dense font-medium hover:bg-surface-muted transition-colors shadow-sm">Send Request</button>
                         </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="holds" className="mt-0 outline-none">
+                    <div className="bg-surface-container-lowest border border-border-hairline rounded-xl shadow-sm overflow-hidden">
+                      <div className="p-4 border-b border-border-hairline flex justify-between items-center bg-canvas-bg/50">
+                        <h3 className="font-bold text-primary flex items-center gap-2">
+                          <PauseCircle className="w-5 h-5" />
+                          Membership Holds
+                        </h3>
+                        <button
+                          onClick={() => setShowHoldModal(true)}
+                          className="px-3 py-1.5 bg-primary text-on-primary rounded-md text-body-dense font-medium hover:bg-primary/90 transition-colors flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">add</span>
+                          Request Hold
+                        </button>
+                      </div>
+                      <div className="p-6">
+                        <HoldList
+                          holds={holds}
+                          onApprove={(id) => handleHoldAction(id, 'approve')}
+                          onDeny={(id) => handleHoldAction(id, 'deny')}
+                          onEndEarly={(id) => handleHoldAction(id, 'end')}
+                          onCancel={(id) => handleHoldAction(id, 'cancel')}
+                          currentUserRole={currentUser?.role || 'member'}
+                        />
                       </div>
                     </div>
                   </TabsContent>
@@ -431,6 +553,20 @@ export default function MemberProfileClient({
           </div>
         </div>
       </div>
+
+      {/* Hold Management Modal */}
+      {showHoldModal && currentUser && tenantId && memberships.length > 0 && (
+        <HoldManagement
+          tenantId={tenantId}
+          membershipId={memberships[0].id}
+          profileId={resolvedParams.id}
+          currentUserId={currentUser.id}
+          membershipPrice={memberships[0].price}
+          billingInterval={memberships[0].billing_interval}
+          onCancel={() => setShowHoldModal(false)}
+          onSubmit={handleHoldSubmit}
+        />
+      )}
     </div>
   );
 }
