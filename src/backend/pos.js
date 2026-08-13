@@ -1,6 +1,7 @@
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const router = express.Router();
+const gymEmitter = require("./events");
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -118,6 +119,13 @@ router.post('/checkout', async (req, res) => {
       }
 
       if (profile && profile.status === 'debtor') {
+        gymEmitter.emit('payment.failed', {
+            tenant_id,
+            profile_id,
+            email: profile.email,
+            amount: totalAmount,
+            reason: 'Account is in debtor status.'
+        });
         return res.status(403).json({ error: 'Cannot charge to tab: Account is in debtor status. Please update payment method.' });
       }
 

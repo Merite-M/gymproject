@@ -17,12 +17,12 @@ function initCron(supabase) {
         }
 
         isRunning = true;
-        console.log("Running low-stock notification cron job...");
+        console.log("Running notification queue cron job...");
         try {
             const { data: notifications, error } = await supabase
                 .from('notification_queue')
                 .select('*')
-                .eq('subject', 'Low Stock Alert')
+
                 .eq('status', 'pending')
                 .is('sent_at', null);
 
@@ -36,7 +36,7 @@ function initCron(supabase) {
             }
 
             for (const notif of notifications) {
-                console.log(`Processing low stock alert for tenant ${notif.tenant_id}: ${notif.content}`);
+                console.log(`Processing notification [${notif.subject}] for tenant ${notif.tenant_id}: ${notif.content}`);
 
                 // Simulate SMS API Call
                 console.log(`[SMS Gateway Mock] Sending SMS to ${notif.recipient}: ${notif.subject} - ${notif.content}`);
