@@ -29,7 +29,7 @@ interface CheckIn {
 // Web Audio API for synthetic notification sounds
 let sharedAudioContext: AudioContext | null = null;
 
-const playSound = (status: string) => {
+const playSound = async (status: string) => {
   if (typeof window === "undefined") return;
 
   try {
@@ -39,9 +39,13 @@ const playSound = (status: string) => {
 
     const ctx = sharedAudioContext;
 
-    // Resume context if suspended (browser autoplay policy)
+    // Wait for context to resume if suspended (browser autoplay policy) before scheduling
     if (ctx.state === 'suspended') {
-      ctx.resume().catch(e => console.warn('Could not resume audio context', e));
+      await ctx.resume().catch(e => {
+        console.warn('Could not resume audio context', e);
+        return;
+      });
+      if (ctx.state === 'suspended') return; // User interaction required
     }
 
     const osc = ctx.createOscillator();
@@ -50,24 +54,26 @@ const playSound = (status: string) => {
     osc.connect(gain);
     gain.connect(ctx.destination);
 
+    const startTime = ctx.currentTime;
+
     if (status === "approved") {
       osc.type = "sine";
-      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
-      osc.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 0.1); // C6
-      gain.gain.setValueAtTime(0, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.5);
+      osc.frequency.setValueAtTime(523.25, startTime); // C5
+      osc.frequency.exponentialRampToValueAtTime(1046.50, startTime + 0.1); // C6
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.5);
+      osc.start(startTime);
+      osc.stop(startTime + 0.5);
     } else {
       // Warning/Denied uses a lower, harsher beep
       osc.type = "square";
-      osc.frequency.setValueAtTime(200, ctx.currentTime);
-      gain.gain.setValueAtTime(0, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.4);
+      osc.frequency.setValueAtTime(200, startTime);
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.2, startTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.4);
+      osc.start(startTime);
+      osc.stop(startTime + 0.4);
     }
   } catch (e) {
     console.error("Audio playback failed:", e);
@@ -93,12 +99,22 @@ export default function MissionControlMonitor() {
         .limit(20);
 
       if (!error && data) {
-        setCheckIns(data as unknown as CheckIn[]);
-        if (data.length > 0) setActiveCheckIn(data[0] as unknown as CheckIn);
+        const fetchedData = data as unknown as CheckIn[];
+        setCheckIns(prev => {
+          // Merge by ID to prevent dropping rows that arrived via realtime while fetch was in flight
+          const combined = [...prev];
+          fetchedData.forEach(newRow => {
+            if (!combined.some(row => row.id === newRow.id)) {
+              combined.push(newRow);
+            }
+          });
+          return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 20);
+        });
+
+        // Only auto-select if no selection has been made manually
+        setActiveCheckIn(current => current ? current : (fetchedData[0] || null));
       }
     };
-
-    fetchRecentCheckIns();
 
     // 2. Setup Realtime Subscription
     const channel = supabase
@@ -109,11 +125,15 @@ export default function MissionControlMonitor() {
         async (payload) => {
           const newCheckIn = payload.new as CheckIn;
           // Fetch associated profile data for the new check-in
-          const { data: profile } = await supabase
+          const { data: profile, error } = await supabase
              .from('profiles')
              .select('first_name, last_name, avatar_url, membership_status')
              .eq('id', newCheckIn.profile_id)
              .single();
+
+          if (error) {
+              console.error("Error fetching profile for realtime check-in:", error);
+          }
 
           if (profile) {
               newCheckIn.profiles = profile;
