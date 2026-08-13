@@ -25,6 +25,61 @@ interface CheckIn {
   }
 }
 
+
+// Web Audio API for synthetic notification sounds
+let sharedAudioContext: AudioContext | null = null;
+
+const playSound = async (status: string) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    if (!sharedAudioContext) {
+      sharedAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+
+    const ctx = sharedAudioContext;
+
+    // Wait for context to resume if suspended (browser autoplay policy) before scheduling
+    if (ctx.state === 'suspended') {
+      await ctx.resume().catch(e => {
+        console.warn('Could not resume audio context', e);
+        return;
+      });
+      if (ctx.state === 'suspended') return; // User interaction required
+    }
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    const startTime = ctx.currentTime;
+
+    if (status === "approved") {
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(523.25, startTime); // C5
+      osc.frequency.exponentialRampToValueAtTime(1046.50, startTime + 0.1); // C6
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.5);
+      osc.start(startTime);
+      osc.stop(startTime + 0.5);
+    } else {
+      // Warning/Denied uses a lower, harsher beep
+      osc.type = "square";
+      osc.frequency.setValueAtTime(200, startTime);
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.2, startTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.4);
+      osc.start(startTime);
+      osc.stop(startTime + 0.4);
+    }
+  } catch (e) {
+    console.error("Audio playback failed:", e);
+  }
+};
+
 export default function MissionControlMonitor() {
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const tenantId = '00000000-0000-0000-0000-000000000000'; // Default or context
@@ -37,19 +92,29 @@ export default function MissionControlMonitor() {
         .from('check_ins')
         .select(`
           *,
-          profiles:profile_id (first_name, last_name, avatar_url)
+          profiles:profile_id (first_name, last_name, avatar_url, membership_status)
         `)
         .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
         .limit(20);
 
       if (!error && data) {
-        setCheckIns(data as unknown as CheckIn[]);
-        if (data.length > 0) setActiveCheckIn(data[0] as unknown as CheckIn);
+        const fetchedData = data as unknown as CheckIn[];
+        setCheckIns(prev => {
+          // Merge by ID to prevent dropping rows that arrived via realtime while fetch was in flight
+          const combined = [...prev];
+          fetchedData.forEach(newRow => {
+            if (!combined.some(row => row.id === newRow.id)) {
+              combined.push(newRow);
+            }
+          });
+          return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 20);
+        });
+
+        // Only auto-select if no selection has been made manually
+        setActiveCheckIn(current => current ? current : (fetchedData[0] || null));
       }
     };
-
-    fetchRecentCheckIns();
 
     // 2. Setup Realtime Subscription
     const channel = supabase
@@ -60,11 +125,15 @@ export default function MissionControlMonitor() {
         async (payload) => {
           const newCheckIn = payload.new as CheckIn;
           // Fetch associated profile data for the new check-in
-          const { data: profile } = await supabase
+          const { data: profile, error } = await supabase
              .from('profiles')
-             .select('first_name, last_name, avatar_url')
+             .select('first_name, last_name, avatar_url, membership_status')
              .eq('id', newCheckIn.profile_id)
              .single();
+
+          if (error) {
+              console.error("Error fetching profile for realtime check-in:", error);
+          }
 
           if (profile) {
               newCheckIn.profiles = profile;
@@ -72,9 +141,15 @@ export default function MissionControlMonitor() {
 
           setCheckIns((prev) => [newCheckIn, ...prev].slice(0, 20));
           setActiveCheckIn(newCheckIn); // Auto select newest
+
+          playSound(newCheckIn.status);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          fetchRecentCheckIns();
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
