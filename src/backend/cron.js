@@ -1,4 +1,7 @@
 const cron = require('node-cron');
+const fetch = require('node-fetch');
+
+let isRunning = false;
 
 function initCron(supabase) {
     if (!supabase) {
@@ -8,6 +11,12 @@ function initCron(supabase) {
 
     // Run every minute
     cron.schedule('* * * * *', async () => {
+        if (isRunning) {
+            console.log("Cron job is already running. Skipping this tick.");
+            return;
+        }
+
+        isRunning = true;
         console.log("Running low-stock notification cron job...");
         try {
             const { data: notifications, error } = await supabase
@@ -87,6 +96,8 @@ function initCron(supabase) {
 
         } catch (e) {
             console.error("Cron job exception:", e);
+        } finally {
+            isRunning = false;
         }
     });
 }

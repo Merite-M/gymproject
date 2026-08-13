@@ -20,12 +20,28 @@ router.get('/reports/z-report', async (req, res) => {
             return res.status(400).json({ error: 'Missing tenant_id, start_date, or end_date' });
         }
 
+        // Ensure authentication
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            return res.status(401).json({ error: 'Missing Authorization header' });
+        }
+
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
+            return res.status(401).json({ error: 'Invalid or expired token' });
+        }
+
+        // Ideally we would verify user role/tenant access here as well.
+        // E.g. get profile by user.id and ensure it matches tenant_id and role == 'admin' or 'manager'
+
         const { data: shifts, error: shiftsError } = await supabase
             .from('shift_ledgers')
             .select('id, starting_cash, expected_cash, actual_cash, status, shift_start, shift_end, staff_id')
             .eq('tenant_id', tenant_id)
             .gte('shift_start', new Date(start_date).toISOString())
-            .lte('shift_start', new Date(end_date).toISOString());
+            .lte('shift_end', new Date(end_date).toISOString());
 
         if (shiftsError) throw shiftsError;
 
@@ -37,7 +53,7 @@ router.get('/reports/z-report', async (req, res) => {
 
         const { data: payments, error: paymentsError } = await supabase
             .from('payments')
-            .select('amount, method')
+            .select('amount, method, status')
             .in('shift_id', shiftIds)
             .eq('tenant_id', tenant_id);
 
@@ -45,19 +61,32 @@ router.get('/reports/z-report', async (req, res) => {
         if (paymentsError) throw paymentsError;
 
         const totals = {
-            cash: 0,
-            card: 0,
-            momo: 0,
-            member_tab: 0,
-            bank_transfer: 0
+            completed: {
+                cash: 0,
+                card: 0,
+                momo: 0,
+                member_tab: 0,
+                bank_transfer: 0
+            },
+            pending: {
+                cash: 0,
+                card: 0,
+                momo: 0,
+                member_tab: 0,
+                bank_transfer: 0
+            }
         };
 
         payments.forEach(p => {
-            if (totals[p.method] !== undefined) {
-                totals[p.method] += parseFloat(p.amount);
+            const statusKey = p.status === 'completed' ? 'completed' : 'pending';
+            if (totals[statusKey][p.method] !== undefined) {
+                totals[statusKey][p.method] += parseFloat(p.amount);
+            } else {
+                totals[statusKey][p.method] = parseFloat(p.amount);
             }
         });
 
+        // Sum total revenue that is fully completed vs total expected
         let summaryExpectedCash = 0;
         let summaryActualCash = 0;
         let discrepancies = 0;
@@ -84,6 +113,5 @@ router.get('/reports/z-report', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-
 
 module.exports = router;
