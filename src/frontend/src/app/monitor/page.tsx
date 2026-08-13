@@ -91,6 +91,21 @@ export default function MissionControlMonitor() {
   soundCuesEnabledRef.current = soundCuesEnabled;
 
   useEffect(() => {
+    // Fetch tenant settings unconditionally on mount
+    const fetchTenantSettings = async () => {
+      const { data: tenantData, error: tenantError } = await supabase
+        .from('tenants')
+        .select('visual_alerts_enabled, sound_cues_enabled')
+        .eq('id', tenantId)
+        .single();
+      if (tenantError) {
+        console.error("Error fetching tenant settings for alerts/sounds (using defaults):", tenantError);
+      }
+      setVisualAlertsEnabled(tenantData?.visual_alerts_enabled ?? true);
+      setSoundCuesEnabled(tenantData?.sound_cues_enabled ?? true);
+    };
+    fetchTenantSettings();
+
     // 1. Initial Fetch
     const fetchRecentCheckIns = async () => {
       const { data, error } = await supabase
@@ -118,17 +133,6 @@ export default function MissionControlMonitor() {
 
         // Only auto-select if no selection has been made manually
         setActiveCheckIn(current => current ? current : (fetchedData[0] || null));
-      }
-
-      // Fetch tenant settings
-      const { data: tenantData, error: tenantError } = await supabase
-        .from('tenants')
-        .select('visual_alerts_enabled, sound_cues_enabled')
-        .eq('id', tenantId)
-        .single();
-      if (!tenantError && tenantData) {
-        setVisualAlertsEnabled(tenantData.visual_alerts_enabled);
-        setSoundCuesEnabled(tenantData.sound_cues_enabled);
       }
     };
 
@@ -175,6 +179,11 @@ export default function MissionControlMonitor() {
   }, []);
 
   const getStatusVisuals = (status: string) => {
+    // If visual alerts are disabled, return a fully neutral state regardless of status
+    if (!visualAlertsEnabled) {
+      return { color: 'bg-surface-tint', dot: 'bg-surface-tint', label: status.replace('denied_', '').toUpperCase(), bg: 'bg-surface-muted', outline: 'border-border-hairline' };
+    }
+
     switch (status) {
       case 'approved': return { color: 'bg-secondary', dot: 'bg-secondary', label: 'Approved', bg: 'bg-secondary-container', outline: 'border-secondary' };
       case 'warning': return { color: 'bg-warning-amber', dot: 'bg-warning-amber', label: 'Warning', bg: 'bg-warning-soft', outline: 'border-warning-amber' };
