@@ -72,7 +72,18 @@ export default function CalendarPage() {
     const [trainers, setTrainers] = useState<any[]>([]);
     const [facilities, setFacilities] = useState<any[]>([]);
 
-    const MOCK_TENANT_ID = '11111111-1111-1111-1111-111111111111';
+    const [currentTenantId, setCurrentTenantId] = useState<string>('');
+
+    useEffect(() => {
+        const getUser = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single();
+                if (data) setCurrentTenantId(data.tenant_id);
+            }
+        };
+        getUser();
+    }, []);
 
     useEffect(() => {
         fetchSchedules();
@@ -120,11 +131,11 @@ export default function CalendarPage() {
 
         // 1. Validate schedule via backend API
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/calendar/validate-schedule`, {
+            const response = await fetch('/api/calendar/validate-schedule', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    tenant_id: MOCK_TENANT_ID, // Use real tenant in production
+                    tenant_id: currentTenantId, // Use real tenant in production
                     start_time: formData.start_time,
                     end_time: formData.end_time,
                     trainer_id: formData.trainer_id,
@@ -160,7 +171,7 @@ export default function CalendarPage() {
 
     const saveClassSchedule = async (data: any) => {
         const { error } = await supabase.from('class_schedules').insert({
-            tenant_id: MOCK_TENANT_ID,
+            tenant_id: currentTenantId,
             title: data.title,
             trainer_id: data.trainer_id || null,
             facility_id: data.facility_id || null,
@@ -387,7 +398,7 @@ export default function CalendarPage() {
                         </div>
                         <div className="bg-slate-50 border-t border-slate-200 p-4 flex justify-end space-x-3">
                             <Button variant="ghost" onClick={() => setShowConflictModal(false)}>Cancel Action</Button>
-                            <Button variant="destructive" onClick={() => { setShowConflictModal(false); setConflictDetails(null); saveClassSchedule(formData); }}>Force Overwrite (Admin Only)</Button>
+                            <Button variant="destructive" onClick={() => saveClassSchedule(formData)}>Force Overwrite (Admin Only)</Button>
                         </div>
                     </div>
                 </div>

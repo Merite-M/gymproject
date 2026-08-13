@@ -16,7 +16,15 @@ router.post('/validate-schedule', async (req, res) => {
             return res.status(500).json({ error: 'Supabase not configured' });
         }
 
-        const { tenant_id, start_time, end_time, trainer_id, facility_id } = req.body;
+        let { tenant_id, start_time, end_time, trainer_id, facility_id } = req.body;
+
+        // Convert local times to UTC if needed before using in queries
+        if (start_time && !start_time.endsWith('Z')) {
+            start_time = new Date(start_time).toISOString();
+        }
+        if (end_time && !end_time.endsWith('Z')) {
+            end_time = new Date(end_time).toISOString();
+        }
 
         if (!tenant_id || !start_time || !end_time) {
             return res.status(400).json({ error: 'Missing tenant_id, start_time, or end_time' });
@@ -33,8 +41,7 @@ router.post('/validate-schedule', async (req, res) => {
                 .eq('tenant_id', tenant_id)
                 .eq('trainer_id', trainer_id)
                 .eq('is_cancelled', false)
-                .lt('start_time', end_time)
-                .gt('end_time', start_time);
+                .or(`and(start_time.lte.${end_time},end_time.gt.${start_time}),and(start_time.lt.${end_time},end_time.gte.${start_time})`);
 
             if (trainerError) {
                 return res.status(500).json({ error: trainerError.message });
@@ -51,7 +58,7 @@ router.post('/validate-schedule', async (req, res) => {
                     .eq('is_cancelled', false)
                     .or(`and(start_time.lte.${end_time},end_time.gt.${start_time}),and(start_time.lt.${end_time},end_time.gte.${start_time})`);
 
-                const busyTrainerIds = (busyTrainers?.map(t => t.trainer_id) || []).filter(Boolean);
+                const busyTrainerIds = busyTrainers?.map(t => t.trainer_id) || [];
 
                 let availableTrainersQuery = supabase
                     .from('profiles')
