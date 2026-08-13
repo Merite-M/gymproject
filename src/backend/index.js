@@ -20,6 +20,7 @@ if (supabaseUrl && supabaseKey) {
   console.warn("Supabase credentials not found, endpoints using supabase will fail.");
 }
 
+const gymEmitter = require("./events");
 const upload = multer({ storage: multer.memoryStorage() });
 
 app.post('/api/waivers/sign', upload.single('pdf'), async (req, res) => {
@@ -159,6 +160,15 @@ app.post('/api/checkin', async (req, res) => {
 
     if (checkinError) {
         return res.status(500).json({ error: checkinError.message });
+    }
+
+    if (finalStatus.startsWith('denied')) {
+        gymEmitter.emit('checkin.denied', {
+            tenant_id,
+            profile_id,
+            phone: profile.phone,
+            reason: reasons.length > 0 ? reasons.join('; ') : 'Denied'
+        });
     }
 
     res.status(200).json({

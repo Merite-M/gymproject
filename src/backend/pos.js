@@ -1,6 +1,7 @@
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const router = express.Router();
+const gymEmitter = require("./events");
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -112,12 +113,19 @@ router.post('/checkout', async (req, res) => {
       }
 
       // Check if primary card is declined (simulated edge case logic based on profile status or tags)
-      const { data: profile, error: profileError } = await supabase.from('profiles').select('status').eq('id', profile_id).single();
+      const { data: profile, error: profileError } = await supabase.from('profiles').select('status, email').eq('id', profile_id).single();
       if (profileError) {
           return res.status(400).json({ error: 'Profile lookup failed' });
       }
 
       if (profile && profile.status === 'debtor') {
+        gymEmitter.emit('payment.failed', {
+            tenant_id,
+            profile_id,
+            email: profile.email,
+            amount: totalAmount,
+            reason: 'Account is in debtor status.'
+        });
         return res.status(403).json({ error: 'Cannot charge to tab: Account is in debtor status. Please update payment method.' });
       }
 
