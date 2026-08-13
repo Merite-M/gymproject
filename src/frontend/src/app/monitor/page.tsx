@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Image from 'next/image';
 import { createClient } from '@supabase/supabase-js';
 
@@ -84,6 +84,11 @@ export default function MissionControlMonitor() {
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const tenantId = '00000000-0000-0000-0000-000000000000'; // Default or context
   const [activeCheckIn, setActiveCheckIn] = useState<CheckIn | null>(null);
+  const [visualAlertsEnabled, setVisualAlertsEnabled] = useState(true);
+  const [soundCuesEnabled, setSoundCuesEnabled] = useState(true);
+
+  const soundCuesEnabledRef = useRef(soundCuesEnabled);
+  soundCuesEnabledRef.current = soundCuesEnabled;
 
   useEffect(() => {
     // 1. Initial Fetch
@@ -114,6 +119,17 @@ export default function MissionControlMonitor() {
         // Only auto-select if no selection has been made manually
         setActiveCheckIn(current => current ? current : (fetchedData[0] || null));
       }
+
+      // Fetch tenant settings
+      const { data: tenantData, error: tenantError } = await supabase
+        .from('tenants')
+        .select('visual_alerts_enabled, sound_cues_enabled')
+        .eq('id', tenantId)
+        .single();
+      if (!tenantError && tenantData) {
+        setVisualAlertsEnabled(tenantData.visual_alerts_enabled);
+        setSoundCuesEnabled(tenantData.sound_cues_enabled);
+      }
     };
 
     // 2. Setup Realtime Subscription
@@ -142,7 +158,9 @@ export default function MissionControlMonitor() {
           setCheckIns((prev) => [newCheckIn, ...prev].slice(0, 20));
           setActiveCheckIn(newCheckIn); // Auto select newest
 
-          playSound(newCheckIn.status);
+          if (soundCuesEnabledRef.current) {
+            playSound(newCheckIn.status);
+          }
         }
       )
       .subscribe((status) => {
@@ -325,7 +343,7 @@ export default function MissionControlMonitor() {
                         <span className="text-[12px] font-mono-id text-on-surface-variant uppercase tracking-wider">{log.access_method}</span>
                       </div>
                       <div className="flex items-center space-x-2 w-1/4">
-                        <div className={`w-2 h-2 rounded-full ${visuals.dot}`}></div>
+                        {visualAlertsEnabled && <div className={`w-2 h-2 rounded-full ${visuals.dot}`}></div>}
                         <span className="text-body-dense text-on-surface-variant font-medium">{visuals.label}</span>
                       </div>
                       <div className="text-[12px] font-mono-id text-text-muted w-1/6 text-right">
@@ -342,7 +360,7 @@ export default function MissionControlMonitor() {
           {activeCheckIn ? (
             <div className="w-full lg:w-[35%] bg-surface flex flex-col h-full border-l border-surface-container shadow-inner z-0">
               {/* Dynamic Header Tint */}
-              <div className={`h-24 ${getStatusVisuals(activeCheckIn.status).bg} border-b ${getStatusVisuals(activeCheckIn.status).outline} relative shrink-0 transition-colors duration-300`}>
+              <div className={`h-24 ${visualAlertsEnabled ? getStatusVisuals(activeCheckIn.status).bg : 'bg-surface'} border-b ${visualAlertsEnabled ? getStatusVisuals(activeCheckIn.status).outline : 'border-surface-container'} relative shrink-0 transition-colors duration-300`}>
                  <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent"></div>
               </div>
 
@@ -365,7 +383,7 @@ export default function MissionControlMonitor() {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <h2 className="text-headline-md font-bold text-primary">{activeCheckIn.profiles?.first_name} {activeCheckIn.profiles?.last_name}</h2>
-                    {activeCheckIn.status === 'approved' && <span className="material-symbols-outlined text-secondary text-[20px]" style={{fontVariationSettings: "'FILL' 1"}}>verified</span>}
+                    {visualAlertsEnabled && activeCheckIn.status === 'approved' && <span className="material-symbols-outlined text-secondary text-[20px]" style={{fontVariationSettings: "'FILL' 1"}}>verified</span>}
                   </div>
                   <div className="flex items-center gap-3 mb-6">
                     <span className="text-[12px] font-mono-id text-text-muted">ID: {activeCheckIn.profile_id.split('-')[0].toUpperCase()}</span>
@@ -374,7 +392,7 @@ export default function MissionControlMonitor() {
                 </div>
 
                 {/* Alert Flag (Bento Style) */}
-                {activeCheckIn.status !== 'approved' && (
+                {visualAlertsEnabled && activeCheckIn.status !== 'approved' && (
                   <div className={`p-4 rounded-xl border mb-6 ${getStatusVisuals(activeCheckIn.status).bg} ${getStatusVisuals(activeCheckIn.status).outline}`}>
                     <div className="flex items-start gap-3">
                       <span className={`material-symbols-outlined ${getStatusVisuals(activeCheckIn.status).color.replace('bg-', 'text-')}`} style={{fontVariationSettings: "'FILL' 1"}}>error</span>
