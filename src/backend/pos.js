@@ -113,7 +113,7 @@ router.post('/checkout', async (req, res) => {
       }
 
       // Check if primary card is declined (simulated edge case logic based on profile status or tags)
-      const { data: profile, error: profileError } = await supabase.from('profiles').select('status').eq('id', profile_id).single();
+      const { data: profile, error: profileError } = await supabase.from('profiles').select('status, email').eq('id', profile_id).single();
       if (profileError) {
           return res.status(400).json({ error: 'Profile lookup failed' });
       }
