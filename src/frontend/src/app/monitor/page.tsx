@@ -25,6 +25,55 @@ interface CheckIn {
   }
 }
 
+
+// Web Audio API for synthetic notification sounds
+let sharedAudioContext: AudioContext | null = null;
+
+const playSound = (status: string) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    if (!sharedAudioContext) {
+      sharedAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+
+    const ctx = sharedAudioContext;
+
+    // Resume context if suspended (browser autoplay policy)
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(e => console.warn('Could not resume audio context', e));
+    }
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    if (status === "approved") {
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+      osc.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 0.1); // C6
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.5);
+    } else {
+      // Warning/Denied uses a lower, harsher beep
+      osc.type = "square";
+      osc.frequency.setValueAtTime(200, ctx.currentTime);
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.4);
+    }
+  } catch (e) {
+    console.error("Audio playback failed:", e);
+  }
+};
+
 export default function MissionControlMonitor() {
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const tenantId = '00000000-0000-0000-0000-000000000000'; // Default or context
@@ -37,7 +86,7 @@ export default function MissionControlMonitor() {
         .from('check_ins')
         .select(`
           *,
-          profiles:profile_id (first_name, last_name, avatar_url)
+          profiles:profile_id (first_name, last_name, avatar_url, membership_status)
         `)
         .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
@@ -62,7 +111,7 @@ export default function MissionControlMonitor() {
           // Fetch associated profile data for the new check-in
           const { data: profile } = await supabase
              .from('profiles')
-             .select('first_name, last_name, avatar_url')
+             .select('first_name, last_name, avatar_url, membership_status')
              .eq('id', newCheckIn.profile_id)
              .single();
 
@@ -72,9 +121,15 @@ export default function MissionControlMonitor() {
 
           setCheckIns((prev) => [newCheckIn, ...prev].slice(0, 20));
           setActiveCheckIn(newCheckIn); // Auto select newest
+
+          playSound(newCheckIn.status);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          fetchRecentCheckIns();
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
