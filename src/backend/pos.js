@@ -196,7 +196,7 @@ router.post('/checkout', async (req, res) => {
             channel: 'email', // Or SMS/WhatsApp
             recipient: 'admin@gym.com', // Would normally be fetched from tenant settings
             subject: 'Low Stock Alert',
-            content: `Product ${product_id} is low on stock (${newStock} remaining).`
+            content: `Product ${product_id} is low on stock (${newStock} remaining).`, status: 'pending'
          });
          if (notifError) throw notifError;
       }

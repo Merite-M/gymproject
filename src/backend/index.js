@@ -183,7 +183,14 @@ app.use("/api/staff", staffRoutes);
 
 
 const calendarRoutes = require("./calendar");
+
+const initCron = require("./cron");
+
+const adminRoutes = require("./admin");
+app.use("/api/admin", adminRoutes);
 app.use("/api/calendar", calendarRoutes);
+
+initCron(supabase);
 
 app.listen(port, () => {
 
