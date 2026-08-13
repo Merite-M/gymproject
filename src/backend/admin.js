@@ -25,7 +25,7 @@ router.get('/reports/z-report', async (req, res) => {
             .select('id, starting_cash, expected_cash, actual_cash, status, shift_start, shift_end, staff_id')
             .eq('tenant_id', tenant_id)
             .gte('shift_start', new Date(start_date).toISOString())
-            .lte('shift_end', new Date(end_date).toISOString()); // Or could just query by shift_start
+            .lte('shift_start', new Date(end_date).toISOString());
 
         if (shiftsError) throw shiftsError;
 
