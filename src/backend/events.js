@@ -18,8 +18,43 @@ if (supabaseUrl && supabaseKey) {
 gymEmitter.on('payment.failed', async (data) => {
     console.log(`[Event] payment.failed triggered for tenant ${data.tenant_id}, profile ${data.profile_id}`);
     if (!supabase) return;
+
     try {
+        const today = new Date().toISOString().split('T')[0];
+        const { data: existingSnap } = await supabase
+            .from('analytics_snapshots')
+            .select('id')
+            .eq('profile_id', data.profile_id)
+            .eq('snapshot_date', today)
+            .single();
+
+        let snapError = null;
+        if (existingSnap) {
+            const { error } = await supabase
+                .from('analytics_snapshots')
+                .update({ churn_risk_score: 90 })
+                .eq('id', existingSnap.id);
+            snapError = error;
+        } else {
+            const { error } = await supabase
+                .from('analytics_snapshots')
+                .insert({
+                    tenant_id: data.tenant_id,
+                    profile_id: data.profile_id,
+                    snapshot_date: today,
+                    churn_risk_score: 90, // Very high risk due to payment failure
+                    trailing_4wk_avg_visits: 0,
+                    current_wk_visits: 0
+                });
+            snapError = error;
+        }
+
+        if (snapError) {
+             console.error("Supabase upsert error for analytics_snapshots in payment.failed:", snapError);
+        }
+
         const { error } = await supabase.from('notification_queue').insert({
+
             tenant_id: data.tenant_id,
             profile_id: data.profile_id,
             channel: 'email',
