@@ -136,19 +136,30 @@ app.post('/api/checkin', async (req, res) => {
     let finalStatus = 'approved';
     let reasons = [];
 
-    if (access_method === 'qr_code' && tenant && tenant.latitude && tenant.longitude) {
-        if (!user_lat || !user_lon) {
+    if (access_method === 'qr_code') {
+        if (tenantError || !tenant) {
             finalStatus = 'denied_geofence';
-            reasons.push('Location coordinates required for QR code check-in');
+            reasons.push('Gym location not configured');
         } else {
-            const distance = getDistanceFromLatLonInM(
-                parseFloat(user_lat), parseFloat(user_lon),
-                parseFloat(tenant.latitude), parseFloat(tenant.longitude)
-            );
-            const radius = tenant.geofence_radius_meters || 100;
-            if (distance > radius) {
+            const tenantLat = parseFloat(tenant.latitude);
+            const tenantLon = parseFloat(tenant.longitude);
+            const uLat = parseFloat(user_lat);
+            const uLon = parseFloat(user_lon);
+
+            if (!Number.isFinite(tenantLat) || !Number.isFinite(tenantLon)) {
                 finalStatus = 'denied_geofence';
-                reasons.push('Not physically present at the gym');
+                reasons.push('Gym location is improperly configured');
+            } else if (user_lat === undefined || user_lon === undefined || user_lat === null || user_lon === null || !Number.isFinite(uLat) || !Number.isFinite(uLon)) {
+                finalStatus = 'denied_geofence';
+                reasons.push('Valid location coordinates required for QR code check-in');
+            } else {
+                const distance = getDistanceFromLatLonInM(uLat, uLon, tenantLat, tenantLon);
+                const radius = Number.isFinite(tenant.geofence_radius_meters) ? tenant.geofence_radius_meters : 100;
+
+                if (Number.isNaN(distance) || distance > radius) {
+                    finalStatus = 'denied_geofence';
+                    reasons.push('Not physically present at the gym');
+                }
             }
         }
     }
