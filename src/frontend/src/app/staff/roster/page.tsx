@@ -168,8 +168,8 @@ export default function RosterPage() {
     try {
       const formData = new FormData();
       formData.append("task_id", taskId);
-      formData.append("tenant_id", tenantId);
-      formData.append("staff_id", staffId);
+      formData.append("tenant_id", tenantId || "");
+      formData.append("staff_id", staffId || "");
 
       if (requiresPhoto && photoFiles[taskId]) {
         formData.append("photo", photoFiles[taskId]);

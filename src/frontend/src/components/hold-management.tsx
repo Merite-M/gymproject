@@ -9,11 +9,7 @@ interface HoldRequest {
   profile_id: string;
   hold_reason: 'medical' | 'travel' | 'financial' | 'other';
   start_date: string;
-<<<<<<< HEAD
-  end_date?: string | null;
-=======
   end_date: string | null;
->>>>>>> 5f41b41 (fix(frontend): resolve Render deployment issues)
   notes?: string | null;
   created_by: string;
 }
@@ -32,7 +28,7 @@ interface HoldManagementProps {
 interface FormData {
   hold_reason: 'medical' | 'travel' | 'financial' | 'other' | '';
   start_date: string;
-  end_date?: string;
+  end_date: string;
   notes: string;
 }
 
@@ -100,7 +96,7 @@ export default function HoldManagement({
         profile_id: profileId,
         hold_reason: formData.hold_reason as 'medical' | 'travel' | 'financial' | 'other',
         start_date: formData.start_date,
-        end_date: formData.end_date || undefined,
+        end_date: formData.end_date || null,
         notes: formData.notes || undefined,
         created_by: currentUserId
       };
