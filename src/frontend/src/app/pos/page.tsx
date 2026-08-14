@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Link from "next/link";
+import { useTenantId } from '@/contexts/AuthContext';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://omufxcaifzqepvqbgghc.supabase.co';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'dummy_key_for_build';
@@ -34,6 +35,7 @@ interface Shift {
 }
 
 export default function POSTerminal() {
+    const tenantId = useTenantId();
     const [isPosEnabled, setIsPosEnabled] = useState<boolean | null>(null);
     const [products, setProducts] = useState<Product[]>([]);
     const [cart, setCart] = useState<CartItem[]>([]);
@@ -50,29 +52,44 @@ export default function POSTerminal() {
 
     useEffect(() => {
         const fetchInitialData = async () => {
-            const { data: tenant } = await supabase.from('tenants').select('*').limit(1).single();
-            if (tenant && tenant.features && tenant.features.pos !== undefined) {
-                setIsPosEnabled(tenant.features.pos);
-            } else {
-                setIsPosEnabled(true);
-            }
+            if (!tenantId) return;
 
-            if (tenant) {
-                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/products?tenant_id=${tenant.id}`);
-                if (res.ok) {
-                    const data: Product[] = await res.json();
-                    setProducts(data);
-                    const cats = Array.from(new Set(data.map(p => p.category)));
-                    setCategories(['ALL', ...cats]);
+            try {
+                const { data: tenant, error: tenantError } = await supabase.from('tenants').select('*').eq('id', tenantId).single();
+                if (tenantError) {
+                    console.error("Error fetching tenant:", tenantError);
+                    setIsPosEnabled(false);
+                    return;
                 }
 
-                const { data: profs } = await supabase.from('profiles').select('id, first_name, last_name');
-                if (profs) setProfiles(profs);
-
-                const resShift = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/shift/status?tenant_id=${tenant.id}`);
-                if (resShift.ok) {
-                    setTillStatus(await resShift.json());
+                if (tenant && tenant.features && tenant.features.pos !== undefined) {
+                    setIsPosEnabled(tenant.features.pos);
+                } else {
+                    setIsPosEnabled(true);
                 }
+
+                if (tenant) {
+                    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/products?tenant_id=${tenant.id}`);
+                    if (res.ok) {
+                        const data: Product[] = await res.json();
+                        setProducts(data);
+                        const cats = Array.from(new Set(data.map(p => p.category)));
+                        setCategories(['ALL', ...cats]);
+                    } else {
+                        console.error("Failed to fetch products:", res.statusText);
+                    }
+
+                    const { data: profs } = await supabase.from('profiles').select('id, first_name, last_name').eq('tenant_id', tenantId);
+                    if (profs) setProfiles(profs);
+
+                    const resShift = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/shift/status?tenant_id=${tenant.id}`);
+                    if (resShift.ok) {
+                        setTillStatus(await resShift.json());
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to fetch initial data:", error);
+                setIsPosEnabled(false);
             }
         };
 
@@ -84,10 +101,13 @@ export default function POSTerminal() {
           'postgres_changes',
           { event: '*', schema: 'public', table: 'inventory_items' },
           async (payload) => {
-               const { data: tenant } = await supabase.from('tenants').select('id').limit(1).single();
-               if(tenant) {
-                   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/products?tenant_id=${tenant.id}`);
+               if (!tenantId) return;
+               
+               try {
+                   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/products?tenant_id=${tenantId}`);
                    if (res.ok) setProducts(await res.json());
+               } catch (error) {
+                   console.error("Failed to refresh products:", error);
                }
           }
         )
@@ -101,30 +121,34 @@ export default function POSTerminal() {
 
     useEffect(() => {
         const fetchTabBalance = async () => {
-            if (selectedProfile) {
-                const { data: tenant } = await supabase.from('tenants').select('id').limit(1).single();
-                if (tenant) {
-                    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/member_tab/${selectedProfile}?tenant_id=${tenant.id}`);
+            if (selectedProfile && tenantId) {
+                try {
+                    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/member_tab/${selectedProfile}?tenant_id=${tenantId}`);
                     if (res.ok) {
                         const data = await res.json();
                         setMemberTabBalance(data.balance);
                     }
+                } catch (error) {
+                    console.error("Failed to fetch tab balance:", error);
                 }
             } else {
                 setMemberTabBalance(0);
             }
         };
         fetchTabBalance();
-    }, [selectedProfile]);
+    }, [selectedProfile, tenantId]);
 
 
 
     const fetchXReport = async () => {
-        if (!tillStatus) return;
-        const { data: _tenant } = await supabase.from('tenants').select('id').limit(1).single();
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/shift/${tillStatus.id}/x-report?tenant_id=${_tenant?.id}`);
-        if (res.ok) {
-            setShiftReport(await res.json());
+        if (!tillStatus || !tenantId) return;
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/shift/${tillStatus.id}/x-report?tenant_id=${tenantId}`);
+            if (res.ok) {
+                setShiftReport(await res.json());
+            }
+        } catch (error) {
+            console.error("Failed to fetch X-report:", error);
         }
     };
 
@@ -172,29 +196,42 @@ export default function POSTerminal() {
 
 
     const openShift = async () => {
+        if (!tenantId) return null;
+        
         const startingCash = prompt("Audit: Please enter current physical till cash balance to open shift");
         if (!startingCash) return null;
 
-        const { data: tenant } = await supabase.from('tenants').select('id').limit(1).single();
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/shift/start`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tenant_id: tenant?.id, staff_id: null, starting_cash: parseFloat(startingCash) })
-        });
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/shift/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tenant_id: tenantId, staff_id: null, starting_cash: parseFloat(startingCash) })
+            });
 
-        if (res.ok) {
-            const shift = await res.json();
-            setTillStatus(shift);
-            alert("Shift Opened successfully.");
-            return shift;
+            if (res.ok) {
+                const shift = await res.json();
+                setTillStatus(shift);
+                alert("Shift Opened successfully.");
+                return shift;
+            } else {
+                alert("Failed to open shift");
+                return null;
+            }
+        } catch (error) {
+            console.error("Failed to open shift:", error);
+            alert("Error opening shift");
+            return null;
         }
-        return null;
     };
 
 
 
     const handleCheckout = async (method: string) => {
         if (cart.length === 0) return;
+        if (!tenantId) {
+            alert("Authentication required");
+            return;
+        }
         if (method === 'member_tab' && !selectedProfile) {
             alert("Please select a member to charge to tab");
             return;
@@ -209,9 +246,8 @@ export default function POSTerminal() {
 
         setIsCheckingOut(true);
         try {
-             const { data: tenant } = await supabase.from('tenants').select('id').limit(1).single();
              const payload = {
-                 tenant_id: tenant?.id,
+                 tenant_id: tenantId,
                  profile_id: selectedProfile || null,
                  method,
                  shift_id: currentShift ? currentShift.id : null,
@@ -230,7 +266,7 @@ const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:
                  setCart([]);
                  setSelectedProfile('');
                  // Refresh products to show new stock
-                 const prodsRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/products?tenant_id=${tenant?.id}`);
+                 const prodsRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/products?tenant_id=${tenantId}`);
                  if (prodsRes.ok) setProducts(await prodsRes.json());
              } else {
                  alert(`Checkout Failed: ${result.error}`);
@@ -270,7 +306,7 @@ const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:
     };
 
 
-    if (isPosEnabled === null) {
+    if (isPosEnabled === null || !tenantId) {
         return <div className="flex h-screen items-center justify-center font-body-base bg-canvas-bg text-primary">Loading POS Terminal...</div>;
     }
 

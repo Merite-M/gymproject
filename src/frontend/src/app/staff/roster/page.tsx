@@ -13,6 +13,7 @@ import {
   MapPin,
   AlertCircle,
 } from "lucide-react";
+import { useTenantId, useAuth } from "@/contexts/AuthContext";
 
 interface TaskTemplate {
   name: string;
@@ -37,17 +38,23 @@ interface Shift {
 }
 
 export default function RosterPage() {
+  const tenantId = useTenantId();
+  const { user } = useAuth();
   const [shift, setShift] = useState<Shift | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
-  const tenantId = "t-001"; // Mock tenant
-  const staffId = "s-001"; // Mock staff
-  const staffName = "Jean-Claude Rugamba";
+  const [staffId, setStaffId] = useState<string | null>(null);
+  const [staffName, setStaffName] = useState<string>("");
   const [photoFiles, setPhotoFiles] = useState<Record<string, File>>({});
   const [completingTask, setCompletingTask] = useState<string | null>(null);
   const [featureDisabled, setFeatureDisabled] = useState(false);
 
   const fetchShiftData = useCallback(async () => {
+    if (!tenantId) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch(
@@ -78,6 +85,14 @@ export default function RosterPage() {
     };
   }, [fetchShiftData]);
 
+  // Set staff info from authenticated user
+  useEffect(() => {
+    if (user) {
+      setStaffId(user.id);
+      setStaffName(user.user_metadata?.full_name || user.email || "Staff Member");
+    }
+  }, [user]);
+
   const refetchData = async () => {
     try {
       const res = await fetch(
@@ -94,6 +109,11 @@ export default function RosterPage() {
   };
 
   const startShift = async () => {
+    if (!tenantId || !staffId) {
+      alert("Authentication required");
+      return;
+    }
+
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/staff/shift/start`,
@@ -109,9 +129,12 @@ export default function RosterPage() {
       );
       if (res.ok) {
         refetchData();
+      } else {
+        alert("Failed to start shift");
       }
     } catch (e) {
       console.error(e);
+      alert("Error starting shift");
     }
   };
 
@@ -176,7 +199,7 @@ export default function RosterPage() {
     setCompletingTask(null);
   };
 
-  if (loading)
+  if (loading || !tenantId || !staffId)
     return (
       <div className="flex items-center justify-center h-full min-h-screen bg-[#fcf8fa]">
         <Loader2 className="animate-spin w-8 h-8 text-[#0f172a]" />

@@ -11,8 +11,4 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing required environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
 }
 
-<<<<<<< HEAD
-export const supabase = createClient(supabaseUrl || 'https://mock.supabase.co', supabaseAnonKey || 'mock-key');
-=======
-export const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseAnonKey || 'placeholder');
->>>>>>> aa2675e (fix(frontend): resolve Render deployment issues)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useRef } from 'react';
 import Image from 'next/image';
 import { createClient } from '@supabase/supabase-js';
+import { useTenantId } from '@/contexts/AuthContext';
 
 // Setup Supabase Client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://omufxcaifzqepvqbgghc.supabase.co';
@@ -82,7 +83,8 @@ const playSound = async (status: string) => {
 
 export default function MissionControlMonitor() {
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
-  const tenantId = '00000000-0000-0000-0000-000000000000'; // Default or context
+  const tenantId = useTenantId();
+  const [loading, setLoading] = useState(true);
   const [activeCheckIn, setActiveCheckIn] = useState<CheckIn | null>(null);
   const [visualAlertsEnabled, setVisualAlertsEnabled] = useState(true);
   const [soundCuesEnabled, setSoundCuesEnabled] = useState(true);
@@ -91,48 +93,65 @@ export default function MissionControlMonitor() {
   soundCuesEnabledRef.current = soundCuesEnabled;
 
   useEffect(() => {
+    if (!tenantId) {
+      setLoading(false);
+      return;
+    }
+
     // Fetch tenant settings unconditionally on mount
     const fetchTenantSettings = async () => {
-      const { data: tenantData, error: tenantError } = await supabase
-        .from('tenants')
-        .select('visual_alerts_enabled, sound_cues_enabled')
-        .eq('id', tenantId)
-        .single();
-      if (tenantError) {
-        console.error("Error fetching tenant settings for alerts/sounds (using defaults):", tenantError);
+      try {
+        const { data: tenantData, error: tenantError } = await supabase
+          .from('tenants')
+          .select('visual_alerts_enabled, sound_cues_enabled')
+          .eq('id', tenantId)
+          .single();
+        if (tenantError) {
+          console.error("Error fetching tenant settings for alerts/sounds (using defaults):", tenantError);
+        }
+        setVisualAlertsEnabled(tenantData?.visual_alerts_enabled ?? true);
+        setSoundCuesEnabled(tenantData?.sound_cues_enabled ?? true);
+      } catch (error) {
+        console.error("Failed to fetch tenant settings:", error);
+      } finally {
+        setLoading(false);
       }
-      setVisualAlertsEnabled(tenantData?.visual_alerts_enabled ?? true);
-      setSoundCuesEnabled(tenantData?.sound_cues_enabled ?? true);
     };
     fetchTenantSettings();
 
     // 1. Initial Fetch
     const fetchRecentCheckIns = async () => {
-      const { data, error } = await supabase
-        .from('check_ins')
-        .select(`
-          *,
-          profiles:profile_id (first_name, last_name, avatar_url, membership_status)
-        `)
-        .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: false })
-        .limit(20);
+      if (!tenantId) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('check_ins')
+          .select(`
+            *,
+            profiles:profile_id (first_name, last_name, avatar_url, membership_status)
+          `)
+          .eq('tenant_id', tenantId)
+          .order('created_at', { ascending: false })
+          .limit(20);
 
-      if (!error && data) {
-        const fetchedData = data as unknown as CheckIn[];
-        setCheckIns(prev => {
-          // Merge by ID to prevent dropping rows that arrived via realtime while fetch was in flight
-          const combined = [...prev];
-          fetchedData.forEach(newRow => {
-            if (!combined.some(row => row.id === newRow.id)) {
-              combined.push(newRow);
-            }
+        if (!error && data) {
+          const fetchedData = data as unknown as CheckIn[];
+          setCheckIns(prev => {
+            // Merge by ID to prevent dropping rows that arrived via realtime while fetch was in flight
+            const combined = [...prev];
+            fetchedData.forEach(newRow => {
+              if (!combined.some(row => row.id === newRow.id)) {
+                combined.push(newRow);
+              }
+            });
+            return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 20);
           });
-          return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 20);
-        });
 
-        // Only auto-select if no selection has been made manually
-        setActiveCheckIn(current => current ? current : (fetchedData[0] || null));
+          // Only auto-select if no selection has been made manually
+          setActiveCheckIn(current => current ? current : (fetchedData[0] || null));
+        }
+      } catch (error) {
+        console.error("Failed to fetch recent check-ins:", error);
       }
     };
 
@@ -143,6 +162,8 @@ export default function MissionControlMonitor() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'check_ins', filter: `tenant_id=eq.${tenantId}` },
         async (payload) => {
+          if (!tenantId) return;
+          
           const newCheckIn = payload.new as CheckIn;
           // Fetch associated profile data for the new check-in
           const { data: profile, error } = await supabase
@@ -193,6 +214,17 @@ export default function MissionControlMonitor() {
       default: return { color: 'bg-surface-tint', dot: 'bg-surface-tint', label: status, bg: 'bg-surface-muted', outline: 'border-border-hairline' };
     }
   };
+
+  if (loading || !tenantId) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-canvas-bg text-on-background font-body-base">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-primary">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-canvas-bg overflow-hidden text-on-background font-body-base">
