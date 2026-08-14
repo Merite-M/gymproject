@@ -214,6 +214,8 @@ const initCron = require("./cron");
 
 const adminRoutes = require("./admin");
 app.use("/api/admin", adminRoutes);
+const paymentsRoutes = require("./payments");
+app.use("/api/payments", paymentsRoutes);
 app.use("/api/calendar", calendarRoutes);
 
 initCron(supabase);
