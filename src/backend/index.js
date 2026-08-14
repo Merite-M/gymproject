@@ -263,6 +263,8 @@ const initCron = require("./cron");
 
 const adminRoutes = require("./admin");
 app.use("/api/admin", adminRoutes);
+const paymentsRoutes = require("./payments");
+app.use("/api/payments", paymentsRoutes);
 app.use("/api/calendar", calendarRoutes);
 const iotRoutes = require("./iot");
 app.use("/api/iot", iotRoutes);
