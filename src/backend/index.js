@@ -215,6 +215,9 @@ const initCron = require("./cron");
 const adminRoutes = require("./admin");
 app.use("/api/admin", adminRoutes);
 app.use("/api/calendar", calendarRoutes);
+const iotRoutes = require("./iot");
+app.use("/api/iot", iotRoutes);
+
 
 initCron(supabase);
 
