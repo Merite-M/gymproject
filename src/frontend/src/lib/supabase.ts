@@ -4,10 +4,15 @@ let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 let supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Missing required environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
-  // Provide dummy values during build to prevent crash
-  supabaseUrl = supabaseUrl || 'https://dummy.supabase.co';
-  supabaseAnonKey = supabaseAnonKey || 'dummy_key';
+  // In static export, NEXT_PUBLIC env vars are embedded at build time.
+  // We throw during actual runtime if missing. During build, it throws unless dummy values are provided or we handle it gracefully.
+  // Based on the user's feedback, we should let it fail loudly on Render, OR throw gracefully.
+  // Actually, Render requires env vars for build. Let's throw.
+  throw new Error('Missing required environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
 }
 
+<<<<<<< HEAD
 export const supabase = createClient(supabaseUrl || 'https://mock.supabase.co', supabaseAnonKey || 'mock-key');
+=======
+export const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseAnonKey || 'placeholder');
+>>>>>>> aa2675e (fix(frontend): resolve Render deployment issues)
