@@ -88,7 +88,7 @@ app.post('/api/waivers/sign', upload.single('pdf'), async (req, res) => {
 
 app.post('/api/checkin', async (req, res) => {
   try {
-    const { tenant_id, profile_id, device_id, access_method } = req.body;
+    const { tenant_id, profile_id, device_id, access_method, user_lat, user_lon } = req.body;
 
     if (!tenant_id || !profile_id) {
        return res.status(400).json({ error: 'Missing required parameters' });
@@ -108,12 +108,50 @@ app.post('/api/checkin', async (req, res) => {
       .eq('tenant_id', tenant_id)
       .single();
 
+    // Fetch tenant details for geofencing
+    const { data: tenant, error: tenantError } = await supabase
+      .from('tenants')
+      .select('latitude, longitude, geofence_radius_meters')
+      .eq('id', tenant_id)
+      .single();
+
     if (profileError || !profile) {
        return res.status(404).json({ error: 'Profile not found' });
     }
 
+    // Helper function for Haversine distance
+    const getDistanceFromLatLonInM = (lat1, lon1, lat2, lon2) => {
+        const R = 6371e3; // Radius of the earth in m
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+          Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const d = R * c; // Distance in m
+        return d;
+    };
+
     let finalStatus = 'approved';
     let reasons = [];
+
+    if (access_method === 'qr_code' && tenant && tenant.latitude && tenant.longitude) {
+        if (!user_lat || !user_lon) {
+            finalStatus = 'denied_geofence';
+            reasons.push('Location coordinates required for QR code check-in');
+        } else {
+            const distance = getDistanceFromLatLonInM(
+                parseFloat(user_lat), parseFloat(user_lon),
+                parseFloat(tenant.latitude), parseFloat(tenant.longitude)
+            );
+            const radius = tenant.geofence_radius_meters || 100;
+            if (distance > radius) {
+                finalStatus = 'denied_geofence';
+                reasons.push('Not physically present at the gym');
+            }
+        }
+    }
 
     if (profile.status === 'debtor') {
         finalStatus = 'denied_debt';
