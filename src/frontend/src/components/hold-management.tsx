@@ -9,8 +9,8 @@ interface HoldRequest {
   profile_id: string;
   hold_reason: 'medical' | 'travel' | 'financial' | 'other';
   start_date: string;
-  end_date?: string;
-  notes?: string;
+  end_date?: string | null;
+  notes?: string | null;
   created_by: string;
 }
 
