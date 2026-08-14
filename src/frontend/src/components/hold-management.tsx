@@ -9,11 +9,7 @@ interface HoldRequest {
   profile_id: string;
   hold_reason: 'medical' | 'travel' | 'financial' | 'other';
   start_date: string;
-<<<<<<< HEAD
   end_date?: string | null;
-=======
-  end_date: string | null;
->>>>>>> 5f41b41 (fix(frontend): resolve Render deployment issues)
   notes?: string | null;
   created_by: string;
 }
