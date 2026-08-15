@@ -4,6 +4,7 @@ import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@supabase/supabase-js";
+import { useTenantId } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -44,6 +45,7 @@ export default function MemberProfileClient({
   params: Promise<{ id: string }>;
 }) {
   const resolvedParams = use(params);
+  const tenantId = useTenantId();
   const [profile, setProfile] = useState<any>(null);
   const [memberships, setMemberships] = useState<any[]>([]);
   const [checkIns, setCheckIns] = useState<any[]>([]);
@@ -52,27 +54,33 @@ export default function MemberProfileClient({
 
   useEffect(() => {
     const fetchMemberData = async () => {
+      if (!tenantId) return;
       setLoading(true);
       try {
         const { data: profileData, error: profileError } = await supabase
           .from("profiles")
           .select("*")
           .eq("id", resolvedParams.id)
+          .eq("tenant_id", tenantId)
           .single();
         if (profileError) throw profileError;
 
-        const { data: memData } = await supabase
+        const { data: memData, error: memError } = await supabase
           .from("memberships")
           .select("*")
           .eq("profile_id", resolvedParams.id)
+          .eq("tenant_id", tenantId)
           .order("created_at", { ascending: false });
+        if (memError) console.error("Membership fetch error:", memError);
 
-        const { data: checkData } = await supabase
+        const { data: checkData, error: checkError } = await supabase
           .from("check_ins")
           .select("*")
           .eq("profile_id", resolvedParams.id)
-          .order("check_in_time", { ascending: false })
+          .eq("tenant_id", tenantId)
+          .order("created_at", { ascending: false })
           .limit(10);
+        if (checkError) console.error("Check-ins fetch error:", checkError);
 
         setProfile(profileData);
         setMemberships(memData || []);
@@ -85,7 +93,7 @@ export default function MemberProfileClient({
       }
     };
     fetchMemberData();
-  }, [resolvedParams.id]);
+  }, [resolvedParams.id, tenantId]);
 
   if (loading) {
     return (
@@ -109,8 +117,8 @@ export default function MemberProfileClient({
       <div className="bg-white border-b border-gray-200 px-8 py-6 shrink-0 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <div className="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-2xl font-bold border-2 border-indigo-200 shadow-sm">
-            {profile.first_name?.[0] || "?"}
-            {profile.last_name?.[0] || "?"}
+            {profile.first_name[0]}
+            {profile.last_name[0]}
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
@@ -133,16 +141,10 @@ export default function MemberProfileClient({
             </p>
           </div>
         </div>
-        <div className="flex gap-3">
-          <button className="px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-            <PauseCircle className="w-4 h-4 text-gray-500" />
-            Hold Membership
-          </button>
-          <button className="px-4 py-2 bg-indigo-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700 flex items-center gap-2">
-            <Edit className="w-4 h-4" />
-            Edit Profile
-          </button>
-        </div>
+        {/* <div className="flex gap-3">
+    Hold Membership and Edit Profile buttons removed temporarily as their functionality was disconnected during the UI redesign.
+    Linear Issue to be created to re-implement them properly.
+</div> */}
       </div>
 
       <div className="flex-1 overflow-y-auto p-8">
@@ -271,7 +273,7 @@ export default function MemberProfileClient({
                         {memberships.length > 0 ? (
                           <div className="flex items-end gap-3">
                             <h2 className="text-2xl font-bold text-gray-900">
-                              {memberships[0].plan_name}
+                              {memberships[0].membership_type}
                             </h2>
                             <span className="text-sm text-gray-500 mb-1">
                               {memberships[0].auto_renew
@@ -345,7 +347,7 @@ export default function MemberProfileClient({
                             checkIns.map((ci: any, idx) => (
                               <TableRow key={idx}>
                                 <TableCell className="text-sm text-gray-900 font-medium">
-                                  {new Date(ci.check_in_time).toLocaleString()}
+                                  {new Date(ci.created_at).toLocaleString()}
                                 </TableCell>
                                 <TableCell className="text-sm text-gray-500">
                                   Main Facility
