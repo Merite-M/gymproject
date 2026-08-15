@@ -109,8 +109,8 @@ export default function MemberProfileClient({
       <div className="bg-white border-b border-gray-200 px-8 py-6 shrink-0 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <div className="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-2xl font-bold border-2 border-indigo-200 shadow-sm">
-            {profile.first_name[0]}
-            {profile.last_name[0]}
+            {profile.first_name?.[0] || "?"}
+            {profile.last_name?.[0] || "?"}
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
