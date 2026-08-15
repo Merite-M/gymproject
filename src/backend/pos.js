@@ -152,7 +152,7 @@ router.post('/checkout', async (req, res) => {
     }
 
     // Create Invoice
-    const isUnpaid = method === 'member_tab' || method === 'momo';
+    const isUnpaid = method === 'member_tab' || method === 'momo' || method === 'airtel';
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
       .insert({
@@ -212,13 +212,13 @@ router.post('/checkout', async (req, res) => {
 
 
     // Record Payment
-    const paymentStatus = (method === 'momo' || method === 'member_tab') ? 'pending' : 'completed';
+    const paymentStatus = (method === 'momo' || method === 'airtel' || method === 'member_tab') ? 'pending' : 'completed';
 
     const { error: paymentError } = await supabase.from('payments').insert({
       tenant_id,
       invoice_id: invoice.id,
       profile_id,
-      shift_id: (method === 'cash' || method === 'member_tab' || method === 'momo') ? shift_id : null, // Record shift for tab to show in X-report
+      shift_id: (method === 'cash' || method === 'member_tab' || method === 'momo' || method === 'airtel') ? shift_id : null, // Record shift for tab to show in X-report
       amount: totalAmount,
       method: method,
       status: paymentStatus
@@ -385,5 +385,49 @@ router.get('/shift/:shift_id/x-report', async (req, res) => {
     }
 });
 
+
+
+router.post('/member-tab/credit', async (req, res) => {
+    try {
+        const { tenant_id, profile_id, amount } = req.body;
+
+        if (!tenant_id || !profile_id || !amount) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        // Fetch current tab balance
+        const { data: tab, error: fetchError } = await supabase
+            .from('member_tabs')
+            .select('balance')
+            .eq('tenant_id', tenant_id)
+            .eq('profile_id', profile_id)
+            .single();
+
+        let currentBalance = 0;
+        if (tab) {
+            currentBalance = tab.balance;
+        }
+
+        const newBalance = currentBalance - amount;
+
+        const { data, error: updateError } = await supabase
+            .from('member_tabs')
+            .upsert({
+                profile_id,
+                tenant_id,
+                balance: newBalance,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'profile_id' })
+            .select()
+            .single();
+
+        if (updateError) throw updateError;
+
+        res.json({ success: true, new_balance: data.balance });
+    } catch (error) {
+        console.error('Add credit error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
 module.exports = router;
