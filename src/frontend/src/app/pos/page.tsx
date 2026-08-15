@@ -226,6 +226,30 @@ export default function POSTerminal() {
 
 
 
+
+    const handleAddCredit = async (amount: number) => {
+        if (!selectedProfile || !tenantId) return;
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/pos/member-tab/credit`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tenant_id: tenantId,
+                    profile_id: selectedProfile,
+                    amount: amount
+                })
+            });
+            const result = await res.json();
+            if (result.success) {
+                setMemberTabBalance(result.new_balance);
+            } else {
+                alert(`Failed to add credit: ${result.error}`);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
     const handleCheckout = async (method: string) => {
         if (cart.length === 0) return;
         if (!tenantId) {
