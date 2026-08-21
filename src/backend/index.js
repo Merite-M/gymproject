@@ -269,6 +269,12 @@ app.use("/api/calendar", calendarRoutes);
 const iotRoutes = require("./iot");
 app.use("/api/iot", iotRoutes);
 
+const memberCrmRoutes = require("./member-crm");
+app.use("/api/members", memberCrmRoutes);
+
+const syncRoutes = require("./sync");
+app.use("/api/sync", syncRoutes);
+
 
 initCron(supabase);
 

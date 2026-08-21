@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import Link from "next/link";
 import { useAuth } from '@/contexts/AuthContext';
+import { ScanLine } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -65,8 +65,8 @@ export default function LoginPage() {
       setEmail('');
       setPassword('');
 
-      // Redirect to dashboard on success
-      router.push('/monitor');
+      // Redirect to reception on success
+      router.push('/reception');
     } catch (error: any) {
       setError(error.message || 'Login failed');
     } finally {
@@ -125,7 +125,7 @@ export default function LoginPage() {
       setEmail('');
       setPassword('');
 
-      router.push('/monitor');
+      router.push('/reception');
     } catch (error: any) {
       setError(error.message || 'Sign up failed');
     } finally {
@@ -134,22 +134,25 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-canvas-bg flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-surface rounded-xl shadow-lg border border-border-hairline p-8">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-card rounded-lg border border-border p-8">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-primary mb-2">Gym Management</h1>
-          <p className="text-text-muted">Sign in to access your dashboard</p>
+          <div className="w-16 h-16 rounded-lg bg-primary flex items-center justify-center mx-auto mb-4">
+            <ScanLine className="w-8 h-8 text-primary-foreground" />
+          </div>
+          <h1 className="text-3xl font-headline-md font-bold text-foreground mb-2">GymPartner</h1>
+          <p className="text-muted-foreground">Operations Console</p>
         </div>
 
         {error && (
-          <div className="bg-danger-soft border border-danger-crimson text-danger-crimson px-4 py-3 rounded-lg mb-6">
+          <div className="bg-status-blocked/10 border border-status-blocked/20 text-status-blocked px-4 py-3 rounded-lg mb-6">
             {error}
           </div>
         )}
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-primary mb-2">
+            <label htmlFor="email" className="block text-sm font-medium text-foreground mb-2">
               Email
             </label>
             <input
@@ -158,13 +161,13 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-4 py-3 bg-surface-container-lowest border border-border-hairline rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-primary"
+              className="w-full px-4 py-3 bg-muted border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-foreground placeholder:text-muted-foreground"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-primary mb-2">
+            <label htmlFor="password" className="block text-sm font-medium text-foreground mb-2">
               Password
             </label>
             <input
@@ -173,7 +176,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-4 py-3 bg-surface-container-lowest border border-border-hairline rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-primary"
+              className="w-full px-4 py-3 bg-muted border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-foreground placeholder:text-muted-foreground"
               placeholder="••••••••"
             />
           </div>
@@ -182,7 +185,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 bg-primary text-on-primary py-3 rounded-lg font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 bg-primary text-primary-foreground py-3 rounded-lg font-semibold hover:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
             >
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
@@ -190,7 +193,7 @@ export default function LoginPage() {
               type="button"
               onClick={handleSignUp}
               disabled={loading}
-              className="flex-1 bg-surface-container border border-border-hairline text-primary py-3 rounded-lg font-semibold hover:bg-surface-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 bg-muted border border-border text-foreground py-3 rounded-lg font-semibold hover:bg-muted/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
             >
               {loading ? 'Creating account...' : 'Sign Up'}
             </button>
@@ -201,9 +204,9 @@ export default function LoginPage() {
           <button
             onClick={() => {
               enableDemoMode();
-              router.push('/monitor');
+              router.push('/reception');
             }}
-            className="text-sm text-text-muted hover:text-primary transition-colors"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             Continue without authentication (Demo Mode)
           </button>

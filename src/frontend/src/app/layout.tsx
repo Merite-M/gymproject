@@ -1,20 +1,38 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Manrope, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { NavigationRail } from "@/components/navigation-rail";
+import { OfflineIndicator } from "@/components/offline-indicator";
+import { AppStateProvider } from "@/lib/state-context";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono" });
+const manrope = Manrope({ 
+  subsets: ["latin"], 
+  variable: "--font-manrope",
+  display: 'swap',
+});
+
+const inter = Inter({ 
+  subsets: ["latin"], 
+  variable: "--font-inter",
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({ 
+  subsets: ["latin"], 
+  variable: "--font-jetbrains-mono",
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
-  title: "Gym SaaS - Kinetic Enterprise",
-  description: "High-Agency Mission Control",
+  title: "GymPartner - Operations Console",
+  description: "High-Agency Mission Control for Gym Operations",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`light ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}>
+    <html lang="en" className={`dark ${manrope.variable} ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}>
       <head>
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
         <style>
@@ -28,9 +46,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           `}
         </style>
       </head>
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex bg-background text-foreground">
         <ErrorBoundary>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <AppStateProvider>
+              <a href="#main-content" className="skip-to-main">
+                Skip to main content
+              </a>
+              <NavigationRail />
+              <OfflineIndicator />
+              <main className="flex-1 ml-[240px] min-h-screen" id="main-content" role="main">
+                {children}
+              </main>
+            </AppStateProvider>
+          </AuthProvider>
         </ErrorBoundary>
       </body>
     </html>
