@@ -72,7 +72,7 @@ export const KEY_CODES = {
  * Check if element is focusable
  */
 export function isFocusable(element: HTMLElement): boolean {
-  if (!element || element.disabled) {
+  if (!element || (element as HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).disabled) {
     return false;
   }
 

@@ -143,18 +143,18 @@ export function measurePerformance(
   if (result instanceof Promise) {
     return result.finally(() => {
       performance.mark(endMark);
-      performance.measure(measureName, startMark, endMark);
+      performance.measure(measureName, startMark);
       const measure = performance.getEntriesByName(measureName)[0];
       console.log(`${name} took ${measure.duration}ms`);
-      performance.clearMarks(startMark, endMark);
+      performance.clearMarks(startMark); performance.clearMarks(endMark);
       performance.clearMeasures(measureName);
     });
   } else {
     performance.mark(endMark);
-    performance.measure(measureName, startMark, endMark);
+    performance.measure(measureName, startMark);
     const measure = performance.getEntriesByName(measureName)[0];
     console.log(`${name} took ${measure.duration}ms`);
-    performance.clearMarks(startMark, endMark);
+    performance.clearMarks(startMark); performance.clearMarks(endMark);
     performance.clearMeasures(measureName);
   }
 }
@@ -252,7 +252,7 @@ export function requestIdleCallback(
     return (window as any).requestIdleCallback(callback, options);
   }
   // Fallback for browsers without requestIdleCallback
-  return setTimeout(callback, options?.timeout || 50);
+  return setTimeout(callback, options?.timeout || 50) as unknown as number;
 }
 
 export function cancelIdleCallback(id: number): void {
