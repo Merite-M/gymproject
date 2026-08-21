@@ -1256,14 +1256,6 @@ router.delete('/:id/family/:link_id', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-    });
-
-  } catch (error) {
-    console.error('Membership freeze error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // Unfreeze membership
 router.post('/:id/unfreeze', async (req, res) => {
   if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
