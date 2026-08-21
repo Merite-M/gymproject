@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Overview, CreditCard, FileText, Users, Snowflake } from "lucide-react";
+import { LayoutDashboard, CreditCard, FileText, Users, Snowflake } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MembershipFreeze } from "@/components/membership-freeze";
 
@@ -12,7 +12,7 @@ interface TabbedConsoleProps {
 type TabType = "overview" | "membership" | "billing" | "waiver" | "dependents";
 
 const tabs = [
-  { id: "overview" as TabType, label: "Overview", icon: Overview },
+  { id: "overview" as TabType, label: "Overview", icon: LayoutDashboard },
   { id: "membership" as TabType, label: "Membership", icon: Snowflake },
   { id: "billing" as TabType, label: "Billing", icon: CreditCard },
   { id: "waiver" as TabType, label: "Waiver", icon: FileText },
@@ -77,7 +77,7 @@ export function TabbedConsole({ member }: TabbedConsoleProps) {
             </div>
             
             <div className="text-center py-12 text-muted-foreground">
-              <Overview className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <LayoutDashboard className="w-12 h-12 mx-auto mb-4 opacity-50" />
               <p className="text-sm">Additional overview statistics</p>
               <p className="text-xs mt-2">Visit frequency, class attendance, and engagement metrics</p>
             </div>

@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
-  Dashboard, 
+  LayoutDashboard,
   Users, 
   ShoppingCart, 
   Calendar, 
-  Campaign, 
+  Megaphone,
   Settings, 
   LogOut,
   ScanLine,
@@ -43,7 +43,7 @@ const navigationItems = [
   {
     name: "Retention",
     href: "/retention",
-    icon: Campaign,
+    icon: Megaphone,
     description: "Automation",
   },
   {

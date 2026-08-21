@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Campaign, MessageSquare, Users, AlertTriangle, Clock, Plus, Play, Eye, Edit, Trash2 } from "lucide-react";
+import { Megaphone, MessageSquare, Users, AlertTriangle, Clock, Plus, Play, Pause, Eye, Edit, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function RetentionPage() {
@@ -131,7 +131,7 @@ export default function RetentionPage() {
                 : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
             )}
           >
-            <Campaign className="w-4 h-4" />
+            <Megaphone className="w-4 h-4" />
             Workflows
             <span className="bg-primary/20 text-primary text-xs px-2 py-0.5 rounded-full">{workflows.length}</span>
           </button>
@@ -177,7 +177,7 @@ export default function RetentionPage() {
                         "w-10 h-10 rounded-lg flex items-center justify-center",
                         workflow.status === "active" ? "bg-status-cleared/20" : "bg-muted"
                       )}>
-                        <Campaign className={cn(
+                        <Megaphone className={cn(
                           "w-5 h-5",
                           workflow.status === "active" ? "text-status-cleared" : "text-muted-foreground"
                         )} />
