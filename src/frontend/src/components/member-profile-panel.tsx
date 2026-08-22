@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 
 import { User, CreditCard, Calendar, Phone, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -14,7 +15,7 @@ export function MemberProfilePanel({ member }: MemberProfilePanelProps) {
       <div className="flex items-start gap-4">
         <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center shrink-0">
           {member.photo ? (
-            <img
+            <Image width={40} height={40}
               src={member.photo}
               alt={member.name}
               className="w-full h-full rounded-lg object-cover"

@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 
 import { Users, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -52,7 +53,7 @@ export function ScanQueue({ queue, onSelect }: ScanQueueProps) {
             {/* Avatar */}
             <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center shrink-0">
               {item.photo ? (
-                <img
+                <Image width={40} height={40}
                   src={item.photo}
                   alt={item.name}
                   className="w-full h-full rounded-full object-cover"

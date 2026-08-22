@@ -99,6 +99,10 @@
   
   /* Status colors */
   --status-cleared: #4edf92;
+  --status-cleared-foreground: #004b2a;
+  --status-action-foreground: #5f3c00;
+  --status-blocked-foreground: #490006;
+  --status-info-foreground: #003f80;
   --status-action: #ffc16b;
   --status-blocked: #fa746f;
   --status-info: #a9c7ff;
@@ -201,6 +205,10 @@
 
   /* Status Colors */
   --color-status-cleared: #4edf92;
+  --color-status-cleared-foreground: #004b2a;
+  --color-status-action-foreground: #5f3c00;
+  --color-status-blocked-foreground: #490006;
+  --color-status-info-foreground: #003f80;
   --color-status-action: #ffc16b;
   --color-status-blocked: #fa746f;
   --color-status-info: #a9c7ff;

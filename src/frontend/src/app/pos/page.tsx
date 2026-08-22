@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 
 import { useState } from "react";
 import { ShoppingCart, Search, User, Package, CreditCard, Smartphone, Wallet, Receipt } from "lucide-react";
@@ -129,7 +130,7 @@ export default function POSPage() {
                 >
                   <div className="aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center">
                     {product.image ? (
-                      <img src={product.image} alt={product.name} className="w-full h-full object-cover rounded-lg" />
+                      <Image width={100} height={100} src={product.image} alt={product.name} className="w-full h-full object-cover rounded-lg" />
                     ) : (
                       <Package className="w-8 h-8 text-muted-foreground" />
                     )}
