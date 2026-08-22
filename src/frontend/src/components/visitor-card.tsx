@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 
 import { User, CreditCard, Calendar } from "lucide-react";
 import { formatCurrencyDisplay } from "@/lib/utils";
@@ -14,7 +15,7 @@ export function VisitorCard({ member }: VisitorCardProps) {
       <div className="flex items-start gap-4">
         <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center shrink-0">
           {member.photo ? (
-            <img
+            <Image width={100} height={100}
               src={member.photo}
               alt={member.name}
               className="w-full h-full rounded-lg object-cover"

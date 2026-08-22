@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 
 import { useState } from "react";
 import { User, Search, Filter, Plus } from "lucide-react";
@@ -112,7 +113,7 @@ export default function MembersPage() {
               >
                 <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0">
                   {member.photo ? (
-                    <img
+                    <Image width={40} height={40}
                       src={member.photo}
                       alt={member.name}
                       className="w-full h-full rounded-full object-cover"
