@@ -5,6 +5,7 @@ const gymEmitter = require("./events");
 const crypto = require('crypto');
 require('dotenv').config();
 
+const authMiddleware = require('./authMiddleware');
 const router = express.Router();
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -44,12 +45,16 @@ function verifyAccessToken(token) {
   }
 }
 
-router.post('/unlock', async (req, res) => {
+router.post('/unlock', authMiddleware, async (req, res) => {
     try {
         const { tenant_id, profile_id, device_id, access_method, geofence_verified } = req.body;
 
         if (!tenant_id || !profile_id || !device_id) {
             return res.status(400).json({ error: 'Missing required parameters (tenant_id, profile_id, device_id)' });
+        }
+
+        if (req.user.id !== profile_id) {
+            return res.status(403).json({ error: 'Unauthorized to unlock for this profile' });
         }
 
         if (access_method === 'geofence') {
