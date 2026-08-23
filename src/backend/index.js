@@ -98,6 +98,17 @@ app.post('/api/checkin', async (req, res) => {
        return res.status(500).json({ error: 'Supabase not configured' });
     }
 
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: 'Missing Authorization header' });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
 
 
     // Check profile
