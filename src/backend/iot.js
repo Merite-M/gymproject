@@ -3,7 +3,70 @@ const fetch = require('node-fetch');
 const { createClient } = require('@supabase/supabase-js');
 const gymEmitter = require("./events");
 const crypto = require('crypto');
+const ipaddr = require('ipaddr.js');
+const dns = require('dns');
+const { promisify } = require('util');
+const lookupAsync = promisify(dns.lookup);
+
 require('dotenv').config();
+
+// SSRF Protection Validator
+async function getSafeIpAndHost(urlString) {
+    try {
+        const url = new URL(urlString);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+            return { safe: false };
+        }
+
+        const hostname = url.hostname.replace(/^\[|\]$/g, '');
+        let ip = hostname;
+
+        if (!ipaddr.isValid(hostname)) {
+            const lookupResult = await lookupAsync(hostname);
+            ip = lookupResult.address;
+        }
+
+        const addr = ipaddr.parse(ip);
+        let checkAddr = addr;
+
+        if (addr.kind() === 'ipv6' && addr.isIPv4MappedAddress()) {
+            checkAddr = addr.toIPv4Address();
+        }
+
+        const range = checkAddr.range();
+
+        const forbiddenRanges = [
+            'unspecified',
+            'loopback',
+            'linkLocal',
+            'multicast',
+            'broadcast',
+            'carrierGradeNat',
+            'reserved'
+        ];
+
+        // Ensure we correctly identify uniqueLocal for IPv6
+        if (forbiddenRanges.includes(range) || checkAddr.toString() === '169.254.169.254' || (addr.kind() === 'ipv6' && range === 'uniqueLocal')) {
+             return { safe: false };
+        }
+
+        // ipaddr parses IPv6 with colons. node-fetch needs brackets around IPv6 addresses in URL
+        const safeFetchIp = addr.kind() === 'ipv6' ? `[${ip}]` : ip;
+
+        return {
+            safe: true,
+            ip: safeFetchIp,
+            hostname: url.hostname,
+            port: url.port,
+            protocol: url.protocol,
+            pathname: url.pathname,
+            search: url.search
+        };
+    } catch (err) {
+        console.error("SSRF validation error:", err);
+        return { safe: false };
+    }
+}
 
 const router = express.Router();
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -150,11 +213,23 @@ router.post('/unlock', async (req, res) => {
                 const urlPath = device.trigger_url_path || '/relay/0?turn=on';
                 const triggerUrl = `http://${device.ip_address}${urlPath}`;
 
+                // SSRF Protection Check
+                const safeUrlInfo = await getSafeIpAndHost(triggerUrl);
+                if (!safeUrlInfo.safe) {
+                    console.error(`Blocked unsafe trigger URL: ${triggerUrl}`);
+                    return res.status(400).json({ error: 'Unsafe device IP address or trigger URL' });
+                }
+
                 // Add a small timeout (3s) for the local relay request
                 const controller = new AbortController();
                 const timeout = setTimeout(() => { controller.abort(); }, 3000);
 
-                const response = await fetch(triggerUrl, {
+                const portStr = safeUrlInfo.port ? `:${safeUrlInfo.port}` : '';
+                const safeFetchUrl = `${safeUrlInfo.protocol}//${safeUrlInfo.ip}${portStr}${safeUrlInfo.pathname}${safeUrlInfo.search}`;
+
+                const response = await fetch(safeFetchUrl, {
+                    headers: { 'Host': safeUrlInfo.hostname },
+
                     method: 'POST',
                     signal: controller.signal
                 });
@@ -673,7 +748,21 @@ router.get('/device/:device_id/status', async (req, res) => {
         let isOnline = device.is_online;
         if (device.device_type === 'shelly_relay' && device.ip_address) {
             try {
-                const response = await fetch(`http://${device.ip_address}/status`, {
+                const statusUrl = `http://${device.ip_address}/status`;
+
+                // SSRF Protection Check
+                const safeUrlInfo = await getSafeIpAndHost(statusUrl);
+                if (!safeUrlInfo.safe) {
+                    console.error(`Blocked unsafe status check URL: ${statusUrl}`);
+                    throw new Error('Unsafe device IP address');
+                }
+
+                const portStr = safeUrlInfo.port ? `:${safeUrlInfo.port}` : '';
+                const safeFetchUrl = `${safeUrlInfo.protocol}//${safeUrlInfo.ip}${portStr}${safeUrlInfo.pathname}${safeUrlInfo.search}`;
+
+                const response = await fetch(safeFetchUrl, {
+                    headers: { 'Host': safeUrlInfo.hostname },
+
                     method: 'GET',
                     timeout: 3000
                 });
