@@ -10,43 +10,6 @@ if (supabaseUrl && supabaseKey) {
   supabase = createClient(supabaseUrl, supabaseKey);
 }
 
-
-// Helper function to verify JWT token and extract user
-async function verifyAuthToken(req) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return { error: 'Missing Authorization header' };
-  }
-
-  const token = authHeader.replace('Bearer ', '');
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-  if (authError || !user) {
-    return { error: 'Invalid or expired token' };
-  }
-
-  return { user };
-}
-
-// Helper function to validate tenant access
-async function validateTenantAccess(userId, tenantId) {
-  const { data: profile, error } = await supabase
-    .from('profiles')
-    .select('tenant_id, role')
-    .eq('id', userId)
-    .single();
-
-  if (error || !profile) {
-    return { error: 'User profile not found' };
-  }
-
-  if (profile.tenant_id !== tenantId && profile.role !== 'super_admin') {
-    return { error: 'Access denied: Invalid tenant' };
-  }
-
-  return { profile };
-}
-
 // Helper function to calculate proration amount
 function calculateProration(membershipPrice, startDate, endDate, billingInterval) {
   const start = new Date(startDate);
@@ -134,19 +97,6 @@ router.post('/', async (req, res) => {
     if (!tenant_id || !membership_id || !profile_id || !hold_reason || !start_date || !created_by) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-
-    // Verify authentication
-    const authResult = await verifyAuthToken(req);
-    if (authResult.error) {
-      return res.status(401).json({ error: authResult.error });
-    }
-
-    // Validate tenant access
-    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
-    if (tenantAccess.error) {
-      return res.status(403).json({ error: tenantAccess.error });
-    }
-
     
     // Validate dates
     if (end_date && new Date(end_date) < new Date(start_date)) {
@@ -225,19 +175,6 @@ router.get('/', async (req, res) => {
     if (!tenant_id) {
       return res.status(400).json({ error: 'Missing tenant_id' });
     }
-
-    // Verify authentication
-    const authResult = await verifyAuthToken(req);
-    if (authResult.error) {
-      return res.status(401).json({ error: authResult.error });
-    }
-
-    // Validate tenant access
-    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
-    if (tenantAccess.error) {
-      return res.status(403).json({ error: tenantAccess.error });
-    }
-
     
     let query = supabase
       .from('membership_holds')
@@ -281,20 +218,6 @@ router.get('/:id', async (req, res) => {
     if (!tenant_id) {
       return res.status(400).json({ error: 'Missing tenant_id' });
     }
-
-
-    // Verify authentication
-    const authResult = await verifyAuthToken(req);
-    if (authResult.error) {
-      return res.status(401).json({ error: authResult.error });
-    }
-
-    // Validate tenant access
-    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
-    if (tenantAccess.error) {
-      return res.status(403).json({ error: tenantAccess.error });
-    }
-
     
     const { data, error } = await supabase
       .from('membership_holds')
@@ -328,19 +251,6 @@ router.put('/:id', async (req, res) => {
     if (!tenant_id) {
       return res.status(400).json({ error: 'Missing tenant_id' });
     }
-
-    // Verify authentication
-    const authResult = await verifyAuthToken(req);
-    if (authResult.error) {
-      return res.status(401).json({ error: authResult.error });
-    }
-
-    // Validate tenant access
-    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
-    if (tenantAccess.error) {
-      return res.status(403).json({ error: tenantAccess.error });
-    }
-
     
     // Get current hold
     const { data: currentHold, error: fetchError } = await supabase
@@ -418,20 +328,6 @@ router.delete('/:id', async (req, res) => {
     if (!tenant_id) {
       return res.status(400).json({ error: 'Missing tenant_id' });
     }
-
-
-    // Verify authentication
-    const authResult = await verifyAuthToken(req);
-    if (authResult.error) {
-      return res.status(401).json({ error: authResult.error });
-    }
-
-    // Validate tenant access
-    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
-    if (tenantAccess.error) {
-      return res.status(403).json({ error: tenantAccess.error });
-    }
-
     
     // Check if hold can be deleted
     const { data: hold, error: fetchError } = await supabase
@@ -476,20 +372,6 @@ router.get('/:id/proration', async (req, res) => {
     if (!tenant_id) {
       return res.status(400).json({ error: 'Missing tenant_id' });
     }
-
-
-    // Verify authentication
-    const authResult = await verifyAuthToken(req);
-    if (authResult.error) {
-      return res.status(401).json({ error: authResult.error });
-    }
-
-    // Validate tenant access
-    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
-    if (tenantAccess.error) {
-      return res.status(403).json({ error: tenantAccess.error });
-    }
-
     
     // Get hold details
     const { data: hold, error: holdError } = await supabase
@@ -530,19 +412,6 @@ router.post('/:id/apply-proration', async (req, res) => {
     if (!tenant_id) {
       return res.status(400).json({ error: 'Missing tenant_id' });
     }
-
-    // Verify authentication
-    const authResult = await verifyAuthToken(req);
-    if (authResult.error) {
-      return res.status(401).json({ error: authResult.error });
-    }
-
-    // Validate tenant access
-    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
-    if (tenantAccess.error) {
-      return res.status(403).json({ error: tenantAccess.error });
-    }
-
     
     // Get hold details
     const { data: hold, error: holdError } = await supabase
