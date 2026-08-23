@@ -14,6 +14,22 @@ if (supabaseUrl && supabaseKey) {
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Helper function to verify JWT token and extract user
+
+// Helper function to validate tenant access
+async function validateTenantAccess(userId, tenantId, supabaseClient) {
+  const { data: profile, error } = await supabaseClient
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .eq('tenant_id', tenantId)
+    .single();
+
+  if (error || !profile) {
+    return { error: 'Unauthorized access to tenant' };
+  }
+  return { role: profile.role };
+}
+
 async function verifyAuthToken(req, supabaseClient) {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
@@ -39,6 +55,14 @@ router.get('/shift', async (req, res) => {
     try {
         const { tenant_id, staff_id } = req.query;
         if (!tenant_id || !staff_id) return res.status(400).json({ error: 'Missing tenant_id or staff_id' });
+
+        const accessRes = await validateTenantAccess(authRes.user.id, tenant_id, supabase);
+        if (accessRes.error) return res.status(403).json({ error: accessRes.error });
+
+        // Ensure user is acting on their own behalf, unless they are admin/manager
+        if (staff_id !== authRes.user.id && accessRes.role !== 'admin' && accessRes.role !== 'manager') {
+            return res.status(403).json({ error: 'Not authorized to view this staff shift' });
+        }
 
         // Get tenant feature flags
         const { data: tenant, error: tenantError } = await supabase
@@ -95,6 +119,14 @@ router.post('/shift/start', async (req, res) => {
      try {
          const { tenant_id, staff_id, starting_cash } = req.body;
          if (!tenant_id || !staff_id) return res.status(400).json({ error: 'Missing tenant_id or staff_id' });
+
+         const accessRes = await validateTenantAccess(authRes.user.id, tenant_id, supabase);
+         if (accessRes.error) return res.status(403).json({ error: accessRes.error });
+
+         // Ensure user is acting on their own behalf, unless they are admin/manager
+         if (staff_id !== authRes.user.id && accessRes.role !== 'admin' && accessRes.role !== 'manager') {
+             return res.status(403).json({ error: 'Not authorized to start shift for this staff' });
+         }
 
          // Check if already active
          const { data: existing } = await supabase
@@ -158,6 +190,14 @@ router.post('/task/complete', upload.single('photo'), async (req, res) => {
         const { task_id, tenant_id, staff_id, notes } = req.body;
         if (!task_id || !tenant_id || !staff_id) return res.status(400).json({ error: 'Missing parameters' });
 
+        const accessRes = await validateTenantAccess(authRes.user.id, tenant_id, supabase);
+        if (accessRes.error) return res.status(403).json({ error: accessRes.error });
+
+        // Ensure user is acting on their own behalf, unless they are admin/manager
+        if (staff_id !== authRes.user.id && accessRes.role !== 'admin' && accessRes.role !== 'manager') {
+            return res.status(403).json({ error: 'Not authorized to complete task for this staff' });
+        }
+
         // Verify task exists and needs photo
         const { data: task, error: taskError } = await supabase
             .from('shift_tasks')
@@ -218,6 +258,19 @@ router.post('/shift/end', async (req, res) => {
     try {
         const { shift_id, tenant_id, actual_cash } = req.body;
 
+        if (!shift_id || !tenant_id) return res.status(400).json({ error: 'Missing parameters' });
+
+        const accessRes = await validateTenantAccess(authRes.user.id, tenant_id, supabase);
+        if (accessRes.error) return res.status(403).json({ error: accessRes.error });
+
+        const { data: shiftToCheck, error: shiftFetchCheckError } = await supabase.from('shift_ledgers').select('staff_id, expected_cash').eq('id', shift_id).single();
+        if (shiftFetchCheckError) return res.status(404).json({ error: 'Shift not found' });
+
+        // Ensure user is acting on their own behalf, unless they are admin/manager
+        if (shiftToCheck.staff_id !== authRes.user.id && accessRes.role !== 'admin' && accessRes.role !== 'manager') {
+            return res.status(403).json({ error: 'Not authorized to end shift for this staff' });
+        }
+
         // Check for incomplete mandatory tasks
         const { data: incompleteTasks, error: incError } = await supabase
             .from('shift_tasks')
@@ -233,18 +286,14 @@ router.post('/shift/end', async (req, res) => {
             return res.status(400).json({ error: 'Cannot end shift: Mandatory tasks are incomplete.' });
         }
 
-        const { data: shift, error: shiftFetchError } = await supabase.from('shift_ledgers').select('expected_cash').eq('id', shift_id).single();
-
-        if (shiftFetchError) throw shiftFetchError;
-
         let status = 'closed';
-        if (actual_cash !== undefined && parseFloat(actual_cash) !== parseFloat(shift.expected_cash)) {
+        if (actual_cash !== undefined && parseFloat(actual_cash) !== parseFloat(shiftToCheck.expected_cash)) {
             status = 'discrepancy';
         }
 
         const { data, error } = await supabase.from('shift_ledgers').update({
             shift_end: new Date().toISOString(),
-            actual_cash: actual_cash || shift.expected_cash, // fallback if not providing cash
+            actual_cash: actual_cash || shiftToCheck.expected_cash, // fallback if not providing cash
             status
         }).eq('id', shift_id).select().single();
 
@@ -263,6 +312,13 @@ router.get('/manager/review', async (req, res) => {
     try {
         const { tenant_id, date } = req.query;
         if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+
+        const accessRes = await validateTenantAccess(authRes.user.id, tenant_id, supabase);
+        if (accessRes.error) return res.status(403).json({ error: accessRes.error });
+
+        if (accessRes.role !== 'admin' && accessRes.role !== 'manager') {
+            return res.status(403).json({ error: 'Not authorized to view manager review' });
+        }
 
         let query = supabase
             .from('shift_ledgers')
