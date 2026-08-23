@@ -13,9 +13,29 @@ if (supabaseUrl && supabaseKey) {
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Helper function to verify JWT token and extract user
+async function verifyAuthToken(req, supabaseClient) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return { error: 'Missing Authorization header' };
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
+
+  if (authError || !user) {
+    return { error: 'Invalid or expired token' };
+  }
+
+  return { user };
+}
+
+
 // Get active shift and tasks for a staff member
 router.get('/shift', async (req, res) => {
     if (!supabase) return res.status(500).json({error: "Supabase config missing"});
+    const authRes = await verifyAuthToken(req, supabase);
+    if (authRes.error) return res.status(401).json({ error: authRes.error });
     try {
         const { tenant_id, staff_id } = req.query;
         if (!tenant_id || !staff_id) return res.status(400).json({ error: 'Missing tenant_id or staff_id' });
@@ -70,6 +90,8 @@ router.get('/shift', async (req, res) => {
 // Start a shift
 router.post('/shift/start', async (req, res) => {
      if (!supabase) return res.status(500).json({error: "Supabase config missing"});
+     const authRes = await verifyAuthToken(req, supabase);
+     if (authRes.error) return res.status(401).json({ error: authRes.error });
      try {
          const { tenant_id, staff_id, starting_cash } = req.body;
          if (!tenant_id || !staff_id) return res.status(400).json({ error: 'Missing tenant_id or staff_id' });
@@ -130,6 +152,8 @@ router.post('/shift/start', async (req, res) => {
 // Complete a task (with optional photo upload)
 router.post('/task/complete', upload.single('photo'), async (req, res) => {
     if (!supabase) return res.status(500).json({error: "Supabase config missing"});
+    const authRes = await verifyAuthToken(req, supabase);
+    if (authRes.error) return res.status(401).json({ error: authRes.error });
     try {
         const { task_id, tenant_id, staff_id, notes } = req.body;
         if (!task_id || !tenant_id || !staff_id) return res.status(400).json({ error: 'Missing parameters' });
@@ -189,6 +213,8 @@ router.post('/task/complete', upload.single('photo'), async (req, res) => {
 // End a shift
 router.post('/shift/end', async (req, res) => {
     if (!supabase) return res.status(500).json({error: "Supabase config missing"});
+    const authRes = await verifyAuthToken(req, supabase);
+    if (authRes.error) return res.status(401).json({ error: authRes.error });
     try {
         const { shift_id, tenant_id, actual_cash } = req.body;
 
@@ -232,6 +258,8 @@ router.post('/shift/end', async (req, res) => {
 // Manager review endpoint
 router.get('/manager/review', async (req, res) => {
     if (!supabase) return res.status(500).json({error: "Supabase config missing"});
+    const authRes = await verifyAuthToken(req, supabase);
+    if (authRes.error) return res.status(401).json({ error: authRes.error });
     try {
         const { tenant_id, date } = req.query;
         if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
