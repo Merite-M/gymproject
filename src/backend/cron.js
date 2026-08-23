@@ -13,7 +13,6 @@ function initCron(supabase) {
     // Run every minute
     cron.schedule('* * * * *', async () => {
         if (isRunning) {
-            console.log("Cron job is already running. Skipping this tick.");
             return;
         }
 
