@@ -3,7 +3,54 @@ const fetch = require('node-fetch');
 const { createClient } = require('@supabase/supabase-js');
 const gymEmitter = require("./events");
 const crypto = require('crypto');
+const ipaddr = require('ipaddr.js');
+const dns = require('dns');
+const { promisify } = require('util');
+const lookupAsync = promisify(dns.lookup);
+
 require('dotenv').config();
+
+// SSRF Protection Validator
+async function isSafeUrl(urlString) {
+    try {
+        const url = new URL(urlString);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+            return false;
+        }
+
+        const hostname = url.hostname;
+        let ip = hostname;
+
+        if (!ipaddr.isValid(hostname)) {
+            const lookupResult = await lookupAsync(hostname);
+            ip = lookupResult.address;
+        }
+
+        const addr = ipaddr.parse(ip);
+        const range = addr.range();
+
+        const forbiddenRanges = [
+            'unspecified',
+            'loopback',
+            'linkLocal',
+            'multicast',
+            'broadcast',
+            'private',
+            'carrierGradeNat',
+            'reserved'
+        ];
+
+        if (forbiddenRanges.includes(range) || ip === '169.254.169.254') {
+             return false;
+        }
+
+        return true;
+    } catch (err) {
+        console.error("SSRF validation error:", err);
+        return false;
+    }
+}
+
 
 const router = express.Router();
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -149,6 +196,12 @@ router.post('/unlock', async (req, res) => {
             try {
                 const urlPath = device.trigger_url_path || '/relay/0?turn=on';
                 const triggerUrl = `http://${device.ip_address}${urlPath}`;
+
+                // SSRF Protection Check
+                if (!(await isSafeUrl(triggerUrl))) {
+                    console.error(`Blocked unsafe trigger URL: ${triggerUrl}`);
+                    return res.status(400).json({ error: 'Unsafe device IP address or trigger URL' });
+                }
 
                 // Add a small timeout (3s) for the local relay request
                 const controller = new AbortController();
@@ -673,7 +726,15 @@ router.get('/device/:device_id/status', async (req, res) => {
         let isOnline = device.is_online;
         if (device.device_type === 'shelly_relay' && device.ip_address) {
             try {
-                const response = await fetch(`http://${device.ip_address}/status`, {
+                const statusUrl = `http://${device.ip_address}/status`;
+
+                // SSRF Protection Check
+                if (!(await isSafeUrl(statusUrl))) {
+                    console.error(`Blocked unsafe status check URL: ${statusUrl}`);
+                    return res.status(400).json({ error: 'Unsafe device IP address' });
+                }
+
+                const response = await fetch(statusUrl, {
                     method: 'GET',
                     timeout: 3000
                 });
