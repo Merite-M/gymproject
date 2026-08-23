@@ -127,6 +127,7 @@ export default function HoldManagement({
             <h2 className="text-headline-md font-bold text-primary">Request Membership Hold</h2>
             <button
               onClick={onCancel}
+              aria-label="Close dialog"
               className="text-text-muted hover:text-primary transition-colors"
             >
               <XCircle className="w-6 h-6" />
@@ -150,10 +151,11 @@ export default function HoldManagement({
 
           <div className="space-y-4">
             <div>
-              <label className="block text-body-dense font-medium text-primary mb-2">
+              <label htmlFor="hold_reason" className="block text-body-dense font-medium text-primary mb-2">
                 Hold Reason *
               </label>
               <select
+                id="hold_reason"
                 name="hold_reason"
                 value={formData.hold_reason}
                 onChange={handleChange}
@@ -170,10 +172,11 @@ export default function HoldManagement({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-body-dense font-medium text-primary mb-2">
+                <label htmlFor="start_date" className="block text-body-dense font-medium text-primary mb-2">
                   Start Date *
                 </label>
                 <input
+                  id="start_date"
                   type="date"
                   name="start_date"
                   value={formData.start_date}
@@ -185,10 +188,11 @@ export default function HoldManagement({
               </div>
 
               <div>
-                <label className="block text-body-dense font-medium text-primary mb-2">
+                <label htmlFor="end_date" className="block text-body-dense font-medium text-primary mb-2">
                   End Date (Optional)
                 </label>
                 <input
+                  id="end_date"
                   type="date"
                   name="end_date"
                   value={formData.end_date}
@@ -202,10 +206,11 @@ export default function HoldManagement({
 
             {formData.hold_reason === 'other' && (
               <div>
-                <label className="block text-body-dense font-medium text-primary mb-2">
+                <label htmlFor="notes" className="block text-body-dense font-medium text-primary mb-2">
                   Notes * (Required for "Other" reason)
                 </label>
                 <textarea
+                  id="notes"
                   name="notes"
                   value={formData.notes}
                   onChange={handleChange}
