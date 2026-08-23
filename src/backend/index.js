@@ -119,6 +119,17 @@ app.post('/api/checkin', async (req, res) => {
       .eq('tenant_id', tenant_id)
       .single();
 
+    if (profileError || !profile) {
+       return res.status(404).json({ error: 'Profile not found' });
+    }
+
+    // Authorize check-in: Must be the profile owner themselves, OR a staff member.
+    // This allows staff to trigger check-ins on behalf of a member (e.g. from the POS kiosk).
+    const { data: staffCheck } = await supabase.from('profiles').select('role').eq('id', user.id).eq('tenant_id', tenant_id).single();
+    if (user.id !== profile_id && (!staffCheck || (staffCheck.role !== 'staff' && staffCheck.role !== 'admin' && staffCheck.role !== 'trainer'))) {
+        return res.status(403).json({ error: 'Unauthorized to check in for this profile' });
+    }
+
     // Fetch tenant details for geofencing
     const { data: tenant, error: tenantError } = await supabase
       .from('tenants')
@@ -126,9 +137,6 @@ app.post('/api/checkin', async (req, res) => {
       .eq('id', tenant_id)
       .single();
 
-    if (profileError || !profile) {
-       return res.status(404).json({ error: 'Profile not found' });
-    }
 
     // Helper function for Haversine distance
     const getDistanceFromLatLonInM = (lat1, lon1, lat2, lon2) => {
