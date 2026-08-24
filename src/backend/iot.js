@@ -11,14 +11,14 @@ const lookupAsync = promisify(dns.lookup);
 require('dotenv').config();
 
 // SSRF Protection Validator
-async function isSafeUrl(urlString) {
+async function getSafeIpAndHost(urlString) {
     try {
         const url = new URL(urlString);
         if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-            return false;
+            return { safe: false };
         }
 
-        const hostname = url.hostname;
+        const hostname = url.hostname.replace(/^\[|\]$/g, '');
         let ip = hostname;
 
         if (!ipaddr.isValid(hostname)) {
@@ -27,7 +27,13 @@ async function isSafeUrl(urlString) {
         }
 
         const addr = ipaddr.parse(ip);
-        const range = addr.range();
+        let checkAddr = addr;
+
+        if (addr.kind() === 'ipv6' && addr.isIPv4MappedAddress()) {
+            checkAddr = addr.toIPv4Address();
+        }
+
+        const range = checkAddr.range();
 
         const forbiddenRanges = [
             'unspecified',
@@ -35,22 +41,32 @@ async function isSafeUrl(urlString) {
             'linkLocal',
             'multicast',
             'broadcast',
-            'private',
             'carrierGradeNat',
             'reserved'
         ];
 
-        if (forbiddenRanges.includes(range) || ip === '169.254.169.254') {
-             return false;
+        // Ensure we correctly identify uniqueLocal for IPv6
+        if (forbiddenRanges.includes(range) || checkAddr.toString() === '169.254.169.254' || (addr.kind() === 'ipv6' && range === 'uniqueLocal')) {
+             return { safe: false };
         }
 
-        return true;
+        // ipaddr parses IPv6 with colons. node-fetch needs brackets around IPv6 addresses in URL
+        const safeFetchIp = addr.kind() === 'ipv6' ? `[${ip}]` : ip;
+
+        return {
+            safe: true,
+            ip: safeFetchIp,
+            hostname: url.hostname,
+            port: url.port,
+            protocol: url.protocol,
+            pathname: url.pathname,
+            search: url.search
+        };
     } catch (err) {
         console.error("SSRF validation error:", err);
-        return false;
+        return { safe: false };
     }
 }
-
 
 const router = express.Router();
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -91,12 +107,40 @@ function verifyAccessToken(token) {
   }
 }
 
+// ─── Anti-Passback Helper ────────────────────────────────────────────────────
+// Returns the most recent SUCCESSFUL check-in for a profile within the last
+// ANTI_PASSBACK_WINDOW_MS milliseconds, or null if none exists.
+const ANTI_PASSBACK_WINDOW_MS = 30_000; // 30 seconds
+
+async function checkAntiPassback(profile_id, tenant_id) {
+  const windowStart = new Date(Date.now() - ANTI_PASSBACK_WINDOW_MS).toISOString();
+
+  const { data, error } = await supabase
+    .from('check_ins')
+    .select('id, created_at, access_method')
+    .eq('profile_id', profile_id)
+    .eq('tenant_id', tenant_id)
+    .in('status', ['approved', 'warning'])   // only count successful entries
+    .gte('created_at', windowStart)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error || !data) return null; // no recent check-in → allow
+  return data;                     // recent check-in found → deny
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 router.post('/unlock', async (req, res) => {
     try {
         const { tenant_id, profile_id, device_id, access_method, geofence_verified } = req.body;
 
         if (!tenant_id || !profile_id || !device_id) {
             return res.status(400).json({ error: 'Missing required parameters (tenant_id, profile_id, device_id)' });
+        }
+
+        if (req.user.id !== profile_id) {
+            return res.status(403).json({ error: 'Unauthorized to unlock for this profile' });
         }
 
         if (access_method === 'geofence') {
@@ -173,6 +217,44 @@ router.post('/unlock', async (req, res) => {
             }
         }
 
+        // ── Anti-Passback Check ──────────────────────────────────────────────
+        // Block if this profile already had a successful entry in the last 30 s
+        if (finalStatus === 'approved' || finalStatus === 'warning') {
+            const recentCheckin = await checkAntiPassback(profile_id, tenant_id);
+            if (recentCheckin) {
+                // Log the anti-passback violation
+                await supabase.from('check_ins').insert({
+                    tenant_id,
+                    profile_id,
+                    device_id,
+                    access_method: access_method || 'manual_override',
+                    status: 'denied_anti_passback',
+                    metadata: {
+                        violation: 'anti_passback',
+                        last_checkin_id: recentCheckin.id,
+                        last_checkin_at: recentCheckin.created_at,
+                        window_seconds: ANTI_PASSBACK_WINDOW_MS / 1000
+                    }
+                });
+
+                // Emit front-desk alert
+                gymEmitter.emit('checkin.antipassback', {
+                    tenant_id,
+                    profile_id,
+                    phone: profile.phone,
+                    device_id,
+                    last_checkin_at: recentCheckin.created_at
+                });
+
+                return res.status(429).json({
+                    success: false,
+                    status: 'denied_anti_passback',
+                    reason: `Anti-passback: entry already recorded ${Math.round((Date.now() - new Date(recentCheckin.created_at).getTime()) / 1000)}s ago. Please wait ${ANTI_PASSBACK_WINDOW_MS / 1000}s between scans.`
+                });
+            }
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         // Fetch hardware device
         const { data: device, error: deviceError } = await supabase
             .from('hardware_devices')
@@ -198,7 +280,8 @@ router.post('/unlock', async (req, res) => {
                 const triggerUrl = `http://${device.ip_address}${urlPath}`;
 
                 // SSRF Protection Check
-                if (!(await isSafeUrl(triggerUrl))) {
+                const safeUrlInfo = await getSafeIpAndHost(triggerUrl);
+                if (!safeUrlInfo.safe) {
                     console.error(`Blocked unsafe trigger URL: ${triggerUrl}`);
                     return res.status(400).json({ error: 'Unsafe device IP address or trigger URL' });
                 }
@@ -207,7 +290,12 @@ router.post('/unlock', async (req, res) => {
                 const controller = new AbortController();
                 const timeout = setTimeout(() => { controller.abort(); }, 3000);
 
-                const response = await fetch(triggerUrl, {
+                const portStr = safeUrlInfo.port ? `:${safeUrlInfo.port}` : '';
+                const safeFetchUrl = `${safeUrlInfo.protocol}//${safeUrlInfo.ip}${portStr}${safeUrlInfo.pathname}${safeUrlInfo.search}`;
+
+                const response = await fetch(safeFetchUrl, {
+                    headers: { 'Host': safeUrlInfo.hostname },
+
                     method: 'POST',
                     signal: controller.signal
                 });
@@ -611,6 +699,50 @@ router.post('/scanner/checkin', async (req, res) => {
             reasons.push(`Outstanding tab balance: ${parseFloat(tab.balance).toFixed(2)}`);
         }
 
+        // ── Anti-Passback Check ──────────────────────────────────────────────
+        // Block if this profile already had a successful entry in the last 30 s
+        if (accessStatus === 'approved' || accessStatus === 'warning') {
+            const recentCheckin = await checkAntiPassback(profile.id, tenant_id);
+            if (recentCheckin) {
+                // Log the anti-passback violation
+                await supabase.from('check_ins').insert({
+                    tenant_id,
+                    profile_id: profile.id,
+                    device_id,
+                    access_method: accessMethod,
+                    scanner_type,
+                    status: 'denied_anti_passback',
+                    metadata: {
+                        violation: 'anti_passback',
+                        scan_data,
+                        last_checkin_id: recentCheckin.id,
+                        last_checkin_at: recentCheckin.created_at,
+                        window_seconds: ANTI_PASSBACK_WINDOW_MS / 1000
+                    }
+                });
+
+                // Emit front-desk alert
+                gymEmitter.emit('checkin.antipassback', {
+                    tenant_id,
+                    profile_id: profile.id,
+                    phone: profile.phone,
+                    device_id,
+                    last_checkin_at: recentCheckin.created_at
+                });
+
+                return res.status(429).json({
+                    success: false,
+                    access_status: 'denied_anti_passback',
+                    profile: {
+                        id: profile.id,
+                        name: `${profile.first_name} ${profile.last_name}`
+                    },
+                    reason: `Anti-passback: entry already recorded ${Math.round((Date.now() - new Date(recentCheckin.created_at).getTime()) / 1000)}s ago. Please wait ${ANTI_PASSBACK_WINDOW_MS / 1000}s between scans.`
+                });
+            }
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         // Log check-in
         const { data: checkin, error: checkinError } = await supabase
             .from('check_ins')
@@ -729,12 +861,18 @@ router.get('/device/:device_id/status', async (req, res) => {
                 const statusUrl = `http://${device.ip_address}/status`;
 
                 // SSRF Protection Check
-                if (!(await isSafeUrl(statusUrl))) {
+                const safeUrlInfo = await getSafeIpAndHost(statusUrl);
+                if (!safeUrlInfo.safe) {
                     console.error(`Blocked unsafe status check URL: ${statusUrl}`);
-                    return res.status(400).json({ error: 'Unsafe device IP address' });
+                    throw new Error('Unsafe device IP address');
                 }
 
-                const response = await fetch(statusUrl, {
+                const portStr = safeUrlInfo.port ? `:${safeUrlInfo.port}` : '';
+                const safeFetchUrl = `${safeUrlInfo.protocol}//${safeUrlInfo.ip}${portStr}${safeUrlInfo.pathname}${safeUrlInfo.search}`;
+
+                const response = await fetch(safeFetchUrl, {
+                    headers: { 'Host': safeUrlInfo.hostname },
+
                     method: 'GET',
                     timeout: 3000
                 });

@@ -9,22 +9,7 @@ let supabase;
 if (supabaseUrl && supabaseKey) {
   supabase = createClient(supabaseUrl, supabaseKey);
 }
-
-// Basic auth middleware
-const authMiddleware = async (req, res, next) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ error: 'Missing Authorization header' });
-    }
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-    req.user = user;
-    next();
-};
-
+const authMiddleware = require("./authMiddleware");
 router.post('/validate-schedule', async (req, res) => {
     try {
         if (!supabase) {
