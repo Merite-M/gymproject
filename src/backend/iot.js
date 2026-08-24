@@ -107,6 +107,30 @@ function verifyAccessToken(token) {
   }
 }
 
+// ─── Anti-Passback Helper ────────────────────────────────────────────────────
+// Returns the most recent SUCCESSFUL check-in for a profile within the last
+// ANTI_PASSBACK_WINDOW_MS milliseconds, or null if none exists.
+const ANTI_PASSBACK_WINDOW_MS = 30_000; // 30 seconds
+
+async function checkAntiPassback(profile_id, tenant_id) {
+  const windowStart = new Date(Date.now() - ANTI_PASSBACK_WINDOW_MS).toISOString();
+
+  const { data, error } = await supabase
+    .from('check_ins')
+    .select('id, created_at, access_method')
+    .eq('profile_id', profile_id)
+    .eq('tenant_id', tenant_id)
+    .in('status', ['approved', 'warning'])   // only count successful entries
+    .gte('created_at', windowStart)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error || !data) return null; // no recent check-in → allow
+  return data;                     // recent check-in found → deny
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 router.post('/unlock', async (req, res) => {
     try {
         const { tenant_id, profile_id, device_id, access_method, geofence_verified } = req.body;
@@ -188,6 +212,44 @@ router.post('/unlock', async (req, res) => {
                 reasons.push('Liability Waiver Expired (Needs Renewal)');
             }
         }
+
+        // ── Anti-Passback Check ──────────────────────────────────────────────
+        // Block if this profile already had a successful entry in the last 30 s
+        if (finalStatus === 'approved' || finalStatus === 'warning') {
+            const recentCheckin = await checkAntiPassback(profile_id, tenant_id);
+            if (recentCheckin) {
+                // Log the anti-passback violation
+                await supabase.from('check_ins').insert({
+                    tenant_id,
+                    profile_id,
+                    device_id,
+                    access_method: access_method || 'manual_override',
+                    status: 'denied_anti_passback',
+                    metadata: {
+                        violation: 'anti_passback',
+                        last_checkin_id: recentCheckin.id,
+                        last_checkin_at: recentCheckin.created_at,
+                        window_seconds: ANTI_PASSBACK_WINDOW_MS / 1000
+                    }
+                });
+
+                // Emit front-desk alert
+                gymEmitter.emit('checkin.antipassback', {
+                    tenant_id,
+                    profile_id,
+                    phone: profile.phone,
+                    device_id,
+                    last_checkin_at: recentCheckin.created_at
+                });
+
+                return res.status(429).json({
+                    success: false,
+                    status: 'denied_anti_passback',
+                    reason: `Anti-passback: entry already recorded ${Math.round((Date.now() - new Date(recentCheckin.created_at).getTime()) / 1000)}s ago. Please wait ${ANTI_PASSBACK_WINDOW_MS / 1000}s between scans.`
+                });
+            }
+        }
+        // ────────────────────────────────────────────────────────────────────
 
         // Fetch hardware device
         const { data: device, error: deviceError } = await supabase
@@ -632,6 +694,50 @@ router.post('/scanner/checkin', async (req, res) => {
             if (accessStatus === 'approved') accessStatus = 'warning';
             reasons.push(`Outstanding tab balance: ${parseFloat(tab.balance).toFixed(2)}`);
         }
+
+        // ── Anti-Passback Check ──────────────────────────────────────────────
+        // Block if this profile already had a successful entry in the last 30 s
+        if (accessStatus === 'approved' || accessStatus === 'warning') {
+            const recentCheckin = await checkAntiPassback(profile.id, tenant_id);
+            if (recentCheckin) {
+                // Log the anti-passback violation
+                await supabase.from('check_ins').insert({
+                    tenant_id,
+                    profile_id: profile.id,
+                    device_id,
+                    access_method: accessMethod,
+                    scanner_type,
+                    status: 'denied_anti_passback',
+                    metadata: {
+                        violation: 'anti_passback',
+                        scan_data,
+                        last_checkin_id: recentCheckin.id,
+                        last_checkin_at: recentCheckin.created_at,
+                        window_seconds: ANTI_PASSBACK_WINDOW_MS / 1000
+                    }
+                });
+
+                // Emit front-desk alert
+                gymEmitter.emit('checkin.antipassback', {
+                    tenant_id,
+                    profile_id: profile.id,
+                    phone: profile.phone,
+                    device_id,
+                    last_checkin_at: recentCheckin.created_at
+                });
+
+                return res.status(429).json({
+                    success: false,
+                    access_status: 'denied_anti_passback',
+                    profile: {
+                        id: profile.id,
+                        name: `${profile.first_name} ${profile.last_name}`
+                    },
+                    reason: `Anti-passback: entry already recorded ${Math.round((Date.now() - new Date(recentCheckin.created_at).getTime()) / 1000)}s ago. Please wait ${ANTI_PASSBACK_WINDOW_MS / 1000}s between scans.`
+                });
+            }
+        }
+        // ────────────────────────────────────────────────────────────────────
 
         // Log check-in
         const { data: checkin, error: checkinError } = await supabase

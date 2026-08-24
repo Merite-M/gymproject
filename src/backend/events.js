@@ -92,4 +92,40 @@ gymEmitter.on('checkin.denied', async (data) => {
     }
 });
 
+// ─── Anti-Passback Front-Desk Alert ──────────────────────────────────────────
+// Fires whenever a scan is blocked by the 30-second anti-passback cooldown.
+// Inserts a high-priority 'antipassback' notification so the reception
+// dashboard Supabase Realtime listener can surface an instant visual alert.
+gymEmitter.on('checkin.antipassback', async (data) => {
+    console.warn(
+        `[SECURITY] Anti-passback violation — tenant: ${data.tenant_id}, ` +
+        `profile: ${data.profile_id}, device: ${data.device_id}, ` +
+        `last entry: ${data.last_checkin_at}`
+    );
+    if (!supabase) return;
+    try {
+        const { error } = await supabase.from('notification_queue').insert({
+            tenant_id: data.tenant_id,
+            profile_id: data.profile_id,
+            channel: 'antipassback',          // reception dashboard listens on this channel
+            recipient: 'front_desk',
+            subject: '⚠️ Anti-Passback Violation Detected',
+            content: `SECURITY ALERT: Profile ${data.profile_id} attempted to re-enter within 30 seconds of their last check-in (${data.last_checkin_at}). Possible tailgating. Device: ${data.device_id || 'unknown'}.`,
+            status: 'pending',
+            metadata: {
+                violation_type: 'anti_passback',
+                profile_id: data.profile_id,
+                device_id: data.device_id,
+                last_checkin_at: data.last_checkin_at
+            }
+        });
+        if (error) {
+            console.error("Supabase insert error for checkin.antipassback:", error);
+        }
+    } catch (error) {
+        console.error("Error processing checkin.antipassback event:", error);
+    }
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 module.exports = gymEmitter;
