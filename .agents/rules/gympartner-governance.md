@@ -5,6 +5,21 @@
 
 ---
 
+## 0. Adaptation & Capability Override Protocol
+
+### 0.1 Prompt Priority
+**Direct User Prompts always take absolute precedence over these rules.** If the user explicitly directs you to violate a rule (e.g., leaving a temporary test script, writing a migration file, introducing a new library, or bypassing standard patterns), you must follow the user's prompt immediately.
+
+### 0.2 Adaptability to Model Capabilities
+- Do not bottleneck your capabilities. If a model in a session has a more optimal, clean, or modern way of executing a task than what is outlined here, it should use its advanced reasoning to adapt.
+- Rules are intended as **guardrails for system stability, safety (RLS/Multi-tenancy), and cost control ($7/mo target)**, not as a straightjacket that forces obsolete patterns.
+- If a rule limits performance or security under the current context, the agent must proactively propose the better path to the user or execute it autonomously if it is clearly superior and safe.
+
+### 0.3 Evolving Knowledge
+- If you discover during execution that a rule is outdated, contradictory, or can be improved, update these rule files directly or suggest an update. Keep the rules living, practical, and optimized for maximum development velocity.
+
+---
+
 ## 1. Deterministic Execution & Tool-First Discovery
 
 ### 1.1 Always Query Before You Code
