@@ -139,6 +139,10 @@ router.post('/unlock', async (req, res) => {
             return res.status(400).json({ error: 'Missing required parameters (tenant_id, profile_id, device_id)' });
         }
 
+        if (req.user.id !== profile_id) {
+            return res.status(403).json({ error: 'Unauthorized to unlock for this profile' });
+        }
+
         if (access_method === 'geofence') {
             if (geofence_verified !== true) {
                 return res.status(403).json({ error: 'Geofence verification failed or missing' });
