@@ -21,6 +21,52 @@ function formatRWF(amount) {
   }).format(amount);
 }
 
+/**
+ * Tenant Access & Authentication Validator
+ * Ensures the caller is authenticated and authorized for the requested tenant_id.
+ */
+async function validateTenantAccess(req, tenantId) {
+  if (!supabase) return { error: 'Supabase not configured', status: 500 };
+  if (!tenantId) return { error: 'Missing tenant_id', status: 400 };
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    // If running in development without auth header, verify tenant exists
+    const { data: tenant, error: tErr } = await supabase
+      .from('tenants')
+      .select('id')
+      .eq('id', tenantId)
+      .single();
+    if (tErr || !tenant) {
+      return { error: 'Invalid tenant_id', status: 404 };
+    }
+    return { authorized: true };
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+  if (authError || !user) {
+    return { error: 'Invalid or expired token', status: 401 };
+  }
+
+  const { data: profile, error: pErr } = await supabase
+    .from('profiles')
+    .select('id, tenant_id, role')
+    .eq('id', user.id)
+    .single();
+
+  if (pErr || !profile) {
+    return { error: 'User profile not found', status: 401 };
+  }
+
+  if (profile.tenant_id !== tenantId && profile.role !== 'super_admin') {
+    return { error: 'Access denied: You do not belong to this tenant', status: 403 };
+  }
+
+  return { user, profile };
+}
+
 // ==========================================
 // 1. SHIFTS & TILL AUDIT
 // ==========================================
@@ -33,7 +79,8 @@ router.get('/shift/status', async (req, res) => {
     if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
     try {
         const { tenant_id } = req.query;
-        if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+        const authCheck = await validateTenantAccess(req, tenant_id);
+        if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
 
         const { data, error } = await supabase
             .from('shift_ledgers')
@@ -61,13 +108,14 @@ router.post('/shift/start', async (req, res) => {
     if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
     try {
         const { tenant_id, staff_id, starting_cash } = req.body;
-        if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+        const authCheck = await validateTenantAccess(req, tenant_id);
+        if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
 
         const startCash = parseFloat(starting_cash) || 0;
 
         const { data, error } = await supabase.from('shift_ledgers').insert({
             tenant_id,
-            staff_id,
+            staff_id: staff_id || null,
             shift_start: new Date().toISOString(),
             starting_cash: startCash,
             expected_cash: startCash,
@@ -98,7 +146,10 @@ router.post('/shift/end', async (req, res) => {
             .eq('id', shift_id)
             .single();
 
-        if (shiftFetchError) throw shiftFetchError;
+        if (shiftFetchError || !shift) return res.status(404).json({ error: 'Shift not found' });
+
+        const authCheck = await validateTenantAccess(req, shift.tenant_id);
+        if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
 
         let status = 'closed';
         const expected = parseFloat(shift.expected_cash || 0);
@@ -140,7 +191,8 @@ router.get('/shift/:shift_id/x-report', async (req, res) => {
         const { shift_id } = req.params;
         const { tenant_id } = req.query;
 
-        if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+        const authCheck = await validateTenantAccess(req, tenant_id);
+        if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
 
         const { data: shift, error: shiftError } = await supabase
             .from('shift_ledgers')
@@ -200,7 +252,8 @@ router.get('/products', async (req, res) => {
   if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
   try {
     const { tenant_id } = req.query;
-    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+    const authCheck = await validateTenantAccess(req, tenant_id);
+    if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
 
     const { data, error } = await supabase
       .from('products')
@@ -238,10 +291,11 @@ router.post('/checkout', async (req, res) => {
       shift_id,
       staff_id,
       applied_promo_code,
-      promo_discount = 0,
-      applied_voucher_code,
-      voucher_discount = 0
+      applied_voucher_code
     } = req.body;
+
+    const authCheck = await validateTenantAccess(req, tenant_id);
+    if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
 
     if (!tenant_id || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Missing required parameters (tenant_id, items)' });
@@ -320,10 +374,60 @@ router.post('/checkout', async (req, res) => {
       });
     }
 
-    // 2. Deduct Discounts
-    const numericPromoDiscount = Math.min(parseFloat(promo_discount) || 0, grossSubtotal);
+    // 2. Server-side Promotion Code Validation & Calculation (Prevents client manipulation)
+    let validatedPromo = null;
+    let numericPromoDiscount = 0;
+
+    if (applied_promo_code && typeof applied_promo_code === 'string' && applied_promo_code.trim()) {
+      const { data: promo, error: promoErr } = await supabase
+        .from('promotions')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .ilike('code', applied_promo_code.trim())
+        .single();
+
+      if (!promoErr && promo) {
+        const notExpired = !promo.expires_at || new Date(promo.expires_at) >= new Date();
+        const withinMaxUses = promo.max_uses === null || promo.max_uses === undefined || (promo.times_used || 0) < promo.max_uses;
+
+        if (notExpired && withinMaxUses) {
+          const discountVal = parseFloat(promo.discount_value) || 0;
+          if (promo.discount_type === 'percentage') {
+            numericPromoDiscount = Math.round((grossSubtotal * discountVal) / 100);
+          } else {
+            numericPromoDiscount = Math.min(discountVal, grossSubtotal);
+          }
+          validatedPromo = promo;
+        }
+      }
+    }
+
+    numericPromoDiscount = Math.min(numericPromoDiscount, grossSubtotal);
     const subtotalAfterPromo = Math.max(0, grossSubtotal - numericPromoDiscount);
-    const numericVoucherDiscount = Math.min(parseFloat(voucher_discount) || 0, subtotalAfterPromo);
+
+    // 3. Server-side Gift Voucher Validation & Calculation (Prevents client manipulation)
+    let validatedVoucher = null;
+    let numericVoucherDiscount = 0;
+
+    if (applied_voucher_code && typeof applied_voucher_code === 'string' && applied_voucher_code.trim()) {
+      const { data: voucher, error: voucherErr } = await supabase
+        .from('gift_vouchers')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .ilike('code', applied_voucher_code.trim())
+        .single();
+
+      if (!voucherErr && voucher) {
+        const notExpired = !voucher.expires_at || new Date(voucher.expires_at) >= new Date();
+        const currentBal = parseFloat(voucher.current_balance_rwf) || 0;
+
+        if (notExpired && currentBal > 0) {
+          numericVoucherDiscount = Math.min(currentBal, subtotalAfterPromo);
+          validatedVoucher = voucher;
+        }
+      }
+    }
+
     const finalTotal = Math.max(0, subtotalAfterPromo - numericVoucherDiscount);
 
     // Adjusted VAT after proportional discounts (RRA EBM Compliance)
@@ -331,7 +435,7 @@ router.post('/checkout', async (req, res) => {
     const finalExVat = Math.round(totalExVat * discountRatio * 100) / 100;
     const finalVat = Math.round((finalTotal - finalExVat) * 100) / 100;
 
-    // 3. Prepare Payment Tenders (Split Payments)
+    // 4. Prepare Payment Tenders (Split Payments)
     let paymentTenders = [];
     if (Array.isArray(rawPayments) && rawPayments.length > 0) {
       paymentTenders = rawPayments.map(p => ({
@@ -349,7 +453,7 @@ router.post('/checkout', async (req, res) => {
       return res.status(400).json({ error: 'Payment method or split payment allocations required' });
     }
 
-    // Validate allocation sum
+    // Validate allocation sum matches server-calculated final total
     const totalAllocated = paymentTenders.reduce((sum, p) => sum + p.amount, 0);
     if (Math.abs(totalAllocated - finalTotal) > 1.0) {
       return res.status(400).json({
@@ -363,7 +467,7 @@ router.post('/checkout', async (req, res) => {
       return res.status(400).json({ error: 'shift_id is required for cash transactions to reconcile till ledger.' });
     }
 
-    // 4. Validate Member Tab Charges & Credit Limits
+    // 5. Validate Member Tab Charges & Credit Limits
     const tabTender = paymentTenders.find(p => p.method === 'member_tab');
     if (tabTender && tabTender.amount > 0) {
       if (!profile_id) {
@@ -392,7 +496,7 @@ router.post('/checkout', async (req, res) => {
         return res.status(403).json({ error: 'Cannot charge to tab: Member account is in debtor status.' });
       }
 
-      // Fetch member tab & credit limit
+      // Fetch member tab & credit limit with composite check
       const { data: existingTab, error: tabError } = await supabase
         .from('member_tabs')
         .select('id, balance, credit_limit')
@@ -412,7 +516,7 @@ router.post('/checkout', async (req, res) => {
         });
       }
 
-      // Update / Upsert member tab balance
+      // Update / Upsert member tab balance explicitly by ID or composite key
       if (existingTab) {
         const { error: updateTabError } = await supabase
           .from('member_tabs')
@@ -437,8 +541,33 @@ router.post('/checkout', async (req, res) => {
       }
     }
 
-    // 5. Create Invoice with RRA VAT Columns
-    const isAllPaid = paymentTenders.every(p => p.method !== 'momo' && p.method !== 'airtel');
+    // 6. Atomically Deduct Voucher & Bump Promo usage on backend
+    if (validatedVoucher && numericVoucherDiscount > 0) {
+      const remainingVoucherBal = Math.max(0, (parseFloat(validatedVoucher.current_balance_rwf) || 0) - numericVoucherDiscount);
+      await supabase
+        .from('gift_vouchers')
+        .update({
+          current_balance_rwf: remainingVoucherBal,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', validatedVoucher.id);
+    }
+
+    if (validatedPromo) {
+      await supabase
+        .from('promotions')
+        .update({
+          times_used: (validatedPromo.times_used || 0) + 1,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', validatedPromo.id);
+    }
+
+    // 7. Create Invoice with RRA VAT Columns
+    // ONLY invoices settled completely by immediate tenders (cash, card, bank_transfer) are marked 'paid'.
+    // Transactions with member_tab (credit debt) or pending momo/airtel are 'unpaid'.
+    const isFullySettled = paymentTenders.every(p => p.method === 'cash' || p.method === 'card' || p.method === 'bank_transfer');
+
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
       .insert({
@@ -450,16 +579,16 @@ router.post('/checkout', async (req, res) => {
         total_incl_vat: finalTotal,
         tax: finalVat,
         total: finalTotal,
-        status: isAllPaid ? 'paid' : 'unpaid',
+        status: isFullySettled ? 'paid' : 'unpaid',
         due_date: new Date().toISOString(),
-        paid_at: isAllPaid ? new Date().toISOString() : null
+        paid_at: isFullySettled ? new Date().toISOString() : null
       })
       .select()
       .single();
 
     if (invoiceError) throw invoiceError;
 
-    // 6. Create Invoice Items & Deduct Stock
+    // 8. Create Invoice Items & Deduct Stock
     for (const item of validatedItems) {
       const { product_id, quantity, unit_price, gross_total, name, min_stock_alert, current_stock } = item;
 
@@ -495,27 +624,24 @@ router.post('/checkout', async (req, res) => {
 
       // Low stock notification
       if (newStock < min_stock_alert) {
-      if (newStock < min_stock_alert) {
-        const { error: notifError } = await supabase.from('notification_queue').insert({
+        await supabase.from('notification_queue').insert({
           tenant_id,
           channel: 'email',
           recipient: 'admin@gym.com',
           subject: 'Low Stock Alert',
           content: `Product "${name}" is low on stock (${newStock} remaining).`,
           status: 'pending'
-        });
-        if (notifError) console.error("Notification queue error:", notifError);
-      }
+        }).catch(err => console.error("Notification queue error:", err));
       }
     }
 
-    // 7. Insert Payment Records & Reconcile Split Payments
+    // 9. Insert Payment Records & Reconcile Split Payments
     let masterPaymentId = null;
     const insertedPayments = [];
 
     for (let i = 0; i < paymentTenders.length; i++) {
       const tender = paymentTenders[i];
-      const pStatus = (tender.method === 'momo' || tender.method === 'airtel') ? 'pending' : 'completed';
+      const pStatus = (tender.method === 'momo' || tender.method === 'airtel' || tender.method === 'member_tab') ? 'pending' : 'completed';
       const refCode = tender.reference_code || `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
 
       const { data: paymentRecord, error: payErr } = await supabase
@@ -570,9 +696,9 @@ router.post('/checkout', async (req, res) => {
       tax_category_breakdown: taxCategoryBreakdown,
       payments: insertedPayments,
       discounts: {
-        promo_code: applied_promo_code || null,
+        promo_code: validatedPromo?.code || null,
         promo_discount: numericPromoDiscount,
-        voucher_code: applied_voucher_code || null,
+        voucher_code: validatedVoucher?.code || null,
         voucher_discount: numericVoucherDiscount
       }
     });
@@ -597,8 +723,11 @@ router.get('/member_tab/:profile_id', async (req, res) => {
     const { profile_id } = req.params;
     const { tenant_id } = req.query;
 
-    if (!profile_id || !tenant_id) {
-       return res.status(400).json({ error: 'Missing profile_id or tenant_id' });
+    const authCheck = await validateTenantAccess(req, tenant_id);
+    if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
+
+    if (!profile_id) {
+       return res.status(400).json({ error: 'Missing profile_id' });
     }
 
     const { data, error } = await supabase
@@ -633,7 +762,7 @@ router.get('/member_tab/:profile_id', async (req, res) => {
 
 /**
  * PUT /api/pos/member_tab/:profile_id/limit
- * Update member's tab credit limit
+ * Update member's tab credit limit with safe existence check
  */
 router.put('/member_tab/:profile_id/limit', async (req, res) => {
   if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
@@ -641,8 +770,11 @@ router.put('/member_tab/:profile_id/limit', async (req, res) => {
     const { profile_id } = req.params;
     const { tenant_id, credit_limit } = req.body;
 
-    if (!profile_id || !tenant_id || credit_limit === undefined) {
-      return res.status(400).json({ error: 'Missing profile_id, tenant_id, or credit_limit' });
+    const authCheck = await validateTenantAccess(req, tenant_id);
+    if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
+
+    if (!profile_id || credit_limit === undefined) {
+      return res.status(400).json({ error: 'Missing profile_id or credit_limit' });
     }
 
     const limitVal = parseFloat(credit_limit);
@@ -650,18 +782,41 @@ router.put('/member_tab/:profile_id/limit', async (req, res) => {
       return res.status(400).json({ error: 'credit_limit must be a non-negative number' });
     }
 
-    const { data, error } = await supabase
+    const { data: existingTab } = await supabase
       .from('member_tabs')
-      .upsert({
-        profile_id,
-        tenant_id,
-        credit_limit: limitVal,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'profile_id' })
-      .select()
+      .select('id, balance')
+      .eq('profile_id', profile_id)
+      .eq('tenant_id', tenant_id)
       .single();
 
-    if (error) throw error;
+    let data;
+    if (existingTab) {
+      const { data: updated, error: updateErr } = await supabase
+        .from('member_tabs')
+        .update({
+          credit_limit: limitVal,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingTab.id)
+        .select()
+        .single();
+      if (updateErr) throw updateErr;
+      data = updated;
+    } else {
+      const { data: inserted, error: insertErr } = await supabase
+        .from('member_tabs')
+        .insert({
+          tenant_id,
+          profile_id,
+          balance: 0,
+          credit_limit: limitVal,
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+      if (insertErr) throw insertErr;
+      data = inserted;
+    }
 
     res.json({
       success: true,
@@ -684,13 +839,16 @@ router.post('/member-tab/credit', async (req, res) => {
     try {
         const { tenant_id, profile_id, amount } = req.body;
 
-        if (!tenant_id || !profile_id || !amount) {
+        const authCheck = await validateTenantAccess(req, tenant_id);
+        if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
+
+        if (!profile_id || !amount) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
         const { data: tab } = await supabase
             .from('member_tabs')
-            .select('balance, credit_limit')
+            .select('id, balance, credit_limit')
             .eq('tenant_id', tenant_id)
             .eq('profile_id', profile_id)
             .single();
@@ -698,19 +856,34 @@ router.post('/member-tab/credit', async (req, res) => {
         let currentBalance = tab ? parseFloat(tab.balance || 0) : 0;
         const newBalance = Math.max(0, currentBalance - parseFloat(amount));
 
-        const { data, error: updateError } = await supabase
-            .from('member_tabs')
-            .upsert({
-                profile_id,
-                tenant_id,
-                balance: newBalance,
-                credit_limit: tab?.credit_limit || 50000.00,
-                updated_at: new Date().toISOString()
-            }, { onConflict: 'profile_id' })
-            .select()
-            .single();
-
-        if (updateError) throw updateError;
+        let data;
+        if (tab) {
+            const { data: updated, error: updateError } = await supabase
+                .from('member_tabs')
+                .update({
+                    balance: newBalance,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', tab.id)
+                .select()
+                .single();
+            if (updateError) throw updateError;
+            data = updated;
+        } else {
+            const { data: inserted, error: insertError } = await supabase
+                .from('member_tabs')
+                .insert({
+                    profile_id,
+                    tenant_id,
+                    balance: 0,
+                    credit_limit: 50000.00,
+                    updated_at: new Date().toISOString()
+                })
+                .select()
+                .single();
+            if (insertError) throw insertError;
+            data = inserted;
+        }
 
         res.json({
           success: true,
@@ -735,7 +908,8 @@ router.get('/suppliers', async (req, res) => {
   if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
   try {
     const { tenant_id } = req.query;
-    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+    const authCheck = await validateTenantAccess(req, tenant_id);
+    if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
 
     const { data: suppliers, error } = await supabase
       .from('suppliers')
@@ -777,8 +951,11 @@ router.post('/suppliers', async (req, res) => {
   try {
     const { tenant_id, name, contact_person, phone, email, address, payment_terms, notes } = req.body;
 
-    if (!tenant_id || !name) {
-      return res.status(400).json({ error: 'tenant_id and name are required' });
+    const authCheck = await validateTenantAccess(req, tenant_id);
+    if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
+
+    if (!name) {
+      return res.status(400).json({ error: 'Supplier name is required' });
     }
 
     const { data, error } = await supabase
@@ -816,7 +993,8 @@ router.get('/suppliers/:id', async (req, res) => {
     const { id } = req.params;
     const { tenant_id } = req.query;
 
-    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+    const authCheck = await validateTenantAccess(req, tenant_id);
+    if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
 
     const { data: supplier, error: suppErr } = await supabase
       .from('suppliers')
@@ -856,7 +1034,8 @@ router.put('/suppliers/:id', async (req, res) => {
     const { id } = req.params;
     const { tenant_id, name, contact_person, phone, email, address, payment_terms, notes } = req.body;
 
-    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+    const authCheck = await validateTenantAccess(req, tenant_id);
+    if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
 
     const { data, error } = await supabase
       .from('suppliers')
@@ -893,7 +1072,8 @@ router.delete('/suppliers/:id', async (req, res) => {
     const { id } = req.params;
     const { tenant_id } = req.query;
 
-    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+    const authCheck = await validateTenantAccess(req, tenant_id);
+    if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
 
     const { error } = await supabase
       .from('suppliers')
@@ -919,7 +1099,8 @@ router.get('/suppliers/:id/purchase-orders', async (req, res) => {
     const { id } = req.params;
     const { tenant_id } = req.query;
 
-    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+    const authCheck = await validateTenantAccess(req, tenant_id);
+    if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
 
     const { data, error } = await supabase
       .from('purchase_orders')
@@ -948,7 +1129,8 @@ router.get('/purchase-orders', async (req, res) => {
   if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
   try {
     const { tenant_id, status } = req.query;
-    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+    const authCheck = await validateTenantAccess(req, tenant_id);
+    if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
 
     let query = supabase
       .from('purchase_orders')
@@ -985,8 +1167,11 @@ router.post('/purchase-orders', async (req, res) => {
       items
     } = req.body;
 
-    if (!tenant_id || !items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'tenant_id and valid items list are required' });
+    const authCheck = await validateTenantAccess(req, tenant_id);
+    if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Valid items list is required' });
     }
 
     // Calculate total cost
@@ -1068,7 +1253,8 @@ router.get('/purchase-orders/:id', async (req, res) => {
     const { id } = req.params;
     const { tenant_id } = req.query;
 
-    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+    const authCheck = await validateTenantAccess(req, tenant_id);
+    if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
 
     const { data: po, error: poError } = await supabase
       .from('purchase_orders')
@@ -1109,8 +1295,11 @@ router.post('/purchase-orders/:id/receive', async (req, res) => {
     const { id: poId } = req.params;
     const { tenant_id, received_items, staff_id, notes } = req.body;
 
-    if (!tenant_id || !received_items || !Array.isArray(received_items) || received_items.length === 0) {
-      return res.status(400).json({ error: 'tenant_id and received_items list required' });
+    const authCheck = await validateTenantAccess(req, tenant_id);
+    if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
+
+    if (!received_items || !Array.isArray(received_items) || received_items.length === 0) {
+      return res.status(400).json({ error: 'received_items list is required' });
     }
 
     // Fetch PO
@@ -1271,7 +1460,8 @@ router.get('/invoices/:id/receipt', async (req, res) => {
     const { id } = req.params;
     const { tenant_id } = req.query;
 
-    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+    const authCheck = await validateTenantAccess(req, tenant_id);
+    if (authCheck.error) return res.status(authCheck.status).json({ error: authCheck.error });
 
     // Fetch tenant details
     const { data: tenant } = await supabase

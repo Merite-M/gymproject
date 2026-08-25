@@ -38,9 +38,7 @@ export interface CheckoutPayload {
   shift_id?: string | null;
   staff_id?: string | null;
   applied_promo_code?: string | null;
-  promo_discount?: number;
   applied_voucher_code?: string | null;
-  voucher_discount?: number;
 }
 
 export interface CheckoutResponse {

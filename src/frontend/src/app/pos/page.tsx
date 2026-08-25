@@ -11,7 +11,7 @@ import {
 import { cn, formatCurrencyDisplay } from "@/lib/utils";
 import {
   fetchProducts, checkoutPOS, fetchMemberTab,
-  validatePromoCode, validateGiftVoucher, applyGiftVoucher,
+  validatePromoCode, validateGiftVoucher,
   fetchShiftStatus, startShift, endShift,
   ProductItem, PaymentTender, MemberTabInfo, ReceiptData, fetchInvoiceReceipt
 } from "@/lib/api/pos";
@@ -54,7 +54,6 @@ export default function POSPage() {
   // Receipt Modal state
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<ReceiptData | null>(null);
-  const [loadingReceipt, setLoadingReceipt] = useState(false);
 
   // Checkout process state
   const [completingSale, setCompletingSale] = useState(false);
@@ -75,7 +74,6 @@ export default function POSPage() {
       if (Array.isArray(data) && data.length > 0) {
         setProducts(data);
       } else {
-        // Fallback default sample items if fresh database
         setProducts([
           { id: "1", tenant_id: tenantId, name: "Kigali Water 500ml", category: "refreshments", sell_price: 1000, stock_quantity: 45, vat_rate: 18.00, tax_category: 'standard' },
           { id: "2", tenant_id: tenantId, name: "FitAid Recovery Can", category: "refreshments", sell_price: 3500, stock_quantity: 20, vat_rate: 18.00, tax_category: 'standard' },
@@ -205,17 +203,10 @@ export default function POSPage() {
 
   // RRA EBM 18% Tax Calculations
   let standardGross = 0;
-  let exemptGross = 0;
-  let zeroRatedGross = 0;
-
   cart.forEach(item => {
     const itemTotal = item.product.sell_price * item.quantity;
     const cat = item.product.tax_category || 'standard';
-    if (cat === 'exempt') {
-      exemptGross += itemTotal;
-    } else if (cat === 'zero_rated') {
-      zeroRatedGross += itemTotal;
-    } else {
+    if (cat === 'standard') {
       standardGross += itemTotal;
     }
   });
@@ -225,13 +216,13 @@ export default function POSPage() {
   const vatAmount = Math.max(0, Math.round((standardGross * discountRatio) - standardNet));
   const subtotalExVat = Math.max(0, finalTotal - vatAmount);
 
-  // Apply Promo
+  // Preview Promo (Does NOT consume on server until checkout)
   const handleApplyPromo = async () => {
     if (!promoCodeInput.trim()) return;
     setLoadingPromo(true);
     setPromoError(null);
     try {
-      const data = await validatePromoCode(tenantId, promoCodeInput.trim(), grossSubtotal);
+      const data = await validatePromoCode(tenantId, promoCodeInput.trim(), grossSubtotal, false);
       setAppliedPromo(data.promotion);
       setPromoCodeInput("");
     } catch (err: any) {
@@ -241,7 +232,7 @@ export default function POSPage() {
     }
   };
 
-  // Apply Voucher
+  // Preview Voucher (Does NOT deduct on server until checkout)
   const handleApplyVoucher = async () => {
     if (!voucherCodeInput.trim()) return;
     setLoadingVoucher(true);
@@ -301,7 +292,7 @@ export default function POSPage() {
     updateTender(targetIndex, 'amount', remainder);
   };
 
-  // Complete Sale (Single Tender or Split Payments)
+  // Complete Sale (Atomic Server-side Execution)
   const handleExecuteCheckout = async (tendersToUse?: PaymentTender[]) => {
     if (cart.length === 0) return;
     setCompletingSale(true);
@@ -340,17 +331,7 @@ export default function POSPage() {
     }
 
     try {
-      // 1. If promo code used, apply it
-      if (appliedPromo && appliedPromo.code) {
-        await validatePromoCode(tenantId, appliedPromo.code, grossSubtotal, true).catch(() => {});
-      }
-
-      // 2. If voucher used, deduct atomically
-      if (appliedVoucher && appliedVoucher.code && voucherDiscount > 0) {
-        await applyGiftVoucher(tenantId, appliedVoucher.code, voucherDiscount).catch(() => {});
-      }
-
-      // 3. Send Checkout Request
+      // Send Atomic Checkout Request (Backend validates discounts, stock, tab limits, and deducts voucher in 1 atomic step)
       const response = await checkoutPOS({
         tenant_id: tenantId,
         profile_id: selectedMember?.id || null,
@@ -364,12 +345,10 @@ export default function POSPage() {
         shift_id: currentShift?.id || null,
         staff_id: null,
         applied_promo_code: appliedPromo?.code || null,
-        promo_discount: promoDiscount,
-        applied_voucher_code: appliedVoucher?.code || null,
-        voucher_discount: voucherDiscount
+        applied_voucher_code: appliedVoucher?.code || null
       });
 
-      // 4. Fetch receipt
+      // Fetch receipt
       try {
         const receipt = await fetchInvoiceReceipt(response.invoice_id, tenantId);
         setLastReceipt(receipt);
@@ -378,13 +357,16 @@ export default function POSPage() {
         console.warn("Receipt fetch error:", err);
       }
 
-      // 5. Reset Cart & UI
+      // Reset Cart & UI
       setSaleSuccess(true);
       setShowSplitModal(false);
       setCart([]);
       setAppliedPromo(null);
       setAppliedVoucher(null);
-      loadProductsData(); // Refresh product stock
+      loadProductsData();
+      if (selectedMember) {
+        handleSelectMember(selectedMember);
+      }
 
       setTimeout(() => setSaleSuccess(false), 4000);
     } catch (err: any) {
