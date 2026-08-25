@@ -267,26 +267,14 @@ router.post('/cancel-booking', authMiddleware, async (req, res) => {
                 feeApplied = parseFloat(tenantPolicy.late_cancel_fee_rwf || 0);
 
                 if (feeApplied > 0) {
-                    const { data: tab } = await supabase
-                        .from('member_tabs')
-                        .select('id, balance')
-                        .eq('profile_id', profile_id)
-                        .eq('tenant_id', tenant_id)
-                        .single();
+                    const { error: rpcError } = await supabase.rpc('increment_member_tab_balance', {
+                        p_tenant_id: tenant_id,
+                        p_profile_id: profile_id,
+                        p_amount: feeApplied
+                    });
 
-                    if (tab) {
-                        await supabase
-                            .from('member_tabs')
-                            .update({ balance: parseFloat(tab.balance || 0) + feeApplied })
-                            .eq('id', tab.id);
-                    } else {
-                        await supabase
-                            .from('member_tabs')
-                            .insert({
-                                tenant_id,
-                                profile_id,
-                                balance: feeApplied
-                            });
+                    if (rpcError) {
+                        console.error("Failed to increment member tab balance via RPC:", rpcError);
                     }
                 }
             }
@@ -641,50 +629,35 @@ router.post('/mark-no-show', authMiddleware, async (req, res) => {
             return res.status(404).json({ error: 'Active booking not found to mark no-show' });
         }
 
-        // Get profile and tenant settings
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('no_show_strikes')
-            .eq('id', profile_id)
-            .single();
-
+        // Get tenant settings for no-show penalty and max strikes
         const { data: tenant } = await supabase
             .from('tenants')
             .select('no_show_penalty_rwf, max_no_show_strikes')
             .eq('id', tenant_id)
             .single();
 
-        const newStrikes = (profile?.no_show_strikes || 0) + 1;
+        // Increment strikes on profile via atomic RPC
+        const { data: newStrikesData, error: strikeError } = await supabase.rpc('increment_no_show_strikes', {
+            p_profile_id: profile_id
+        });
+
+        if (strikeError) {
+            console.error("Failed to increment no_show_strikes via RPC:", strikeError);
+        }
+
+        const newStrikes = newStrikesData || 1;
         const penaltyFee = parseFloat(tenant?.no_show_penalty_rwf || 0);
 
-        // Update strikes on profile
-        await supabase
-            .from('profiles')
-            .update({ no_show_strikes: newStrikes })
-            .eq('id', profile_id);
-
-        // Charge penalty fee if configured
+        // Charge penalty fee if configured via atomic RPC
         if (penaltyFee > 0) {
-            const { data: tab } = await supabase
-                .from('member_tabs')
-                .select('id, balance')
-                .eq('profile_id', profile_id)
-                .eq('tenant_id', tenant_id)
-                .single();
+            const { error: rpcError } = await supabase.rpc('increment_member_tab_balance', {
+                p_tenant_id: tenant_id,
+                p_profile_id: profile_id,
+                p_amount: penaltyFee
+            });
 
-            if (tab) {
-                await supabase
-                    .from('member_tabs')
-                    .update({ balance: parseFloat(tab.balance || 0) + penaltyFee })
-                    .eq('id', tab.id);
-            } else {
-                await supabase
-                    .from('member_tabs')
-                    .insert({
-                        tenant_id,
-                        profile_id,
-                        balance: penaltyFee
-                    });
+            if (rpcError) {
+                console.error("Failed to increment member tab balance via RPC:", rpcError);
             }
         }
 
@@ -764,6 +737,10 @@ router.post('/rentals', authMiddleware, async (req, res) => {
         const startDate = new Date(start_time);
         const endDate = new Date(end_time);
 
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+            return res.status(400).json({ error: 'Invalid start_time or end_time date format' });
+        }
+
         if (startDate >= endDate) {
             return res.status(400).json({ error: 'end_time must be after start_time' });
         }
@@ -798,13 +775,17 @@ router.post('/rentals', authMiddleware, async (req, res) => {
         }
 
         // Check for conflicting class schedules in same facility
-        const { data: classConflicts } = await supabase
+        const { data: classConflicts, error: classConflictError } = await supabase
             .from('class_schedules')
             .select('id, title, start_time, end_time')
             .eq('tenant_id', tenant_id)
             .eq('facility_id', facility_id)
             .eq('is_cancelled', false)
             .or(`and(start_time.lte.${end_time},end_time.gt.${start_time}),and(start_time.lt.${end_time},end_time.gte.${start_time})`);
+
+        if (classConflictError) {
+            return res.status(500).json({ error: classConflictError.message });
+        }
 
         if (classConflicts && classConflicts.length > 0) {
             return res.status(409).json({ error: 'Facility has scheduled classes during this time slot', conflicts: classConflicts });
