@@ -220,7 +220,25 @@ router.post('/cancel-booking', authMiddleware, async (req, res) => {
             return res.status(403).json({ error: 'Unauthorized to cancel this booking' });
         }
 
-        // Check cancellation window policy
+        // 1. Update booking status to cancelled FIRST
+        const { data: cancelledData, error: cancelError } = await supabase
+            .from('class_bookings')
+            .update({ status: 'cancelled' })
+            .eq('schedule_id', schedule_id)
+            .eq('profile_id', profile_id)
+            .eq('tenant_id', tenant_id)
+            .in('status', ['booked', 'checked_in'])
+            .select();
+
+        if (cancelError) {
+            return res.status(500).json({ error: 'Failed to cancel booking' });
+        }
+
+        if (!cancelledData || cancelledData.length === 0) {
+            return res.status(404).json({ error: 'Active booking not found' });
+        }
+
+        // 2. Compute and apply late cancellation penalty fee ONLY IF booking was actively cancelled
         const { data: tenantPolicy } = await supabase
             .from('tenants')
             .select('cancellation_window_hours, late_cancel_fee_rwf')
@@ -243,7 +261,8 @@ router.post('/cancel-booking', authMiddleware, async (req, res) => {
             const now = Date.now();
             const hoursDiff = (startTime - now) / (1000 * 60 * 60);
 
-            if (hoursDiff < windowHours && hoursDiff > 0) {
+            // Cancellation within the window hours or after the class has already started
+            if (hoursDiff < windowHours) {
                 isLateCancel = true;
                 feeApplied = parseFloat(tenantPolicy.late_cancel_fee_rwf || 0);
 
@@ -271,24 +290,6 @@ router.post('/cancel-booking', authMiddleware, async (req, res) => {
                     }
                 }
             }
-        }
-
-        // 1. Update booking status to cancelled
-        const { data: cancelledData, error: cancelError } = await supabase
-            .from('class_bookings')
-            .update({ status: 'cancelled' })
-            .eq('schedule_id', schedule_id)
-            .eq('profile_id', profile_id)
-            .eq('tenant_id', tenant_id)
-            .in('status', ['booked', 'checked_in'])
-            .select();
-
-        if (cancelError) {
-            return res.status(500).json({ error: 'Failed to cancel booking' });
-        }
-
-        if (!cancelledData || cancelledData.length === 0) {
-            return res.status(404).json({ error: 'Active booking not found' });
         }
 
         // Check if there is capacity (maybe we cancelled something that didn't free up space? Just recount to be sure)
@@ -613,17 +614,30 @@ router.post('/mark-no-show', authMiddleware, async (req, res) => {
             return res.status(400).json({ error: 'Missing tenant_id, schedule_id, or profile_id' });
         }
 
-        // Update booking status to no_show
-        const { data: booking, error: bookingError } = await supabase
+        // Authorization check: User must be staff, trainer, or admin
+        const { data: requesterProfile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', req.user.id)
+            .eq('tenant_id', tenant_id)
+            .single();
+
+        const allowedRoles = ['staff', 'trainer', 'admin'];
+        if (!requesterProfile || !allowedRoles.includes(requesterProfile.role)) {
+            return res.status(403).json({ error: 'Forbidden: Only staff, trainers, or admins can mark no-shows' });
+        }
+
+        // Update active booking status to no_show with status guard for idempotency
+        const { data: bookings, error: bookingError } = await supabase
             .from('class_bookings')
             .update({ status: 'no_show' })
             .eq('schedule_id', schedule_id)
             .eq('profile_id', profile_id)
             .eq('tenant_id', tenant_id)
-            .select()
-            .single();
+            .in('status', ['booked', 'checked_in'])
+            .select();
 
-        if (bookingError || !booking) {
+        if (bookingError || !bookings || bookings.length === 0) {
             return res.status(404).json({ error: 'Active booking not found to mark no-show' });
         }
 
