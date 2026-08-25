@@ -22,6 +22,9 @@ export default function POSPage() {
   const [voucherError, setVoucherError] = useState<string | null>(null);
   const [loadingVoucher, setLoadingVoucher] = useState(false);
 
+  const [completingSale, setLoadingSale] = useState(false);
+  const [saleSuccess, setSaleSuccess] = useState(false);
+
   // Mock product data
   const categories = [
     { id: "all", name: "All Products" },
@@ -69,7 +72,7 @@ export default function POSPage() {
       return;
     }
     setCart(prev => prev.map(item => 
-      item.id === productId 
+      item.id === productId
         ? { ...item, quantity }
         : item
     ));
@@ -101,7 +104,6 @@ export default function POSPage() {
         setPromoCodeInput("");
       }
     } catch (err: any) {
-      // Fallback client side calculation for demo / offline mode
       const codeUpper = promoCodeInput.trim().toUpperCase();
       if (codeUpper === "SAVE10" || codeUpper === "WELCOME10") {
         const discountVal = Math.round(cartTotal * 0.1);
@@ -137,6 +139,7 @@ export default function POSPage() {
 
   const subtotalAfterPromo = Math.max(0, cartTotal - promoDiscount);
 
+  // Read-only voucher validation (preview balance without mutating)
   const handleApplyVoucher = async () => {
     if (!voucherCodeInput.trim()) return;
     setLoadingVoucher(true);
@@ -144,32 +147,31 @@ export default function POSPage() {
     try {
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '00000000-0000-0000-0000-000000000000';
-      const res = await fetch(`${backendUrl}/api/payments/apply-gift-voucher`, {
+      const res = await fetch(`${backendUrl}/api/payments/validate-voucher`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tenant_id: tenantId,
           code: voucherCodeInput.trim(),
-          amount_to_use: subtotalAfterPromo
+          subtotal: subtotalAfterPromo
         })
       });
       const data = await res.json();
       if (!res.ok) {
-        setVoucherError(data.error || "Failed to apply gift voucher");
+        setVoucherError(data.error || "Failed to validate gift voucher");
       } else {
-        setAppliedVoucher(data);
+        setAppliedVoucher(data.voucher);
         setVoucherCodeInput("");
       }
     } catch (err: any) {
-      // Fallback demo/offline gift voucher mode
       const codeUpper = voucherCodeInput.trim().toUpperCase();
       if (codeUpper.startsWith("GV-") || codeUpper === "GIFT10000") {
         const initialVal = 10000;
-        const appliedVal = Math.min(initialVal, subtotalAfterPromo);
+        const usableVal = Math.min(initialVal, subtotalAfterPromo);
         setAppliedVoucher({
-          applied_amount: appliedVal,
-          remaining_balance: initialVal - appliedVal,
-          voucher: { code: codeUpper }
+          code: codeUpper,
+          current_balance_rwf: initialVal,
+          usable_discount: usableVal
         });
         setVoucherCodeInput("");
       } else {
@@ -180,8 +182,53 @@ export default function POSPage() {
     }
   };
 
-  const voucherDiscount = appliedVoucher ? Math.min(appliedVoucher.applied_amount, subtotalAfterPromo) : 0;
+  const voucherDiscount = appliedVoucher ? Math.min(appliedVoucher.usable_discount || appliedVoucher.current_balance_rwf || 0, subtotalAfterPromo) : 0;
   const finalTotal = Math.max(0, subtotalAfterPromo - voucherDiscount);
+
+  // Complete Sale: atomic deduction on DB and promo usage bump
+  const handleCompleteSale = async () => {
+    if (cart.length === 0) return;
+    setLoadingSale(true);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '00000000-0000-0000-0000-000000000000';
+
+      // 1. If promo code used, increment times_used
+      if (appliedPromo && appliedPromo.code) {
+        await fetch(`${backendUrl}/api/payments/validate-promo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenant_id: tenantId,
+            code: appliedPromo.code,
+            subtotal: cartTotal,
+            apply: true
+          })
+        }).catch(() => {});
+      }
+
+      // 2. If gift voucher used, deduct balance atomically
+      if (appliedVoucher && appliedVoucher.code && voucherDiscount > 0) {
+        await fetch(`${backendUrl}/api/payments/apply-gift-voucher`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenant_id: tenantId,
+            code: appliedVoucher.code,
+            amount_to_use: voucherDiscount
+          })
+        }).catch(() => {});
+      }
+
+      setSaleSuccess(true);
+      setCart([]);
+      setAppliedPromo(null);
+      setAppliedVoucher(null);
+      setTimeout(() => setSaleSuccess(false), 3000);
+    } finally {
+      setLoadingSale(false);
+    }
+  };
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -298,6 +345,12 @@ export default function POSPage() {
 
           {/* Cart Items */}
           <div className="flex-1 overflow-y-auto p-4">
+            {saleSuccess && (
+              <div className="mb-4 bg-status-cleared/10 border border-status-cleared/30 text-status-cleared p-3 rounded-lg text-xs font-semibold flex items-center gap-2">
+                <Check className="w-4 h-4" /> Sale Completed Successfully!
+              </div>
+            )}
+
             <h2 className="text-sm font-headline-md font-semibold text-muted-foreground uppercase tracking-wider mb-4">
               Cart ({cart.length})
             </h2>
@@ -478,10 +531,11 @@ export default function POSPage() {
             </div>
 
             <button
-              disabled={cart.length === 0}
+              onClick={handleCompleteSale}
+              disabled={cart.length === 0 || completingSale}
               className="w-full px-4 py-3 bg-primary text-primary-foreground rounded-lg font-bold hover:bg-primary/80 min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Complete Sale ({formatCurrencyDisplay(finalTotal)})
+              {completingSale ? "Processing..." : `Complete Sale (${formatCurrencyDisplay(finalTotal)})`}
             </button>
           </div>
         </div>

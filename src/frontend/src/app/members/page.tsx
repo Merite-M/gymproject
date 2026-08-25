@@ -30,6 +30,8 @@ export default function MembersPage() {
   const [voucherError, setVoucherError] = useState<string | null>(null);
   const [loadingVoucher, setLoadingVoucher] = useState(false);
 
+  const [submittingSignUp, setSubmittingSignUp] = useState(false);
+
   const planPrices: Record<string, number> = {
     Standard: 30000,
     Premium: 50000,
@@ -88,6 +90,7 @@ export default function MembersPage() {
 
   const subtotalAfterPromo = Math.max(0, planPrice - promoDiscount);
 
+  // Read-only voucher validation (preview balance without mutating)
   const handleApplyVoucher = async () => {
     if (!voucherCodeInput.trim()) return;
     setLoadingVoucher(true);
@@ -95,31 +98,31 @@ export default function MembersPage() {
     try {
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '00000000-0000-0000-0000-000000000000';
-      const res = await fetch(`${backendUrl}/api/payments/apply-gift-voucher`, {
+      const res = await fetch(`${backendUrl}/api/payments/validate-voucher`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tenant_id: tenantId,
           code: voucherCodeInput.trim(),
-          amount_to_use: subtotalAfterPromo
+          subtotal: subtotalAfterPromo
         })
       });
       const data = await res.json();
       if (!res.ok) {
         setVoucherError(data.error || "Invalid gift voucher code");
       } else {
-        setAppliedVoucher(data);
+        setAppliedVoucher(data.voucher);
         setVoucherCodeInput("");
       }
     } catch (err) {
       const codeUpper = voucherCodeInput.trim().toUpperCase();
       if (codeUpper.startsWith("GV-") || codeUpper === "GIFT10000") {
         const initialVal = 10000;
-        const appliedVal = Math.min(initialVal, subtotalAfterPromo);
+        const usableVal = Math.min(initialVal, subtotalAfterPromo);
         setAppliedVoucher({
-          applied_amount: appliedVal,
-          remaining_balance: initialVal - appliedVal,
-          voucher: { code: codeUpper }
+          code: codeUpper,
+          current_balance_rwf: initialVal,
+          usable_discount: usableVal
         });
         setVoucherCodeInput("");
       } else {
@@ -130,7 +133,7 @@ export default function MembersPage() {
     }
   };
 
-  const voucherDiscount = appliedVoucher ? Math.min(appliedVoucher.applied_amount, subtotalAfterPromo) : 0;
+  const voucherDiscount = appliedVoucher ? Math.min(appliedVoucher.usable_discount || appliedVoucher.current_balance_rwf || 0, subtotalAfterPromo) : 0;
   const finalPrice = Math.max(0, subtotalAfterPromo - voucherDiscount);
 
   // Mock member data for demonstration
@@ -179,32 +182,68 @@ export default function MembersPage() {
     },
   ]);
 
-  const handleAddMemberSubmit = (e: React.FormEvent) => {
+  const handleAddMemberSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newMem = {
-      id: String(mockMembers.length + 1),
-      name: `${firstName} ${lastName}`.trim() || "New Member",
-      email: email || "member@example.com",
-      membership_type: membershipType,
-      status: "active",
-      photo: null,
-      outstanding_balance: 0,
-      waiver_valid: true,
-      access_token: `GP-${Math.floor(10000 + Math.random() * 90000)}`,
-      member_since: "Today",
-      renewal_date: "Next Month",
-      phone: phone || "+250 780 000 000",
-    };
-    setMockMembers([newMem, ...mockMembers]);
-    setSelectedMember(newMem);
-    setShowAddModal(false);
-    // Reset form
-    setFirstName("");
-    setLastName("");
-    setEmail("");
-    setPhone("");
-    setAppliedPromo(null);
-    setAppliedVoucher(null);
+    setSubmittingSignUp(true);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '00000000-0000-0000-0000-000000000000';
+
+      // 1. If promo code used, increment times_used
+      if (appliedPromo && appliedPromo.code) {
+        await fetch(`${backendUrl}/api/payments/validate-promo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenant_id: tenantId,
+            code: appliedPromo.code,
+            subtotal: planPrice,
+            apply: true
+          })
+        }).catch(() => {});
+      }
+
+      // 2. If gift voucher used, deduct balance atomically
+      if (appliedVoucher && appliedVoucher.code && voucherDiscount > 0) {
+        await fetch(`${backendUrl}/api/payments/apply-gift-voucher`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenant_id: tenantId,
+            code: appliedVoucher.code,
+            amount_to_use: voucherDiscount
+          })
+        }).catch(() => {});
+      }
+
+      const newMem = {
+        id: String(mockMembers.length + 1),
+        name: `${firstName} ${lastName}`.trim() || "New Member",
+        email: email || "member@example.com",
+        membership_type: membershipType,
+        status: "active",
+        photo: null,
+        outstanding_balance: 0,
+        waiver_valid: true,
+        access_token: `GP-${Math.floor(10000 + Math.random() * 90000)}`,
+        member_since: "Today",
+        renewal_date: "Next Month",
+        phone: phone || "+250 780 000 000",
+      };
+      setMockMembers([newMem, ...mockMembers]);
+      setSelectedMember(newMem);
+      setShowAddModal(false);
+
+      // Reset form
+      setFirstName("");
+      setLastName("");
+      setEmail("");
+      setPhone("");
+      setAppliedPromo(null);
+      setAppliedVoucher(null);
+    } finally {
+      setSubmittingSignUp(false);
+    }
   };
 
   return (
@@ -399,7 +438,7 @@ export default function MembersPage() {
               {/* Promo Code & Voucher Section */}
               <div className="p-3 bg-muted/40 border border-border rounded-lg space-y-3">
                 <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">Discounts & Vouchers</h3>
-                
+
                 {/* Promo Code */}
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1 block flex items-center gap-1">
@@ -509,9 +548,10 @@ export default function MembersPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg text-sm hover:bg-primary/80"
+                  disabled={submittingSignUp}
+                  className="px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50"
                 >
-                  Complete Sign Up ({formatCurrencyDisplay(finalPrice)})
+                  {submittingSignUp ? "Processing..." : `Complete Sign Up (${formatCurrencyDisplay(finalPrice)})`}
                 </button>
               </div>
             </form>

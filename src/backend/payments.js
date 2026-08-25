@@ -1,3 +1,4 @@
+const authMiddleware = require('./authMiddleware');
 const express = require('express');
 const router = express.Router();
 const { createClient } = require('@supabase/supabase-js');
@@ -846,6 +847,57 @@ router.post('/validate-promo', async (req, res) => {
     }
 });
 
+// Read-Only Validate / Preview Gift Voucher (Does NOT mutate balance)
+router.post('/validate-voucher', async (req, res) => {
+    if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
+
+    try {
+        const { tenant_id, code, subtotal = 0 } = req.body;
+
+        if (!tenant_id || !code) {
+            return res.status(400).json({ error: "Missing required fields: tenant_id and code" });
+        }
+
+        const { data: voucher, error } = await supabase
+            .from('gift_vouchers')
+            .select('*')
+            .eq('tenant_id', tenant_id)
+            .ilike('code', code.trim())
+            .single();
+
+        if (error || !voucher) {
+            return res.status(404).json({ error: "Invalid gift voucher code" });
+        }
+
+        if (voucher.expires_at && new Date(voucher.expires_at) < new Date()) {
+            return res.status(400).json({ error: "Gift voucher has expired" });
+        }
+
+        const currentBalance = parseFloat(voucher.current_balance_rwf) || 0;
+        if (currentBalance <= 0) {
+            return res.status(400).json({ error: "Gift voucher has zero remaining balance" });
+        }
+
+        const numericSubtotal = parseFloat(subtotal) || 0;
+        const usableDiscount = numericSubtotal > 0 ? Math.min(currentBalance, numericSubtotal) : currentBalance;
+
+        res.status(200).json({
+            success: true,
+            voucher: {
+                id: voucher.id,
+                code: voucher.code,
+                current_balance_rwf: currentBalance,
+                usable_discount: usableDiscount,
+                formatted_balance: formatRWF(currentBalance),
+                formatted_discount: formatRWF(usableDiscount)
+            }
+        });
+    } catch (error) {
+        console.error("Validate voucher error:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
 // Issue Gift Voucher
 router.post('/issue-gift-voucher', async (req, res) => {
     if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
@@ -897,7 +949,7 @@ router.post('/issue-gift-voucher', async (req, res) => {
     }
 });
 
-// Apply Gift Voucher
+// Apply Gift Voucher (Atomic Deduction called upon sale completion)
 router.post('/apply-gift-voucher', async (req, res) => {
     if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
 
@@ -913,51 +965,40 @@ router.post('/apply-gift-voucher', async (req, res) => {
             return res.status(400).json({ error: "amount_to_use must be a positive number" });
         }
 
-        const { data: voucher, error } = await supabase
+        // Fetch voucher ID securely for the given tenant and code
+        const { data: voucher, error: fetchErr } = await supabase
             .from('gift_vouchers')
-            .select('*')
+            .select('id, expires_at, current_balance_rwf')
             .eq('tenant_id', tenant_id)
             .ilike('code', code.trim())
             .single();
 
-        if (error || !voucher) {
+        if (fetchErr || !voucher) {
             return res.status(404).json({ error: "Invalid gift voucher code" });
         }
 
-        if (voucher.expires_at && new Date(voucher.expires_at) < new Date()) {
-            return res.status(400).json({ error: "Gift voucher has expired" });
+        // Execute atomic PostgreSQL RPC function with row locking
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('deduct_gift_voucher_balance', {
+            p_voucher_id: voucher.id,
+            p_amount: requestedAmount
+        });
+
+        if (rpcErr || !rpcRes || rpcRes.length === 0) {
+            console.error("Atomic voucher deduction RPC error:", rpcErr);
+            return res.status(500).json({ error: "Failed to deduct gift voucher balance" });
         }
 
-        const currentBalance = parseFloat(voucher.current_balance_rwf) || 0;
-        if (currentBalance <= 0) {
-            return res.status(400).json({ error: "Gift voucher has zero remaining balance" });
-        }
-
-        const appliedAmount = Math.min(currentBalance, requestedAmount);
-        const newBalance = currentBalance - appliedAmount;
-
-        const { data: updatedVoucher, error: updateError } = await supabase
-            .from('gift_vouchers')
-            .update({
-                current_balance_rwf: newBalance,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', voucher.id)
-            .select()
-            .single();
-
-        if (updateError) {
-            console.error("Apply gift voucher DB error:", updateError);
-            return res.status(500).json({ error: "Failed to deduct balance from gift voucher" });
+        const result = rpcRes[0];
+        if (!result.success) {
+            return res.status(400).json({ error: result.error_message || "Deduction failed" });
         }
 
         res.status(200).json({
             success: true,
-            applied_amount: appliedAmount,
-            remaining_balance: newBalance,
-            formatted_applied: formatRWF(appliedAmount),
-            formatted_remaining: formatRWF(newBalance),
-            voucher: updatedVoucher
+            applied_amount: parseFloat(result.applied_amount),
+            remaining_balance: parseFloat(result.remaining_balance),
+            formatted_applied: formatRWF(result.applied_amount),
+            formatted_remaining: formatRWF(result.remaining_balance)
         });
     } catch (error) {
         console.error("Apply gift voucher error:", error);
