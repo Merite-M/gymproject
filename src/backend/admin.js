@@ -10,6 +10,33 @@ if (supabaseUrl && supabaseKey) {
   supabase = createClient(supabaseUrl, supabaseKey);
 }
 
+/**
+ * Helper to validate that the authenticated user belongs to the requested tenant
+ * and possesses an authorized administrative role (admin, manager, owner, super_admin, staff).
+ */
+async function validateAdminTenantAccess(userId, tenantId) {
+    const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('tenant_id, role')
+        .eq('id', userId)
+        .single();
+
+    if (error || !profile) {
+        return { error: 'User profile not found', status: 401 };
+    }
+
+    if (profile.tenant_id !== tenantId && profile.role !== 'super_admin') {
+        return { error: 'Access denied: You do not belong to this tenant', status: 403 };
+    }
+
+    const allowedRoles = ['admin', 'manager', 'owner', 'super_admin', 'staff'];
+    if (!allowedRoles.includes(profile.role)) {
+        return { error: 'Access denied: Insufficient permissions for financial reports', status: 403 };
+    }
+
+    return { profile };
+}
+
 // Z-Report (Aggregated across shifts for a date range)
 router.get('/reports/z-report', async (req, res) => {
     if (!supabase) return res.status(500).json({error: "Supabase config missing"});
@@ -33,8 +60,11 @@ router.get('/reports/z-report', async (req, res) => {
             return res.status(401).json({ error: 'Invalid or expired token' });
         }
 
-        // Ideally we would verify user role/tenant access here as well.
-        // E.g. get profile by user.id and ensure it matches tenant_id and role == 'admin' or 'manager'
+        // Validate tenant binding and administrative permissions
+        const tenantAccess = await validateAdminTenantAccess(user.id, tenant_id);
+        if (tenantAccess.error) {
+            return res.status(tenantAccess.status).json({ error: tenantAccess.error });
+        }
 
         const { data: shifts, error: shiftsError } = await supabase
             .from('shift_ledgers')
@@ -139,6 +169,12 @@ router.get('/reports/kpi-dashboard', async (req, res) => {
             return res.status(401).json({ error: 'Invalid or expired token' });
         }
 
+        // Validate tenant binding and administrative permissions
+        const tenantAccess = await validateAdminTenantAccess(user.id, tenant_id);
+        if (tenantAccess.error) {
+            return res.status(tenantAccess.status).json({ error: tenantAccess.error });
+        }
+
         const today = new Date().toISOString().split('T')[0];
 
         // Today's tenant snapshot
@@ -235,6 +271,12 @@ router.get('/reports/financial-history', async (req, res) => {
         const { data: { user }, error: authError } = await supabase.auth.getUser(token);
         if (authError || !user) {
             return res.status(401).json({ error: 'Invalid or expired token' });
+        }
+
+        // Validate tenant binding and administrative permissions
+        const tenantAccess = await validateAdminTenantAccess(user.id, tenant_id);
+        if (tenantAccess.error) {
+            return res.status(tenantAccess.status).json({ error: tenantAccess.error });
         }
 
         const { data: snapshots, error: snapError } = await supabase

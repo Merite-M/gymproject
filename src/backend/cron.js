@@ -311,6 +311,46 @@ function initCron(supabase) {
         }
     });
 
+/**
+ * Calculates start and end of day in UTC aligned with a tenant's local timezone.
+ * Returns local date string (YYYY-MM-DD), todayStart (UTC ISO), todayEnd (UTC ISO),
+ * monthStartISO (UTC ISO), and monthStartStr (YYYY-MM-DD).
+ */
+function getTenantDayBounds(timezone = 'Africa/Kigali') {
+    try {
+        const now = new Date();
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: timezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        const localDate = formatter.format(now); // "YYYY-MM-DD"
+
+        // Compute local timezone offset relative to UTC
+        const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+        const tzDate = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+        const offsetMs = tzDate.getTime() - utcDate.getTime();
+
+        const todayStart = new Date(new Date(`${localDate}T00:00:00.000Z`).getTime() - offsetMs).toISOString();
+        const todayEnd = new Date(new Date(`${localDate}T23:59:59.999Z`).getTime() - offsetMs).toISOString();
+
+        const monthStartStr = `${localDate.substring(0, 7)}-01`;
+        const monthStartISO = new Date(new Date(`${monthStartStr}T00:00:00.000Z`).getTime() - offsetMs).toISOString();
+
+        return { localDate, todayStart, todayEnd, monthStartISO, monthStartStr };
+    } catch (e) {
+        const today = new Date().toISOString().split('T')[0];
+        return {
+            localDate: today,
+            todayStart: `${today}T00:00:00.000Z`,
+            todayEnd: `${today}T23:59:59.999Z`,
+            monthStartISO: `${today.substring(0, 7)}-01T00:00:00.000Z`,
+            monthStartStr: `${today.substring(0, 7)}-01`
+        };
+    }
+}
+
     // Nightly financial clearing, utilization & owner digest (23:59)
     cron.schedule('59 23 * * *', async () => {
         if (isNightlyRunning) {
@@ -321,14 +361,10 @@ function initCron(supabase) {
         isNightlyRunning = true;
         console.log("Running nightly financial clearing & utilization cron...");
         try {
-            const today = new Date().toISOString().split('T')[0];
-            const todayStart = `${today}T00:00:00.000Z`;
-            const todayEnd = `${today}T23:59:59.999Z`;
-
-            // Get all tenants
+            // Get all tenants with timezone
             const { data: tenants, error: tenantError } = await supabase
                 .from('tenants')
-                .select('id, name, contact_email');
+                .select('id, name, contact_email, timezone');
 
             if (tenantError) {
                 console.error("[nightly-clearing] Error fetching tenants:", tenantError);
@@ -342,7 +378,14 @@ function initCron(supabase) {
 
             for (const tenant of tenants) {
                 try {
-                    console.log(`[nightly-clearing] Processing tenant: ${tenant.name} (${tenant.id})`);
+                    const bounds = getTenantDayBounds(tenant.timezone || 'Africa/Kigali');
+                    const today = bounds.localDate;
+                    const todayStart = bounds.todayStart;
+                    const todayEnd = bounds.todayEnd;
+                    const monthStartISO = bounds.monthStartISO;
+                    const monthStartStr = bounds.monthStartStr;
+
+                    console.log(`[nightly-clearing] Processing tenant: ${tenant.name} (${tenant.id}) [TZ: ${tenant.timezone || 'Africa/Kigali'}, Day: ${today}]`);
 
                     // ─── 1. Financial Clearing ───
                     const { data: todayPayments, error: payError } = await supabase
@@ -455,17 +498,33 @@ function initCron(supabase) {
                     const arpu = activeMembers > 0 ? mrr / activeMembers : 0;
 
                     // Churn rate: members cancelled this month / active at start of month
-                    const monthStart = `${today.substring(0, 7)}-01`;
-                    const { count: cancelledCount, error: churnError } = await supabase
+                    // 1. Primary check on cancelled_at (full ISO timestamp populated by member-crm.js)
+                    const { count: cancelledByTimestamp, error: churnError1 } = await supabase
                         .from('memberships')
                         .select('id', { count: 'exact', head: true })
                         .eq('tenant_id', tenant.id)
                         .eq('status', 'cancelled')
-                        .gte('cancellation_date', monthStart)
-                        .lte('cancellation_date', today);
+                        .gte('cancelled_at', monthStartISO)
+                        .lte('cancelled_at', todayEnd);
 
-                    if (churnError) {
-                        console.error(`[nightly-clearing] Churn calc error for ${tenant.id}:`, churnError);
+                    let cancelledCount = cancelledByTimestamp || 0;
+
+                    // 2. Fallback check: legacy records where cancelled_at is null, check end_date
+                    if (!churnError1) {
+                        const { count: cancelledByEndDate, error: churnError2 } = await supabase
+                            .from('memberships')
+                            .select('id', { count: 'exact', head: true })
+                            .eq('tenant_id', tenant.id)
+                            .eq('status', 'cancelled')
+                            .is('cancelled_at', null)
+                            .gte('end_date', monthStartStr)
+                            .lte('end_date', today);
+
+                        if (!churnError2 && cancelledByEndDate) {
+                            cancelledCount += cancelledByEndDate;
+                        }
+                    } else {
+                        console.error(`[nightly-clearing] Churn calculation error for ${tenant.id}:`, churnError1);
                     }
 
                     const totalMemberBase = activeMembers + (cancelledCount || 0);
