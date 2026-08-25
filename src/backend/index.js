@@ -295,6 +295,9 @@ app.use("/api/iot", iotRoutes);
 const memberCrmRoutes = require("./member-crm");
 app.use("/api/members", memberCrmRoutes);
 
+const publicRoutes = require("./public");
+app.use("/api/public", publicRoutes);
+
 const syncRoutes = require("./sync");
 app.use("/api/sync", syncRoutes);
 

@@ -54,6 +54,1024 @@ async function validateTenantAccess(userId, tenantId) {
   return { profile };
 }
 
+const gymEmitter = require('./events');
+
+// Helper to generate unique referral code
+function generateReferralCode(name = 'MEMBER') {
+  const clean = (name || 'MEM').replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'MEM';
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let rand = '';
+  for (let i = 0; i < 4; i++) {
+    rand += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `GP-${clean}${rand}`;
+}
+
+// Helper to generate voucher code
+function generateVoucherCode(prefix = 'REF') {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let rand = '';
+  for (let i = 0; i < 6; i++) {
+    rand += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `${prefix}-${rand}`;
+}
+
+// ==========================================
+// SALES LEAD PIPELINE CRM API
+// ==========================================
+
+/**
+ * GET /api/members/leads
+ * Retrieves sales leads with filtering by stage, search query, source, and pagination.
+ */
+router.get('/leads', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
+
+  try {
+    const { tenant_id, stage, search, source, limit = 100, offset = 0 } = req.query;
+
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'Missing tenant_id' });
+    }
+
+    const authResult = await verifyAuthToken(req);
+    if (authResult.error) {
+      return res.status(401).json({ error: authResult.error });
+    }
+
+    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
+    if (tenantAccess.error) {
+      return res.status(403).json({ error: tenantAccess.error });
+    }
+
+    let query = supabase
+      .from('leads')
+      .select('*, assigned_staff:profiles!assigned_staff_id(id, first_name, last_name), referred_by:profiles!referred_by_id(id, first_name, last_name, referral_code)', { count: 'exact' })
+      .eq('tenant_id', tenant_id)
+      .order('created_at', { ascending: false });
+
+    if (stage && stage !== 'all') {
+      query = query.eq('pipeline_stage', stage);
+    }
+
+    if (source && source !== 'all') {
+      query = query.eq('source', source);
+    }
+
+    if (search) {
+      query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`);
+    }
+
+    query = query.range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+
+    const { data: leads, error: leadsError, count } = await query;
+
+    if (leadsError) {
+      console.error('[leads-list] error:', leadsError);
+      return res.status(500).json({ error: leadsError.message });
+    }
+
+    // Compute stage duration days for each lead
+    const enhancedLeads = (leads || []).map(lead => {
+      const enteredAt = lead.stage_entered_at ? new Date(lead.stage_entered_at) : new Date(lead.created_at);
+      const daysInStage = Math.max(0, Math.floor((Date.now() - enteredAt.getTime()) / (1000 * 60 * 60 * 24)));
+      return {
+        ...lead,
+        days_in_stage: daysInStage
+      };
+    });
+
+    // Compute stage breakdown counts
+    const { data: allTenantLeads } = await supabase
+      .from('leads')
+      .select('pipeline_stage')
+      .eq('tenant_id', tenant_id);
+
+    const stageSummary = {
+      inquiry: 0,
+      tour_scheduled: 0,
+      trial_active: 0,
+      trial_expired: 0,
+      closed_won: 0,
+      closed_lost: 0,
+      total: (allTenantLeads || []).length
+    };
+
+    (allTenantLeads || []).forEach(l => {
+      if (stageSummary[l.pipeline_stage] !== undefined) {
+        stageSummary[l.pipeline_stage]++;
+      }
+    });
+
+    res.json({
+      leads: enhancedLeads,
+      total_count: count || 0,
+      stage_summary: stageSummary
+    });
+
+  } catch (error) {
+    console.error('[leads-list] error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/members/leads
+ * Creates a new sales lead in the pipeline.
+ */
+router.post('/leads', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
+
+  try {
+    const {
+      tenant_id,
+      first_name,
+      last_name,
+      email,
+      phone,
+      pipeline_stage = 'inquiry',
+      source = 'manual',
+      tour_date,
+      trial_start_date,
+      trial_end_date,
+      assigned_staff_id,
+      referred_by_id,
+      referral_code_used,
+      notes,
+      custom_fields
+    } = req.body;
+
+    if (!tenant_id || !first_name || !last_name || !phone) {
+      return res.status(400).json({ error: 'Missing required fields: tenant_id, first_name, last_name, phone' });
+    }
+
+    const authResult = await verifyAuthToken(req);
+    if (authResult.error) {
+      return res.status(401).json({ error: authResult.error });
+    }
+
+    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
+    if (tenantAccess.error) {
+      return res.status(403).json({ error: tenantAccess.error });
+    }
+
+    // Check if referral code was provided without referred_by_id
+    let resolvedReferrerId = referred_by_id || null;
+    if (!resolvedReferrerId && referral_code_used) {
+      const { data: refUser } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('tenant_id', tenant_id)
+        .eq('referral_code', referral_code_used.trim().toUpperCase())
+        .maybeSingle();
+
+      if (refUser) resolvedReferrerId = refUser.id;
+    }
+
+    const now = new Date().toISOString();
+    const { data: lead, error: insertError } = await supabase
+      .from('leads')
+      .insert({
+        tenant_id,
+        first_name: first_name.trim(),
+        last_name: last_name.trim(),
+        email: email ? email.trim() : null,
+        phone: phone.trim(),
+        pipeline_stage,
+        stage_entered_at: now,
+        source,
+        tour_date: tour_date ? new Date(tour_date).toISOString() : null,
+        trial_start_date: trial_start_date || (pipeline_stage === 'trial_active' ? now.split('T')[0] : null),
+        trial_end_date: trial_end_date || (pipeline_stage === 'trial_active' ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : null),
+        assigned_staff_id: assigned_staff_id || null,
+        referred_by_id: resolvedReferrerId,
+        referral_code_used: referral_code_used ? referral_code_used.trim().toUpperCase() : null,
+        notes: notes || null,
+        custom_fields: custom_fields || {}
+      })
+      .select('*, assigned_staff:profiles!assigned_staff_id(id, first_name, last_name), referred_by:profiles!referred_by_id(id, first_name, last_name)')
+      .single();
+
+    if (insertError) {
+      console.error('[leads-create] error:', insertError);
+      return res.status(500).json({ error: insertError.message });
+    }
+
+    // Audit stage history
+    await supabase.from('lead_stage_history').insert({
+      tenant_id,
+      lead_id: lead.id,
+      from_stage: null,
+      to_stage: pipeline_stage,
+      changed_by: authResult.user.id,
+      trigger_source: 'manual_create',
+      notes: notes || 'Lead created'
+    });
+
+    // If referral exists, create referral reward tracking row
+    if (resolvedReferrerId) {
+      await supabase.from('referral_rewards').upsert({
+        tenant_id,
+        referrer_profile_id: resolvedReferrerId,
+        referee_lead_id: lead.id,
+        referral_code: referral_code_used ? referral_code_used.trim().toUpperCase() : 'DIRECT',
+        status: 'pending',
+        reward_amount_rwf: 10000
+      }, { onConflict: 'referrer_profile_id, referee_lead_id' });
+    }
+
+    // Queue welcome or tour confirmation SMS if applicable
+    if (pipeline_stage === 'tour_scheduled' && tour_date) {
+      await supabase.from('notification_queue').insert({
+        tenant_id,
+        profile_id: null,
+        channel: 'sms',
+        recipient: phone.trim(),
+        subject: 'Gym Tour Scheduled',
+        content: `Hi ${first_name}, your tour is scheduled for ${new Date(tour_date).toLocaleString()}. We are excited to meet you!`,
+        status: 'pending'
+      });
+    }
+
+    gymEmitter.emit('lead.created', {
+      tenant_id,
+      lead_id: lead.id,
+      name: `${first_name} ${last_name}`,
+      stage: pipeline_stage
+    });
+
+    res.status(201).json({ success: true, lead });
+
+  } catch (error) {
+    console.error('[leads-create] error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * GET /api/members/leads/:leadId
+ * Retrieves detailed lead profile including stage transition history and logs.
+ */
+router.get('/leads/:leadId', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
+
+  try {
+    const { leadId } = req.params;
+    const { tenant_id } = req.query;
+
+    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+
+    const authResult = await verifyAuthToken(req);
+    if (authResult.error) return res.status(401).json({ error: authResult.error });
+
+    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
+    if (tenantAccess.error) return res.status(403).json({ error: tenantAccess.error });
+
+    const { data: lead, error: leadErr } = await supabase
+      .from('leads')
+      .select('*, assigned_staff:profiles!assigned_staff_id(id, first_name, last_name), referred_by:profiles!referred_by_id(id, first_name, last_name, phone, referral_code)')
+      .eq('id', leadId)
+      .eq('tenant_id', tenant_id)
+      .single();
+
+    if (leadErr || !lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    // Fetch stage history
+    const { data: stageHistory } = await supabase
+      .from('lead_stage_history')
+      .select('*, actor:profiles!changed_by(id, first_name, last_name)')
+      .eq('lead_id', leadId)
+      .eq('tenant_id', tenant_id)
+      .order('created_at', { ascending: false });
+
+    // Fetch communication logs
+    const { data: communications } = await supabase
+      .from('communications_log')
+      .select('*')
+      .eq('tenant_id', tenant_id)
+      .or(`profile_id.eq.${leadId},content.ilike.%${lead.phone}%`)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    res.json({
+      lead,
+      stage_history: stageHistory || [],
+      communications: communications || []
+    });
+
+  } catch (error) {
+    console.error('[lead-detail] error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * PUT /api/members/leads/:leadId
+ * Updates sales lead information.
+ */
+router.put('/leads/:leadId', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
+
+  try {
+    const { leadId } = req.params;
+    const { tenant_id, ...updateFields } = req.body;
+
+    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+
+    const authResult = await verifyAuthToken(req);
+    if (authResult.error) return res.status(401).json({ error: authResult.error });
+
+    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
+    if (tenantAccess.error) return res.status(403).json({ error: tenantAccess.error });
+
+    const allowedUpdates = [
+      'first_name', 'last_name', 'email', 'phone', 'assigned_staff_id',
+      'source', 'tour_date', 'trial_start_date', 'trial_end_date', 'notes', 'custom_fields'
+    ];
+
+    const safeUpdates = { updated_at: new Date().toISOString() };
+    for (const key of Object.keys(updateFields)) {
+      if (allowedUpdates.includes(key)) {
+        safeUpdates[key] = updateFields[key];
+      }
+    }
+
+    const { data: updatedLead, error: updErr } = await supabase
+      .from('leads')
+      .update(safeUpdates)
+      .eq('id', leadId)
+      .eq('tenant_id', tenant_id)
+      .select('*, assigned_staff:profiles!assigned_staff_id(id, first_name, last_name)')
+      .single();
+
+    if (updErr) {
+      console.error('[lead-update] error:', updErr);
+      return res.status(500).json({ error: updErr.message });
+    }
+
+    res.json({ success: true, lead: updatedLead });
+
+  } catch (error) {
+    console.error('[lead-update] error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/members/leads/:leadId/stage
+ * Advances or changes lead pipeline stage with automated trigger actions.
+ */
+router.post('/leads/:leadId/stage', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
+
+  try {
+    const { leadId } = req.params;
+    const {
+      tenant_id,
+      stage,
+      tour_date,
+      trial_days = 7,
+      lost_reason,
+      notes
+    } = req.body;
+
+    const validStages = ['inquiry', 'tour_scheduled', 'trial_active', 'trial_expired', 'closed_won', 'closed_lost'];
+    if (!tenant_id || !stage || !validStages.includes(stage)) {
+      return res.status(400).json({ error: `Invalid or missing stage. Must be one of: ${validStages.join(', ')}` });
+    }
+
+    const authResult = await verifyAuthToken(req);
+    if (authResult.error) return res.status(401).json({ error: authResult.error });
+
+    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
+    if (tenantAccess.error) return res.status(403).json({ error: tenantAccess.error });
+
+    // Fetch existing lead
+    const { data: currentLead, error: fetchErr } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', leadId)
+      .eq('tenant_id', tenant_id)
+      .single();
+
+    if (fetchErr || !currentLead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    const oldStage = currentLead.pipeline_stage;
+    const now = new Date().toISOString();
+    const updatePayload = {
+      pipeline_stage: stage,
+      stage_entered_at: now,
+      updated_at: now
+    };
+
+    // Automated trigger logic per stage
+    let triggerNotes = notes || `Stage transitioned from ${oldStage} to ${stage}`;
+
+    if (stage === 'tour_scheduled') {
+      const tourTimestamp = tour_date ? new Date(tour_date).toISOString() : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      updatePayload.tour_date = tourTimestamp;
+
+      // Queue tour reminder
+      await supabase.from('notification_queue').insert({
+        tenant_id,
+        profile_id: null,
+        channel: 'sms',
+        recipient: currentLead.phone,
+        subject: 'Tour Scheduled',
+        content: `Hi ${currentLead.first_name}! Your gym tour is scheduled for ${new Date(tourTimestamp).toLocaleString()}. See you then!`,
+        status: 'pending'
+      });
+      triggerNotes += ` (Tour set for ${new Date(tourTimestamp).toLocaleString()})`;
+
+    } else if (stage === 'trial_active') {
+      const startDate = now.split('T')[0];
+      const endDate = new Date(Date.now() + (parseInt(trial_days) || 7) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      updatePayload.trial_start_date = startDate;
+      updatePayload.trial_end_date = endDate;
+
+      // Queue trial activation SMS
+      await supabase.from('notification_queue').insert({
+        tenant_id,
+        profile_id: null,
+        channel: 'sms',
+        recipient: currentLead.phone,
+        subject: 'VIP Trial Activated',
+        content: `Welcome ${currentLead.first_name}! Your ${trial_days}-day VIP trial is active through ${endDate}. Enjoy full access!`,
+        status: 'pending'
+      });
+      triggerNotes += ` (${trial_days}-day trial active until ${endDate})`;
+
+    } else if (stage === 'trial_expired') {
+      // Queue special conversion discount offer
+      await supabase.from('notification_queue').insert({
+        tenant_id,
+        profile_id: null,
+        channel: 'sms',
+        recipient: currentLead.phone,
+        subject: 'Special Membership Offer',
+        content: `Hi ${currentLead.first_name}, your trial has ended! Join this week and get 15% off your first month. Visit reception to claim!`,
+        status: 'pending'
+      });
+
+    } else if (stage === 'closed_lost') {
+      updatePayload.lost_reason = lost_reason || 'No response / Not interested';
+      triggerNotes += ` (Reason: ${updatePayload.lost_reason})`;
+
+    } else if (stage === 'closed_won') {
+      // Auto conversion trigger if lead is marked closed_won
+      // Check if profile exists, or create member profile
+      let profileId = currentLead.converted_profile_id;
+      if (!profileId) {
+        const newRefCode = generateReferralCode(currentLead.first_name);
+        const { data: newProf, error: profErr } = await supabase
+          .from('profiles')
+          .insert({
+            tenant_id,
+            first_name: currentLead.first_name,
+            last_name: currentLead.last_name,
+            email: currentLead.email,
+            phone: currentLead.phone,
+            role: 'member',
+            status: 'active',
+            membership_status: 'active',
+            referral_code: newRefCode,
+            referred_by_id: currentLead.referred_by_id
+          })
+          .select()
+          .single();
+
+        if (!profErr && newProf) {
+          profileId = newProf.id;
+          updatePayload.converted_profile_id = profileId;
+
+          // Create active Standard membership
+          const today = now.split('T')[0];
+          const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          await supabase.from('memberships').insert({
+            tenant_id,
+            profile_id: profileId,
+            membership_type: 'STANDARD',
+            start_date: today,
+            end_date: nextMonth,
+            status: 'active',
+            price: 30000,
+            billing_interval: 'monthly'
+          });
+        }
+      }
+
+      // Fulfill Referral Reward if lead had a referrer
+      if (currentLead.referred_by_id) {
+        const rewardAmount = 10000;
+        const voucherCode = generateVoucherCode('REF');
+        const voucherExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+
+        // Create gift voucher
+        const { data: voucher } = await supabase
+          .from('gift_vouchers')
+          .insert({
+            tenant_id,
+            code: voucherCode,
+            initial_balance_rwf: rewardAmount,
+            current_balance_rwf: rewardAmount,
+            expires_at: voucherExpiry
+          })
+          .select()
+          .single();
+
+        if (voucher) {
+          // Update or insert referral_rewards
+          await supabase.from('referral_rewards').upsert({
+            tenant_id,
+            referrer_profile_id: currentLead.referred_by_id,
+            referee_lead_id: currentLead.id,
+            referee_profile_id: profileId,
+            referral_code: currentLead.referral_code_used || 'DIRECT',
+            status: 'rewarded',
+            reward_voucher_id: voucher.id,
+            reward_amount_rwf: rewardAmount,
+            reward_applied_at: now
+          }, { onConflict: 'referrer_profile_id, referee_lead_id' });
+
+          // Send reward notification to Referrer
+          const { data: referrer } = await supabase
+            .from('profiles')
+            .select('phone, first_name')
+            .eq('id', currentLead.referred_by_id)
+            .single();
+
+          if (referrer && referrer.phone) {
+            await supabase.from('notification_queue').insert({
+              tenant_id,
+              profile_id: currentLead.referred_by_id,
+              channel: 'sms',
+              recipient: referrer.phone,
+              subject: 'Referral Reward Voucher Issued! 🎉',
+              content: `Great news ${referrer.first_name}! Your referral ${currentLead.first_name} joined GymPartner! Your RWF 10,000 credit voucher is ${voucherCode}. Present at front desk to redeem!`,
+              status: 'pending'
+            });
+          }
+        }
+      }
+    }
+
+    // Apply update to lead
+    const { data: updatedLead, error: updErr } = await supabase
+      .from('leads')
+      .update(updatePayload)
+      .eq('id', leadId)
+      .eq('tenant_id', tenant_id)
+      .select('*, assigned_staff:profiles!assigned_staff_id(id, first_name, last_name)')
+      .single();
+
+    if (updErr) {
+      console.error('[lead-stage] error:', updErr);
+      return res.status(500).json({ error: updErr.message });
+    }
+
+    // Log to stage history
+    await supabase.from('lead_stage_history').insert({
+      tenant_id,
+      lead_id: leadId,
+      from_stage: oldStage,
+      to_stage: stage,
+      changed_by: authResult.user.id,
+      trigger_source: 'manual_transition',
+      notes: triggerNotes
+    });
+
+    gymEmitter.emit('lead.stage_changed', {
+      tenant_id,
+      lead_id: leadId,
+      old_stage: oldStage,
+      new_stage: stage
+    });
+
+    res.json({
+      success: true,
+      message: `Lead transitioned to ${stage}`,
+      lead: updatedLead
+    });
+
+  } catch (error) {
+    console.error('[lead-stage] error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/members/leads/:leadId/convert
+ * Directly converts a lead into an active member profile and fulfills referral reward.
+ */
+router.post('/leads/:leadId/convert', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
+
+  try {
+    const { leadId } = req.params;
+    const { tenant_id, membership_type = 'STANDARD', price = 30000 } = req.body;
+
+    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+
+    const authResult = await verifyAuthToken(req);
+    if (authResult.error) return res.status(401).json({ error: authResult.error });
+
+    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
+    if (tenantAccess.error) return res.status(403).json({ error: tenantAccess.error });
+
+    const { data: lead, error: leadErr } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', leadId)
+      .eq('tenant_id', tenant_id)
+      .single();
+
+    if (leadErr || !lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    // 1. Create Profile
+    const refCode = generateReferralCode(lead.first_name);
+    const { data: profile, error: profErr } = await supabase
+      .from('profiles')
+      .insert({
+        tenant_id,
+        first_name: lead.first_name,
+        last_name: lead.last_name,
+        email: lead.email,
+        phone: lead.phone,
+        role: 'member',
+        status: 'active',
+        membership_status: 'active',
+        referral_code: refCode,
+        referred_by_id: lead.referred_by_id
+      })
+      .select()
+      .single();
+
+    if (profErr) {
+      console.error('[lead-convert] profile create error:', profErr);
+      return res.status(500).json({ error: profErr.message });
+    }
+
+    // 2. Create Membership
+    const now = new Date().toISOString();
+    const today = now.split('T')[0];
+    const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const { data: membership } = await supabase
+      .from('memberships')
+      .insert({
+        tenant_id,
+        profile_id: profile.id,
+        membership_type: membership_type.toUpperCase(),
+        start_date: today,
+        end_date: nextMonth,
+        status: 'active',
+        price: parseFloat(price) || 30000,
+        billing_interval: 'monthly'
+      })
+      .select()
+      .single();
+
+    // 3. Fulfill Referral Reward Voucher if lead was referred
+    let rewardVoucher = null;
+    if (lead.referred_by_id) {
+      const rewardAmount = 10000;
+      const voucherCode = generateVoucherCode('REF');
+      const voucherExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+
+      const { data: voucher } = await supabase
+        .from('gift_vouchers')
+        .insert({
+          tenant_id,
+          code: voucherCode,
+          initial_balance_rwf: rewardAmount,
+          current_balance_rwf: rewardAmount,
+          expires_at: voucherExpiry
+        })
+        .select()
+        .single();
+
+      if (voucher) {
+        rewardVoucher = voucher;
+
+        await supabase.from('referral_rewards').upsert({
+          tenant_id,
+          referrer_profile_id: lead.referred_by_id,
+          referee_lead_id: lead.id,
+          referee_profile_id: profile.id,
+          referral_code: lead.referral_code_used || 'DIRECT',
+          status: 'rewarded',
+          reward_voucher_id: voucher.id,
+          reward_amount_rwf: rewardAmount,
+          reward_applied_at: now
+        }, { onConflict: 'referrer_profile_id, referee_lead_id' });
+
+        const { data: referrer } = await supabase
+          .from('profiles')
+          .select('phone, first_name')
+          .eq('id', lead.referred_by_id)
+          .single();
+
+        if (referrer && referrer.phone) {
+          await supabase.from('notification_queue').insert({
+            tenant_id,
+            profile_id: lead.referred_by_id,
+            channel: 'sms',
+            recipient: referrer.phone,
+            subject: 'Referral Reward Voucher Issued! 🎉',
+            content: `Congratulations ${referrer.first_name}! Your referral ${lead.first_name} has converted to a full member! Here is your RWF 10,000 voucher: ${voucherCode}.`,
+            status: 'pending'
+          });
+        }
+      }
+    }
+
+    // 4. Update Lead to closed_won
+    await supabase
+      .from('leads')
+      .update({
+        pipeline_stage: 'closed_won',
+        converted_profile_id: profile.id,
+        stage_entered_at: now,
+        updated_at: now
+      })
+      .eq('id', lead.id);
+
+    // Audit stage history
+    await supabase.from('lead_stage_history').insert({
+      tenant_id,
+      lead_id: lead.id,
+      from_stage: lead.pipeline_stage,
+      to_stage: 'closed_won',
+      changed_by: authResult.user.id,
+      trigger_source: 'manual_conversion',
+      notes: `Converted to Member Profile ${profile.id}`
+    });
+
+    gymEmitter.emit('lead.converted', {
+      tenant_id,
+      lead_id: lead.id,
+      profile_id: profile.id,
+      membership_id: membership ? membership.id : null
+    });
+
+    res.json({
+      success: true,
+      message: 'Lead converted to member successfully',
+      profile,
+      membership,
+      reward_voucher: rewardVoucher
+    });
+
+  } catch (error) {
+    console.error('[lead-convert] error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ==========================================
+// REFERRAL ENGINE & REWARD VOUCHER API
+// ==========================================
+
+/**
+ * GET /api/members/referrals/list
+ * Tenant-wide directory of referral tracking, conversion rates, and reward vouchers.
+ */
+router.get('/referrals/list', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
+
+  try {
+    const { tenant_id, status } = req.query;
+
+    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+
+    const authResult = await verifyAuthToken(req);
+    if (authResult.error) return res.status(401).json({ error: authResult.error });
+
+    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
+    if (tenantAccess.error) return res.status(403).json({ error: tenantAccess.error });
+
+    let query = supabase
+      .from('referral_rewards')
+      .select('*, referrer:profiles!referrer_profile_id(id, first_name, last_name, phone, referral_code), referee_profile:profiles!referee_profile_id(id, first_name, last_name, phone), referee_lead:leads!referee_lead_id(id, first_name, last_name, phone, pipeline_stage), reward_voucher:gift_vouchers!reward_voucher_id(id, code, current_balance_rwf, expires_at)')
+      .eq('tenant_id', tenant_id)
+      .order('created_at', { ascending: false });
+
+    if (status && status !== 'all') {
+      query = query.eq('status', status);
+    }
+
+    const { data: referrals, error: refErr } = await query;
+
+    if (refErr) {
+      console.error('[referrals-list] error:', refErr);
+      return res.status(500).json({ error: refErr.message });
+    }
+
+    const totalReferrals = (referrals || []).length;
+    const totalRewarded = (referrals || []).filter(r => r.status === 'rewarded').length;
+    const totalPending = (referrals || []).filter(r => r.status === 'pending').length;
+    const totalRewardsPaidRWF = (referrals || [])
+      .filter(r => r.status === 'rewarded')
+      .reduce((sum, r) => sum + parseFloat(r.reward_amount_rwf || 0), 0);
+
+    const conversionRate = totalReferrals > 0 ? ((totalRewarded / totalReferrals) * 100).toFixed(1) : '0';
+
+    res.json({
+      referrals: referrals || [],
+      metrics: {
+        total_referrals: totalReferrals,
+        total_rewarded: totalRewarded,
+        total_pending: totalPending,
+        total_rewards_paid_rwf: totalRewardsPaidRWF,
+        formatted_rewards_paid: formatRWF(totalRewardsPaidRWF),
+        conversion_rate_pct: conversionRate
+      }
+    });
+
+  } catch (error) {
+    console.error('[referrals-list] error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/members/referrals/validate
+ * Validates a referral code and returns referrer details and reward info.
+ */
+router.post('/referrals/validate', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
+
+  try {
+    const { tenant_id, code } = req.body;
+
+    if (!tenant_id || !code) {
+      return res.status(400).json({ error: 'Missing tenant_id or code' });
+    }
+
+    const cleanCode = code.trim().toUpperCase();
+    const { data: referrer, error: refErr } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, referral_code')
+      .eq('tenant_id', tenant_id)
+      .eq('referral_code', cleanCode)
+      .maybeSingle();
+
+    if (refErr || !referrer) {
+      return res.status(404).json({ valid: false, error: 'Invalid or expired referral code' });
+    }
+
+    res.json({
+      valid: true,
+      code: cleanCode,
+      referrer: {
+        id: referrer.id,
+        name: `${referrer.first_name} ${referrer.last_name}`
+      },
+      reward_amount_rwf: 10000,
+      formatted_reward: formatRWF(10000)
+    });
+
+  } catch (error) {
+    console.error('[referral-validate] error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * GET /api/members/:id/referral
+ * Retrieves member's personal referral hub data (code, share link, referees, earned rewards).
+ */
+router.get('/:id/referral', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
+
+  try {
+    const { id } = req.params;
+    const { tenant_id } = req.query;
+
+    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+
+    const authResult = await verifyAuthToken(req);
+    if (authResult.error) return res.status(401).json({ error: authResult.error });
+
+    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
+    if (tenantAccess.error) return res.status(403).json({ error: tenantAccess.error });
+
+    // Fetch profile
+    const { data: profile, error: profErr } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, referral_code, tenant_id')
+      .eq('id', id)
+      .eq('tenant_id', tenant_id)
+      .single();
+
+    if (profErr || !profile) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+
+    // Generate referral code if missing
+    let referralCode = profile.referral_code;
+    if (!referralCode) {
+      referralCode = generateReferralCode(profile.first_name);
+      await supabase
+        .from('profiles')
+        .update({ referral_code: referralCode })
+        .eq('id', id);
+    }
+
+    // Fetch all referrals made by this member
+    const { data: referrals } = await supabase
+      .from('referral_rewards')
+      .select('*, referee_profile:profiles!referee_profile_id(id, first_name, last_name), referee_lead:leads!referee_lead_id(id, first_name, last_name, pipeline_stage), voucher:gift_vouchers!reward_voucher_id(code, current_balance_rwf, expires_at)')
+      .eq('tenant_id', tenant_id)
+      .eq('referrer_profile_id', id)
+      .order('created_at', { ascending: false });
+
+    const totalReferrals = (referrals || []).length;
+    const rewardedReferrals = (referrals || []).filter(r => r.status === 'rewarded');
+    const totalEarnedRWF = rewardedReferrals.reduce((sum, r) => sum + parseFloat(r.reward_amount_rwf || 0), 0);
+
+    const shareUrl = `https://gym-frontend-app.onrender.com/join?ref=${referralCode}&tenant=${tenant_id}`;
+
+    res.json({
+      profile_id: id,
+      referral_code: referralCode,
+      share_url: shareUrl,
+      metrics: {
+        total_referrals: totalReferrals,
+        converted_count: rewardedReferrals.length,
+        pending_count: (referrals || []).filter(r => r.status === 'pending').length,
+        total_earned_rwf: totalEarnedRWF,
+        formatted_earned: formatRWF(totalEarnedRWF)
+      },
+      referrals: referrals || []
+    });
+
+  } catch (error) {
+    console.error('[member-referral] error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/members/:id/referral/generate
+ * Generates or regenerates a unique referral code for a member.
+ */
+router.post('/:id/referral/generate', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
+
+  try {
+    const { id } = req.params;
+    const { tenant_id } = req.body;
+
+    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+
+    const authResult = await verifyAuthToken(req);
+    if (authResult.error) return res.status(401).json({ error: authResult.error });
+
+    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
+    if (tenantAccess.error) return res.status(403).json({ error: tenantAccess.error });
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('first_name')
+      .eq('id', id)
+      .eq('tenant_id', tenant_id)
+      .single();
+
+    const newCode = generateReferralCode(profile ? profile.first_name : 'MEMBER');
+
+    const { data: updated, error: updErr } = await supabase
+      .from('profiles')
+      .update({ referral_code: newCode })
+      .eq('id', id)
+      .eq('tenant_id', tenant_id)
+      .select('id, first_name, last_name, referral_code')
+      .single();
+
+    if (updErr) {
+      console.error('[referral-gen] error:', updErr);
+      return res.status(500).json({ error: updErr.message });
+    }
+
+    res.json({
+      success: true,
+      referral_code: newCode,
+      profile: updated
+    });
+
+  } catch (error) {
+    console.error('[referral-gen] error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ==========================================
 // MEMBER PROFILE API
 // ==========================================

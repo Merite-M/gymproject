@@ -453,11 +453,105 @@ All monetary values use the `formatRWF()` helper function:
 
 ---
 
+---
+
+## Sales Lead Pipeline API
+
+### List Sales Leads
+**GET** `/api/members/leads`
+
+Retrieves leads with stage, source, and search filters.
+
+**Query Parameters:**
+- `tenant_id` (required)
+- `stage` (optional, e.g. 'inquiry', 'tour_scheduled', 'trial_active', 'trial_expired', 'closed_won', 'closed_lost')
+- `search` (optional)
+- `source` (optional)
+- `limit` (optional, default: 100)
+- `offset` (optional, default: 0)
+
+### Create Sales Lead
+**POST** `/api/members/leads`
+
+Creates a new lead.
+
+**Body Parameters:**
+- `tenant_id` (required)
+- `first_name` (required)
+- `last_name` (required)
+- `phone` (required)
+- `email` (optional)
+- `pipeline_stage` (optional, default: 'inquiry')
+- `tour_date` (optional, ISO timestamp)
+- `referral_code_used` (optional)
+- `notes` (optional)
+
+### Advance Pipeline Stage
+**POST** `/api/members/leads/:leadId/stage`
+
+Transitions lead pipeline stage and executes automated triggers (e.g. tour confirmation, trial activation, reward vouchers).
+
+**Body Parameters:**
+- `tenant_id` (required)
+- `stage` (required)
+- `tour_date` (optional)
+- `trial_days` (optional, default: 7)
+- `lost_reason` (optional)
+- `notes` (optional)
+
+### Convert Lead to Member
+**POST** `/api/members/leads/:leadId/convert`
+
+One-click converts lead to member profile and fulfills referral rewards.
+
+---
+
+## Member Referral Engine API
+
+### Get Member Referral Hub
+**GET** `/api/members/:id/referral`
+
+Returns personal referral code, share link, list of referee leads/members, and earned rewards in RWF.
+
+### List All Referrals (Tenant-wide)
+**GET** `/api/members/referrals/list`
+
+### Validate Referral Code
+**POST** `/api/members/referrals/validate`
+
+---
+
+## Embeddable Public Web Widgets API
+
+### Get Public Gym Config & Schedules
+**GET** `/api/public/config/:tenant_id`
+
+### Public Schedule Tour / Trial Pass
+**POST** `/api/public/schedule`
+
+### Public Web Registration & Sign-up
+**POST** `/api/public/join`
+
+### Embeddable Widget JavaScript Script
+**GET** `/api/public/widget.js`
+
+Embed snippet:
+```html
+<div id="gympartner-widget" data-tenant-id="<TENANT_UUID>" data-mode="schedule"></div>
+<script src="https://gym-backend-core.onrender.com/api/public/widget.js"></script>
+```
+
+---
+
 ## Database Schema Requirements
 
 The following database tables are expected to exist:
 
-- `profiles` - Member profiles
+- `profiles` - Member profiles (with `referral_code`, `referred_by_id`)
+- `leads` - Sales funnel leads and pipeline stages
+- `referral_rewards` - Attribution tracking and voucher bonuses
+- `lead_stage_history` - Audit trail of stage movements
+- `gift_vouchers` - Monetary reward vouchers (RWF)
 - `memberships` - Membership records
 - `membership_holds` - Hold/freeze records
 - `invoices` - Billing invoices
@@ -472,22 +566,10 @@ The following database tables are expected to exist:
 
 ### Using fetch():
 ```javascript
-const response = await fetch('/api/members/123?tenant_id=456', {
+const response = await fetch('/api/members/leads?tenant_id=456&stage=inquiry', {
   headers: {
     'Authorization': 'Bearer <jwt_token>'
   }
 });
 const data = await response.json();
-```
-
-### Using axios:
-```javascript
-const response = await axios.get('/api/members/123', {
-  headers: {
-    'Authorization': 'Bearer <jwt_token>'
-  },
-  params: {
-    tenant_id: '456'
-  }
-});
 ```

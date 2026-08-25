@@ -304,18 +304,33 @@ function initCron(supabase) {
                 }
             }
 
+            // 3. Lead CRM Automation: Trial Expiration Engine
+            try {
+                await processTrialExpirations(supabase);
+            } catch (err) {
+                console.error("[cron-leads] Trial expiration error:", err);
+            }
+
+            // 4. Lead CRM Automation: Automated Drip Sequences
+            try {
+                await processLeadDripSequences(supabase);
+            } catch (err) {
+                console.error("[cron-leads] Lead drip sequence error:", err);
+            }
+
+            // 5. Referral Engine: Automated Reward Fulfillment
+            try {
+                await processReferralRewardFulfillment(supabase);
+            } catch (err) {
+                console.error("[cron-referrals] Referral reward fulfillment error:", err);
+            }
+
         } catch (e) {
             console.error("Daily cron job exception:", e);
         } finally {
             isDailyRunning = false;
         }
     });
-
-/**
- * Calculates start and end of day in UTC aligned with a tenant's local timezone.
- * Returns local date string (YYYY-MM-DD), todayStart (UTC ISO), todayEnd (UTC ISO),
- * monthStartISO (UTC ISO), and monthStartStr (YYYY-MM-DD).
- */
 function getTenantDayBounds(timezone = 'Africa/Kigali') {
     try {
         const now = new Date();
@@ -662,4 +677,241 @@ function getTenantDayBounds(timezone = 'Africa/Kigali') {
 
 }
 
+/**
+ * Automatically transitions expired trials from 'trial_active' to 'trial_expired'
+ * and dispatches win-back conversion offers.
+ */
+async function processTrialExpirations(supabase) {
+    const today = new Date().toISOString().split('T')[0];
+    const { data: expiredLeads, error } = await supabase
+        .from('leads')
+        .select('id, tenant_id, first_name, last_name, phone, email, trial_end_date')
+        .eq('pipeline_stage', 'trial_active')
+        .lte('trial_end_date', today);
+
+    if (error) {
+        console.error("[cron-trial-expirations] Fetch error:", error);
+        return;
+    }
+
+    if (!expiredLeads || expiredLeads.length === 0) return;
+
+    console.log(`[cron-trial-expirations] Found ${expiredLeads.length} expired trials to transition.`);
+
+    for (const lead of expiredLeads) {
+        try {
+            const now = new Date().toISOString();
+            // Update stage to trial_expired
+            await supabase
+                .from('leads')
+                .update({
+                    pipeline_stage: 'trial_expired',
+                    stage_entered_at: now,
+                    updated_at: now
+                })
+                .eq('id', lead.id);
+
+            // Audit stage history
+            await supabase.from('lead_stage_history').insert({
+                tenant_id: lead.tenant_id,
+                lead_id: lead.id,
+                from_stage: 'trial_active',
+                to_stage: 'trial_expired',
+                trigger_source: 'automated_cron',
+                notes: `Trial ended on ${lead.trial_end_date}. Auto-transitioned to trial_expired.`
+            });
+
+            // Dispatch special conversion discount SMS
+            if (lead.phone) {
+                await supabase.from('notification_queue').insert({
+                    tenant_id: lead.tenant_id,
+                    profile_id: null,
+                    channel: 'sms',
+                    recipient: lead.phone,
+                    subject: 'Your Free Trial Has Ended',
+                    content: `Hi ${lead.first_name}, your 7-day GymPartner VIP trial has concluded! Join this week to receive a 15% discount on your first month. Sign up online or visit the front desk.`,
+                    status: 'pending'
+                });
+            }
+
+            // Log communication
+            await supabase.from('communications_log').insert({
+                tenant_id: lead.tenant_id,
+                profile_id: null,
+                channel: 'sms',
+                direction: 'outbound',
+                status: 'pending',
+                content: `[Automated Drip] Trial Expiration Notice & 15% Conversion Offer sent to ${lead.phone}`
+            });
+
+        } catch (e) {
+            console.error(`[cron-trial-expirations] Error processing lead ${lead.id}:`, e);
+        }
+    }
+}
+
+/**
+ * Processes automated drip communication sequences based on lead stage duration.
+ */
+async function processLeadDripSequences(supabase) {
+    const now = Date.now();
+    const twoDaysAgo = new Date(now - 48 * 60 * 60 * 1000).toISOString();
+    const tomorrowStart = new Date(now + 20 * 60 * 60 * 1000).toISOString();
+    const tomorrowEnd = new Date(now + 30 * 60 * 60 * 1000).toISOString();
+
+    // 1. Inquiry Stage 48-Hour Drip: Leads waiting in 'inquiry' for > 48 hours
+    const { data: stagnantInquiries } = await supabase
+        .from('leads')
+        .select('id, tenant_id, first_name, phone')
+        .eq('pipeline_stage', 'inquiry')
+        .lte('stage_entered_at', twoDaysAgo)
+        .limit(30);
+
+    for (const lead of (stagnantInquiries || [])) {
+        try {
+            // Check if reminder was already sent in communications_log
+            const { data: existingLogs } = await supabase
+                .from('communications_log')
+                .select('id')
+                .eq('tenant_id', lead.tenant_id)
+                .ilike('content', `%Inquiry Drip%${lead.phone}%`)
+                .limit(1);
+
+            if (!existingLogs || existingLogs.length === 0) {
+                await supabase.from('notification_queue').insert({
+                    tenant_id: lead.tenant_id,
+                    profile_id: null,
+                    channel: 'sms',
+                    recipient: lead.phone,
+                    subject: 'Free VIP Gym Pass',
+                    content: `Hi ${lead.first_name}! Are you still looking to reach your fitness goals? Book a free gym tour and workout pass here: https://gym-frontend-app.onrender.com/join`,
+                    status: 'pending'
+                });
+
+                await supabase.from('communications_log').insert({
+                    tenant_id: lead.tenant_id,
+                    profile_id: null,
+                    channel: 'sms',
+                    direction: 'outbound',
+                    status: 'pending',
+                    content: `[Automated Drip] 48h Inquiry Follow-up dispatched to ${lead.phone}`
+                });
+            }
+        } catch (e) {
+            console.error(`[cron-drip] Inquiry drip error for ${lead.id}:`, e);
+        }
+    }
+
+    // 2. Tour Scheduled 24-Hour Reminder Drip
+    const { data: upcomingTours } = await supabase
+        .from('leads')
+        .select('id, tenant_id, first_name, phone, tour_date')
+        .eq('pipeline_stage', 'tour_scheduled')
+        .gte('tour_date', tomorrowStart)
+        .lte('tour_date', tomorrowEnd)
+        .limit(30);
+
+    for (const lead of (upcomingTours || [])) {
+        try {
+            const { data: existingLogs } = await supabase
+                .from('communications_log')
+                .select('id')
+                .eq('tenant_id', lead.tenant_id)
+                .ilike('content', `%24h Tour Reminder%${lead.phone}%`)
+                .limit(1);
+
+            if (!existingLogs || existingLogs.length === 0) {
+                const tourTimeStr = new Date(lead.tour_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                await supabase.from('notification_queue').insert({
+                    tenant_id: lead.tenant_id,
+                    profile_id: null,
+                    channel: 'sms',
+                    recipient: lead.phone,
+                    subject: 'Gym Tour Tomorrow',
+                    content: `Hi ${lead.first_name}! Friendly reminder that your VIP gym tour is scheduled for tomorrow at ${tourTimeStr}. Free parking is available!`,
+                    status: 'pending'
+                });
+
+                await supabase.from('communications_log').insert({
+                    tenant_id: lead.tenant_id,
+                    profile_id: null,
+                    channel: 'sms',
+                    direction: 'outbound',
+                    status: 'pending',
+                    content: `[Automated Drip] 24h Tour Reminder dispatched for ${lead.phone} at ${tourTimeStr}`
+                });
+            }
+        } catch (e) {
+            console.error(`[cron-drip] Tour reminder error for ${lead.id}:`, e);
+        }
+    }
+}
+
+/**
+ * Automatically creates and issues gift vouchers for converted referrals.
+ */
+async function processReferralRewardFulfillment(supabase) {
+    const { data: pendingRewards, error } = await supabase
+        .from('referral_rewards')
+        .select('id, tenant_id, referrer_profile_id, referee_lead_id, referee_profile_id, reward_amount_rwf, status, profiles:referrer_profile_id(id, first_name, phone)')
+        .eq('status', 'converted')
+        .is('reward_voucher_id', null);
+
+    if (error || !pendingRewards || pendingRewards.length === 0) return;
+
+    for (const reward of pendingRewards) {
+        try {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let rand = '';
+            for (let i = 0; i < 6; i++) {
+                rand += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            const voucherCode = `REF-${rand}`;
+            const amount = parseFloat(reward.reward_amount_rwf || 10000);
+            const expiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+
+            // Create Gift Voucher
+            const { data: voucher, error: vError } = await supabase
+                .from('gift_vouchers')
+                .insert({
+                    tenant_id: reward.tenant_id,
+                    code: voucherCode,
+                    initial_balance_rwf: amount,
+                    current_balance_rwf: amount,
+                    expires_at: expiry
+                })
+                .select()
+                .single();
+
+            if (!vError && voucher) {
+                // Update referral reward
+                await supabase
+                    .from('referral_rewards')
+                    .update({
+                        status: 'rewarded',
+                        reward_voucher_id: voucher.id,
+                        reward_applied_at: new Date().toISOString()
+                    })
+                    .eq('id', reward.id);
+
+                // Dispatch celebratory SMS to Referrer
+                if (reward.profiles && reward.profiles.phone) {
+                    await supabase.from('notification_queue').insert({
+                        tenant_id: reward.tenant_id,
+                        profile_id: reward.referrer_profile_id,
+                        channel: 'sms',
+                        recipient: reward.profiles.phone,
+                        subject: 'Referral Reward Voucher Issued! 🎉',
+                        content: `Hi ${reward.profiles.first_name}! Your referral bonus voucher is ready: ${voucherCode} (RWF ${amount.toLocaleString()}). Use it towards your next membership renewal or smoothie bar tab!`,
+                        status: 'pending'
+                    });
+                }
+            }
+        } catch (err) {
+            console.error(`[cron-referral-fulfillment] Error fulfilling reward ${reward.id}:`, err);
+        }
+    }
+}
+
 module.exports = initCron;
+
