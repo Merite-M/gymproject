@@ -138,9 +138,9 @@ export async function updateGatewaySettings(
     },
     body: JSON.stringify({
       tenant_id: tenantId,
-      paypack_api_key: gateways.paypack_api_key || null,
-      paypack_secret: gateways.paypack_secret || null,
-      sms_gateway_credentials: gateways.sms_gateway_credentials || null
+      paypack_api_key: gateways.paypack_api_key || undefined,
+      paypack_secret: gateways.paypack_secret || undefined,
+      sms_gateway_credentials: gateways.sms_gateway_credentials || undefined
     })
   });
 
