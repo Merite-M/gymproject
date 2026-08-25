@@ -12,7 +12,8 @@ import {
   LogOut,
   ScanLine,
   CreditCard,
-  Sparkles
+  Sparkles,
+  GitBranch
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,12 @@ const navigationItems = [
     href: "/members",
     icon: Users,
     description: "Member CRM",
+  },
+  {
+    name: "Sales & Leads",
+    href: "/members/leads",
+    icon: GitBranch,
+    description: "Pipeline & referrals",
   },
   {
     name: "POS",

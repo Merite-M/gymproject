@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import Link from "next/link";
 
 import { useState } from "react";
 import { User, Search, Filter, Plus, Tag, Gift, Check, X } from "lucide-react";
@@ -266,10 +267,13 @@ export default function MembersPage() {
                 className="pl-10 pr-4 py-2 bg-muted border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-foreground placeholder:text-muted-foreground w-64"
               />
             </div>
-            <button className="px-4 py-2 bg-muted border border-border text-foreground rounded-lg hover:bg-muted/80 flex items-center gap-2 min-h-[44px]">
-              <Filter className="w-4 h-4" />
-              Filters
-            </button>
+            <Link
+              href="/members/leads"
+              className="px-4 py-2 bg-purple-500/10 border border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 rounded-lg flex items-center gap-2 min-h-[44px] text-sm font-semibold transition"
+            >
+              <Tag className="w-4 h-4" />
+              Sales & Referrals Hub
+            </Link>
             <button
               onClick={() => setShowAddModal(true)}
               className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/80 flex items-center gap-2 min-h-[44px]"
