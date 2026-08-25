@@ -220,6 +220,59 @@ router.post('/cancel-booking', authMiddleware, async (req, res) => {
             return res.status(403).json({ error: 'Unauthorized to cancel this booking' });
         }
 
+        // Check cancellation window policy
+        const { data: tenantPolicy } = await supabase
+            .from('tenants')
+            .select('cancellation_window_hours, late_cancel_fee_rwf')
+            .eq('id', tenant_id)
+            .single();
+
+        const { data: classSchedule } = await supabase
+            .from('class_schedules')
+            .select('start_time, title')
+            .eq('id', schedule_id)
+            .eq('tenant_id', tenant_id)
+            .single();
+
+        let isLateCancel = false;
+        let feeApplied = 0;
+
+        if (classSchedule && tenantPolicy) {
+            const windowHours = tenantPolicy.cancellation_window_hours || 2;
+            const startTime = new Date(classSchedule.start_time).getTime();
+            const now = Date.now();
+            const hoursDiff = (startTime - now) / (1000 * 60 * 60);
+
+            if (hoursDiff < windowHours && hoursDiff > 0) {
+                isLateCancel = true;
+                feeApplied = parseFloat(tenantPolicy.late_cancel_fee_rwf || 0);
+
+                if (feeApplied > 0) {
+                    const { data: tab } = await supabase
+                        .from('member_tabs')
+                        .select('id, balance')
+                        .eq('profile_id', profile_id)
+                        .eq('tenant_id', tenant_id)
+                        .single();
+
+                    if (tab) {
+                        await supabase
+                            .from('member_tabs')
+                            .update({ balance: parseFloat(tab.balance || 0) + feeApplied })
+                            .eq('id', tab.id);
+                    } else {
+                        await supabase
+                            .from('member_tabs')
+                            .insert({
+                                tenant_id,
+                                profile_id,
+                                balance: feeApplied
+                            });
+                    }
+                }
+            }
+        }
+
         // 1. Update booking status to cancelled
         const { data: cancelledData, error: cancelError } = await supabase
             .from('class_bookings')
@@ -543,6 +596,235 @@ router.put('/reassign-trainer', authMiddleware, async (req, res) => {
 
     } catch (error) {
         console.error("Reassign trainer error:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+
+router.post('/mark-no-show', authMiddleware, async (req, res) => {
+    try {
+        if (!supabase) {
+            return res.status(500).json({ error: 'Supabase not configured' });
+        }
+
+        const { tenant_id, schedule_id, profile_id } = req.body;
+
+        if (!tenant_id || !schedule_id || !profile_id) {
+            return res.status(400).json({ error: 'Missing tenant_id, schedule_id, or profile_id' });
+        }
+
+        // Update booking status to no_show
+        const { data: booking, error: bookingError } = await supabase
+            .from('class_bookings')
+            .update({ status: 'no_show' })
+            .eq('schedule_id', schedule_id)
+            .eq('profile_id', profile_id)
+            .eq('tenant_id', tenant_id)
+            .select()
+            .single();
+
+        if (bookingError || !booking) {
+            return res.status(404).json({ error: 'Active booking not found to mark no-show' });
+        }
+
+        // Get profile and tenant settings
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('no_show_strikes')
+            .eq('id', profile_id)
+            .single();
+
+        const { data: tenant } = await supabase
+            .from('tenants')
+            .select('no_show_penalty_rwf, max_no_show_strikes')
+            .eq('id', tenant_id)
+            .single();
+
+        const newStrikes = (profile?.no_show_strikes || 0) + 1;
+        const penaltyFee = parseFloat(tenant?.no_show_penalty_rwf || 0);
+
+        // Update strikes on profile
+        await supabase
+            .from('profiles')
+            .update({ no_show_strikes: newStrikes })
+            .eq('id', profile_id);
+
+        // Charge penalty fee if configured
+        if (penaltyFee > 0) {
+            const { data: tab } = await supabase
+                .from('member_tabs')
+                .select('id, balance')
+                .eq('profile_id', profile_id)
+                .eq('tenant_id', tenant_id)
+                .single();
+
+            if (tab) {
+                await supabase
+                    .from('member_tabs')
+                    .update({ balance: parseFloat(tab.balance || 0) + penaltyFee })
+                    .eq('id', tab.id);
+            } else {
+                await supabase
+                    .from('member_tabs')
+                    .insert({
+                        tenant_id,
+                        profile_id,
+                        balance: penaltyFee
+                    });
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Marked as no-show',
+            no_show_strikes: newStrikes,
+            penalty_fee: penaltyFee,
+            exceeded_max_strikes: newStrikes >= (tenant?.max_no_show_strikes || 3)
+        });
+
+    } catch (error) {
+        console.error("Mark no show error:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+router.get('/rentals', authMiddleware, async (req, res) => {
+    try {
+        if (!supabase) {
+            return res.status(500).json({ error: 'Supabase not configured' });
+        }
+
+        const { tenant_id, facility_id } = req.query;
+
+        if (!tenant_id) {
+            return res.status(400).json({ error: 'Missing tenant_id' });
+        }
+
+        let query = supabase
+            .from('facility_rentals')
+            .select(`
+                *,
+                facility:facilities(id, name, resource_type, hourly_rate_rwf),
+                profile:profiles(id, first_name, last_name, email, phone)
+            `)
+            .eq('tenant_id', tenant_id)
+            .order('start_time', { ascending: true });
+
+        if (facility_id) {
+            query = query.eq('facility_id', facility_id);
+        }
+
+        const { data: rentals, error } = await query;
+
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+
+        res.status(200).json({ rentals: rentals || [] });
+
+    } catch (error) {
+        console.error("Get rentals error:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+router.post('/rentals', authMiddleware, async (req, res) => {
+    try {
+        if (!supabase) {
+            return res.status(500).json({ error: 'Supabase not configured' });
+        }
+
+        let { tenant_id, facility_id, profile_id, start_time, end_time, notes } = req.body;
+
+        if (!tenant_id || !facility_id || !profile_id || !start_time || !end_time) {
+            return res.status(400).json({ error: 'Missing tenant_id, facility_id, profile_id, start_time, or end_time' });
+        }
+
+        if (start_time && !start_time.endsWith('Z')) {
+            start_time = new Date(start_time).toISOString();
+        }
+        if (end_time && !end_time.endsWith('Z')) {
+            end_time = new Date(end_time).toISOString();
+        }
+
+        const startDate = new Date(start_time);
+        const endDate = new Date(end_time);
+
+        if (startDate >= endDate) {
+            return res.status(400).json({ error: 'end_time must be after start_time' });
+        }
+
+        // Get facility details
+        const { data: facility, error: facilityError } = await supabase
+            .from('facilities')
+            .select('id, name, hourly_rate_rwf')
+            .eq('id', facility_id)
+            .eq('tenant_id', tenant_id)
+            .single();
+
+        if (facilityError || !facility) {
+            return res.status(404).json({ error: 'Facility not found' });
+        }
+
+        // Check for conflicting rentals
+        const { data: rentalConflicts, error: rentalConflictError } = await supabase
+            .from('facility_rentals')
+            .select('id, start_time, end_time')
+            .eq('tenant_id', tenant_id)
+            .eq('facility_id', facility_id)
+            .eq('status', 'confirmed')
+            .or(`and(start_time.lte.${end_time},end_time.gt.${start_time}),and(start_time.lt.${end_time},end_time.gte.${start_time})`);
+
+        if (rentalConflictError) {
+            return res.status(500).json({ error: rentalConflictError.message });
+        }
+
+        if (rentalConflicts && rentalConflicts.length > 0) {
+            return res.status(409).json({ error: 'Facility is already rented during this time slot', conflicts: rentalConflicts });
+        }
+
+        // Check for conflicting class schedules in same facility
+        const { data: classConflicts } = await supabase
+            .from('class_schedules')
+            .select('id, title, start_time, end_time')
+            .eq('tenant_id', tenant_id)
+            .eq('facility_id', facility_id)
+            .eq('is_cancelled', false)
+            .or(`and(start_time.lte.${end_time},end_time.gt.${start_time}),and(start_time.lt.${end_time},end_time.gte.${start_time})`);
+
+        if (classConflicts && classConflicts.length > 0) {
+            return res.status(409).json({ error: 'Facility has scheduled classes during this time slot', conflicts: classConflicts });
+        }
+
+        // Calculate total fee
+        const durationHours = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
+        const hourlyRate = parseFloat(facility.hourly_rate_rwf || 0);
+        const totalFee = Math.round(durationHours * hourlyRate);
+
+        // Create rental record
+        const { data: rental, error: insertError } = await supabase
+            .from('facility_rentals')
+            .insert({
+                tenant_id,
+                facility_id,
+                profile_id,
+                start_time,
+                end_time,
+                total_fee: totalFee,
+                status: 'confirmed',
+                notes: notes || null
+            })
+            .select()
+            .single();
+
+        if (insertError) {
+            return res.status(500).json({ error: insertError.message });
+        }
+
+        res.status(201).json({ success: true, rental });
+
+    } catch (error) {
+        console.error('Create rental error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

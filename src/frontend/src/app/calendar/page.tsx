@@ -1,15 +1,62 @@
 "use client";
 
 import { useState } from "react";
-import { Calendar, Plus, Search, Filter, Clock, MapPin, Users, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {
+  Calendar as CalendarIcon,
+  Plus,
+  Search,
+  Filter,
+  Clock,
+  MapPin,
+  Users,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Grid,
+  CalendarDays,
+  ShieldAlert,
+  Ticket,
+  UserCheck,
+  UserX,
+  CreditCard
+} from "lucide-react";
+import { cn, formatCurrencyDisplay } from "@/lib/utils";
 
 export default function SchedulePage() {
-  const [viewMode, setViewMode] = useState<"weekly" | "conflicts" | "rooms">("weekly");
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState<"weekly" | "day" | "conflicts" | "rooms" | "rentals" | "policies">("weekly");
+  const [selectedDay, setSelectedDay] = useState<string>("Monday");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [selectedFacilityForRental, setSelectedFacilityForRental] = useState<any | null>(null);
+  const [rentalHours, setRentalHours] = useState(1);
+  const [rentalDate, setRentalDate] = useState("2026-08-25");
+  const [rentalStartTime, setRentalStartTime] = useState("14:00");
+  const [rentalNotes, setRentalNotes] = useState("");
+  const [showRentalSuccess, setShowRentalSuccess] = useState(false);
 
-  // Mock schedule data
-  const schedules = [
+  // Policy state
+  const [cancellationWindowHours, setCancellationWindowHours] = useState(2);
+  const [lateCancelFeeRwf, setLateCancelFeeRwf] = useState(5000);
+  const [noShowPenaltyRwf, setNoShowPenaltyRwf] = useState(10000);
+  const [maxNoShowStrikes, setMaxNoShowStrikes] = useState(3);
+  const [policySaved, setPolicySaved] = useState(false);
+
+  // Schedules state
+  interface ScheduleItem {
+  id: string;
+  title: string;
+  instructor: string;
+  room: string;
+  day: string;
+  time: string;
+  duration: number;
+  capacity: number;
+  enrolled: number;
+  waitlistCount?: number;
+  conflicts: string[];
+}
+
+const [schedules, setSchedules] = useState<ScheduleItem[]>([
     {
       id: "1",
       title: "Power Yoga",
@@ -31,7 +78,8 @@ export default function SchedulePage() {
       time: "10:00",
       duration: 60,
       capacity: 25,
-      enrolled: 22,
+      enrolled: 25,
+      waitlistCount: 3,
       conflicts: [],
     },
     {
@@ -58,14 +106,55 @@ export default function SchedulePage() {
       enrolled: 18,
       conflicts: [],
     },
-  ];
+    {
+      id: "5",
+      title: "Pilates Reformer",
+      instructor: "Coach Sarah",
+      room: "Studio B",
+      day: "Wednesday",
+      time: "14:00",
+      duration: 60,
+      capacity: 10,
+      enrolled: 10,
+      waitlistCount: 2,
+      conflicts: [],
+    }
+  ]);
 
-  const rooms = [
-    { id: "1", name: "Yoga Hall", capacity: 25, type: "Studio" },
-    { id: "2", name: "Main Floor", capacity: 40, type: "Open Space" },
-    { id: "3", name: "Studio A", capacity: 20, type: "Studio" },
-    { id: "4", name: "Studio B", capacity: 15, type: "Studio" },
-  ];
+  // Facilities & Equipment for Hourly Rental
+  const [facilities, setFacilities] = useState([
+    { id: "1", name: "Squash Court A", capacity: 4, type: "Squash Court", hourlyRateRwf: 15000, status: "Available" },
+    { id: "2", name: "Private Sauna Suite 1", capacity: 2, type: "Wellness Suite", hourlyRateRwf: 25000, status: "Available" },
+    { id: "3", name: "Private Studio Room B", capacity: 15, type: "Studio", hourlyRateRwf: 20000, status: "Available" },
+    { id: "4", name: "Spin Bike Cluster (10 Bikes)", capacity: 10, type: "Equipment Group", hourlyRateRwf: 12000, status: "Booked" },
+  ]);
+
+  const [rentals, setRentals] = useState([
+    {
+      id: "r1",
+      facilityName: "Squash Court A",
+      memberName: "Jean-Paul Habimana",
+      startTime: "2026-08-25 14:00",
+      endTime: "2026-08-25 16:00",
+      totalFeeRwf: 30000,
+      status: "Confirmed"
+    },
+    {
+      id: "r2",
+      facilityName: "Private Sauna Suite 1",
+      memberName: "Marie Claire Uwase",
+      startTime: "2026-08-25 17:00",
+      endTime: "2026-08-25 18:00",
+      totalFeeRwf: 25000,
+      status: "Confirmed"
+    }
+  ]);
+
+  const [waitlistEntries, setWaitlistEntries] = useState([
+    { id: "w1", className: "CrossFit WOD", memberName: "Eric Mugisha", joinedAt: "10 mins ago", status: "Waiting", position: 1 },
+    { id: "w2", className: "CrossFit WOD", memberName: "Divine Ineza", joinedAt: "5 mins ago", status: "Waiting", position: 2 },
+    { id: "w3", className: "Pilates Reformer", memberName: "Alice Kayitesi", joinedAt: "1 hour ago", status: "Promoted & Booked", position: 0 },
+  ]);
 
   const instructors = [
     { id: "1", name: "Coach Sarah", specialties: ["Yoga", "HIIT"] },
@@ -76,127 +165,191 @@ export default function SchedulePage() {
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const timeSlots = ["06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00"];
 
-  const hasConflicts = schedules.some(s => s.conflicts.length > 0);
+  const handleBookRental = () => {
+    if (!selectedFacilityForRental) return;
+    const fee = selectedFacilityForRental.hourlyRateRwf * rentalHours;
+    const newRental = {
+      id: `r${Date.now()}`,
+      facilityName: selectedFacilityForRental.name,
+      memberName: "Current Receptionist / Member",
+      startTime: `${rentalDate} ${rentalStartTime}`,
+      endTime: `${rentalDate} ${parseInt(rentalStartTime.split(":")[0]) + rentalHours}:00`,
+      totalFeeRwf: fee,
+      status: "Confirmed"
+    };
+    setRentals([newRental, ...rentals]);
+    setShowRentalSuccess(true);
+    setTimeout(() => {
+      setShowRentalSuccess(false);
+      setSelectedFacilityForRental(null);
+    }, 2000);
+  };
+
+  const filteredSchedules = schedules.filter(s =>
+    s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    s.instructor.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    s.room.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col bg-background">
       {/* Header */}
       <header className="border-b border-border bg-card px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-headline-md font-bold text-foreground">Schedule & Conflict Manager</h1>
-            <p className="text-sm text-muted-foreground">Weekly classes with resource assignment and conflict resolution</p>
+            <h1 className="text-2xl font-headline-md font-bold text-foreground flex items-center gap-2">
+              <CalendarIcon className="w-6 h-6 text-primary" />
+              Class Calendar, Resources & Facility Rentals
+            </h1>
+            <p className="text-sm text-muted-foreground">Week/Day grid, conflict warning overlays, hourly rentals & booking policies</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search classes..."
-                className="pl-10 pr-4 py-2 bg-muted border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-foreground placeholder:text-muted-foreground w-64"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search classes or rooms..."
+                className="pl-10 pr-4 py-2 bg-muted border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-foreground placeholder:text-muted-foreground w-64 text-sm"
               />
             </div>
-            <button className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/80 flex items-center gap-2 min-h-[44px]">
-              <Plus className="w-4 h-4" />
-              Schedule Class
+            <button
+              onClick={() => setViewMode("rentals")}
+              className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 flex items-center gap-2 min-h-[44px] text-sm font-medium"
+            >
+              <Ticket className="w-4 h-4" />
+              Rent Facility Resource
             </button>
           </div>
         </div>
       </header>
 
-      {/* View Mode Tabs */}
+      {/* Navigation Tabs */}
       <div className="border-b border-border bg-card">
-        <div className="flex">
+        <div className="flex overflow-x-auto">
           <button
             onClick={() => setViewMode("weekly")}
             className={cn(
-              "flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors min-h-[44px]",
+              "flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors min-h-[44px] whitespace-nowrap",
               viewMode === "weekly"
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
             )}
           >
-            <Calendar className="w-4 h-4" />
-            Weekly Calendar
+            <Grid className="w-4 h-4" />
+            Week Grid View
+          </button>
+          <button
+            onClick={() => setViewMode("day")}
+            className={cn(
+              "flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors min-h-[44px] whitespace-nowrap",
+              viewMode === "day"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}
+          >
+            <CalendarDays className="w-4 h-4" />
+            Day View ({selectedDay})
+          </button>
+          <button
+            onClick={() => setViewMode("rentals")}
+            className={cn(
+              "flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors min-h-[44px] whitespace-nowrap",
+              viewMode === "rentals"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}
+          >
+            <Ticket className="w-4 h-4" />
+            Facility Resource Rental
           </button>
           <button
             onClick={() => setViewMode("conflicts")}
             className={cn(
-              "flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors min-h-[44px]",
+              "flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors min-h-[44px] whitespace-nowrap relative",
               viewMode === "conflicts"
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
             )}
           >
             <AlertTriangle className="w-4 h-4" />
-            Conflicts
-            {hasConflicts && (
-              <span className="bg-status-blocked text-status-blocked-foreground text-xs px-2 py-0.5 rounded-full">
-                {schedules.filter(s => s.conflicts.length > 0).length}
-              </span>
+            Conflict Matrix
+            {schedules.some(s => s.conflicts.length > 0) && (
+              <span className="w-2 h-2 rounded-full bg-status-blocked animate-pulse" />
             )}
           </button>
           <button
-            onClick={() => setViewMode("rooms")}
+            onClick={() => setViewMode("policies")}
             className={cn(
-              "flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors min-h-[44px]",
-              viewMode === "rooms"
+              "flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors min-h-[44px] whitespace-nowrap",
+              viewMode === "policies"
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
             )}
           >
-            <MapPin className="w-4 h-4" />
-            Room Assignments
+            <ShieldAlert className="w-4 h-4" />
+            Booking Policies & Waitlists
           </button>
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Main Content Body */}
       <div className="flex-1 overflow-auto">
         {viewMode === "weekly" && (
           <div className="p-6">
-            {/* Weekly Calendar Grid */}
             <div className="bg-card border border-border rounded-lg overflow-hidden">
-              {/* Calendar Header */}
-              <div className="grid grid-cols-8 border-b border-border bg-muted/30">
+              {/* Header Days */}
+              <div className="grid grid-cols-8 border-b border-border bg-muted/50">
                 <div className="p-3 border-r border-border text-xs font-semibold text-muted-foreground uppercase tracking-wider text-center">
                   Time
                 </div>
                 {days.map((day) => (
-                  <div key={day} className="p-3 border-r border-border text-center">
+                  <button
+                    key={day}
+                    onClick={() => { setSelectedDay(day); setViewMode("day"); }}
+                    className="p-3 border-r border-border text-center hover:bg-muted/80 transition-colors"
+                  >
                     <div className="text-sm font-semibold text-foreground">{day}</div>
-                  </div>
+                  </button>
                 ))}
               </div>
 
-              {/* Calendar Body */}
+              {/* Time Slots Grid */}
               <div className="max-h-[600px] overflow-y-auto">
                 {timeSlots.map((time) => (
-                  <div key={time} className="grid grid-cols-8 border-b border-border h-16">
+                  <div key={time} className="grid grid-cols-8 border-b border-border h-20">
                     <div className="p-2 border-r border-border text-xs font-medium text-muted-foreground text-right pr-4 bg-card">
                       {time}
                     </div>
                     {days.map((day) => (
-                      <div key={`${time}-${day}`} className="border-r border-border p-1 relative">
-                        {schedules
+                      <div key={`${time}-${day}`} className="border-r border-border p-1 relative hover:bg-muted/30 transition-colors">
+                        {filteredSchedules
                           .filter(s => s.day === day && s.time === time)
                           .map((schedule) => (
                             <div
                               key={schedule.id}
                               className={cn(
-                                "text-xs p-2 rounded mb-1 cursor-pointer transition-colors",
+                                "text-xs p-2 rounded mb-1 cursor-pointer transition-all shadow-sm",
                                 schedule.conflicts.length > 0
-                                  ? "bg-status-blocked/10 border border-status-blocked/20 text-status-blocked"
+                                  ? "bg-status-blocked/15 border-2 border-status-blocked text-status-blocked font-semibold animate-pulse"
                                   : "bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20"
                               )}
                             >
-                              <div className="font-medium truncate">{schedule.title}</div>
-                              <div className="text-xs opacity-70 truncate">{schedule.instructor}</div>
-                              <div className="text-xs opacity-70 truncate">{schedule.room}</div>
+                              <div className="font-semibold truncate">{schedule.title}</div>
+                              <div className="text-[11px] opacity-80 truncate">{schedule.instructor} • {schedule.room}</div>
+                              <div className="flex items-center justify-between mt-1 text-[10px]">
+                                <span>{schedule.enrolled}/{schedule.capacity} booked</span>
+                                {schedule.waitlistCount && (
+                                  <span className="bg-amber-500/20 text-amber-700 dark:text-amber-400 px-1 rounded">
+                                    WL: {schedule.waitlistCount}
+                                  </span>
+                                )}
+                              </div>
                               {schedule.conflicts.length > 0 && (
-                                <div className="flex items-center gap-1 mt-1">
+                                <div className="flex items-center gap-1 mt-1 font-bold text-status-blocked text-[10px]">
                                   <AlertTriangle className="w-3 h-3" />
-                                  <span className="text-xs">Conflict</span>
+                                  <span>Conflict Overlay</span>
                                 </div>
                               )}
                             </div>
@@ -207,38 +360,258 @@ export default function SchedulePage() {
                 ))}
               </div>
             </div>
+          </div>
+        )}
 
-            {/* Off-Peak Access Blocks */}
-            <div className="mt-6 bg-status-action/10 border border-status-action/20 rounded-lg p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <AlertTriangle className="w-5 h-5 text-status-action" />
-                <div>
-                  <h3 className="font-headline-md font-semibold text-status-action">Off-Peak Access Blocks</h3>
-                  <p className="text-sm text-muted-foreground">Time-based access restrictions for cost optimization</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-7 gap-2">
+        {viewMode === "day" && (
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-headline-md font-semibold text-foreground">
+                Day Grid View: {selectedDay}
+              </h2>
+              <div className="flex items-center gap-2">
                 {days.map((day) => (
-                  <div key={day} className="bg-card border border-border rounded p-3">
-                    <div className="text-xs font-medium text-foreground mb-2">{day}</div>
-                    <div className="text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1 mb-1">
-                        <Clock className="w-3 h-3" />
-                        <span>11:00 - 15:00</span>
-                      </div>
-                      <span className="text-status-action">Restricted Access</span>
-                    </div>
-                  </div>
+                  <button
+                    key={day}
+                    onClick={() => setSelectedDay(day)}
+                    className={cn(
+                      "px-3 py-1.5 text-xs rounded-lg font-medium transition-colors",
+                      selectedDay === day
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    )}
+                  >
+                    {day}
+                  </button>
                 ))}
               </div>
+            </div>
+
+            <div className="bg-card border border-border rounded-lg p-4 space-y-4">
+              {timeSlots.map((time) => {
+                const daySchedules = filteredSchedules.filter(s => s.day === selectedDay && s.time === time);
+                return (
+                  <div key={time} className="flex border-b border-border pb-4 last:border-none">
+                    <div className="w-20 font-mono text-sm font-semibold text-muted-foreground pt-2">
+                      {time}
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      {daySchedules.length === 0 ? (
+                        <div className="text-xs text-muted-foreground/60 italic pt-2">No scheduled classes</div>
+                      ) : (
+                        daySchedules.map((schedule) => (
+                          <div
+                            key={schedule.id}
+                            className={cn(
+                              "p-4 rounded-lg border flex items-center justify-between",
+                              schedule.conflicts.length > 0
+                                ? "bg-status-blocked/10 border-status-blocked"
+                                : "bg-card border-border hover:border-primary/50"
+                            )}
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-semibold text-foreground text-sm">{schedule.title}</h3>
+                                {schedule.conflicts.length > 0 && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-status-blocked/20 text-status-blocked flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3" />
+                                    Conflict Warning
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Instructor: <span className="text-foreground">{schedule.instructor}</span> • Room: <span className="text-foreground">{schedule.room}</span> • Duration: {schedule.duration}m
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-xs font-medium text-foreground">
+                                {schedule.enrolled} / {schedule.capacity} Booked
+                              </span>
+                              {schedule.waitlistCount && (
+                                <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mt-1">
+                                  {schedule.waitlistCount} on Waitlist
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
+        {viewMode === "rentals" && (
+          <div className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-headline-md font-semibold text-foreground">Facility & Equipment Hourly Rental</h2>
+                <p className="text-sm text-muted-foreground">Book private rooms, squash courts, sauna suites, and spin bike clusters with hourly billing</p>
+              </div>
+            </div>
+
+            {/* Facilities List */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {facilities.map((facility) => (
+                <div key={facility.id} className="bg-card border border-border rounded-lg p-5 flex flex-col justify-between hover:border-primary/50 transition-all">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                        {facility.type}
+                      </span>
+                      <span className="text-xs font-medium text-status-cleared bg-status-cleared/10 px-2 py-0.5 rounded">
+                        {facility.status}
+                      </span>
+                    </div>
+                    <h3 className="font-semibold text-foreground text-base mb-1">{facility.name}</h3>
+                    <p className="text-xs text-muted-foreground mb-4">Capacity: {facility.capacity} people</p>
+                    <div className="text-lg font-bold text-primary mb-4">
+                      {formatCurrencyDisplay(facility.hourlyRateRwf)} <span className="text-xs text-muted-foreground font-normal">/ hour</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSelectedFacilityForRental(facility)}
+                    className="w-full py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm font-medium transition-colors"
+                  >
+                    Rent Now
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Existing Rentals Ledger */}
+            <div className="bg-card border border-border rounded-lg p-5">
+              <h3 className="font-semibold text-foreground text-base mb-4 flex items-center gap-2">
+                <Ticket className="w-5 h-5 text-primary" />
+                Active & Upcoming Hourly Rentals
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-muted-foreground bg-muted/50 uppercase">
+                    <tr>
+                      <th className="p-3">Facility / Resource</th>
+                      <th className="p-3">Member</th>
+                      <th className="p-3">Start Time</th>
+                      <th className="p-3">End Time</th>
+                      <th className="p-3">Total Fee</th>
+                      <th className="p-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rentals.map((r) => (
+                      <tr key={r.id} className="border-b border-border">
+                        <td className="p-3 font-semibold text-foreground">{r.facilityName}</td>
+                        <td className="p-3 text-muted-foreground">{r.memberName}</td>
+                        <td className="p-3 font-mono text-xs">{r.startTime}</td>
+                        <td className="p-3 font-mono text-xs">{r.endTime}</td>
+                        <td className="p-3 font-semibold text-primary">{formatCurrencyDisplay(r.totalFeeRwf)}</td>
+                        <td className="p-3">
+                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-status-cleared/15 text-status-cleared">
+                            {r.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Rental Modal */}
+            {selectedFacilityForRental && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-card border border-border rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
+                  <div className="flex items-center justify-between border-b border-border pb-3">
+                    <h3 className="font-bold text-lg text-foreground">Rent {selectedFacilityForRental.name}</h3>
+                    <button onClick={() => setSelectedFacilityForRental(null)} className="text-muted-foreground hover:text-foreground">
+                      <XCircle className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3 text-sm">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground">Hourly Rate</label>
+                      <div className="font-bold text-primary">{formatCurrencyDisplay(selectedFacilityForRental.hourlyRateRwf)} / hour</div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground">Rental Date</label>
+                      <input
+                        type="date"
+                        value={rentalDate}
+                        onChange={(e) => setRentalDate(e.target.value)}
+                        className="w-full p-2 bg-muted border border-border rounded-lg text-foreground text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground">Start Time</label>
+                      <input
+                        type="time"
+                        value={rentalStartTime}
+                        onChange={(e) => setRentalStartTime(e.target.value)}
+                        className="w-full p-2 bg-muted border border-border rounded-lg text-foreground text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground">Duration (Hours)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="8"
+                        value={rentalHours}
+                        onChange={(e) => setRentalHours(parseInt(e.target.value) || 1)}
+                        className="w-full p-2 bg-muted border border-border rounded-lg text-foreground text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground">Notes / Purpose</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Member private coaching session"
+                        value={rentalNotes}
+                        onChange={(e) => setRentalNotes(e.target.value)}
+                        className="w-full p-2 bg-muted border border-border rounded-lg text-foreground text-sm"
+                      />
+                    </div>
+
+                    <div className="pt-3 border-t border-border flex items-center justify-between font-bold text-base">
+                      <span>Total Rental Fee:</span>
+                      <span className="text-primary">{formatCurrencyDisplay(selectedFacilityForRental.hourlyRateRwf * rentalHours)}</span>
+                    </div>
+
+                    {showRentalSuccess && (
+                      <div className="p-3 bg-status-cleared/20 text-status-cleared border border-status-cleared/30 rounded-lg text-center font-semibold text-xs">
+                        Rental Confirmed & Added to Ledger!
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-4">
+                    <button
+                      onClick={() => setSelectedFacilityForRental(null)}
+                      className="flex-1 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 text-sm font-medium"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleBookRental}
+                      className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm font-semibold"
+                    >
+                      Confirm Booking
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {viewMode === "conflicts" && (
-          <div className="p-6">
-            <h2 className="text-lg font-headline-md font-semibold text-foreground mb-4">Conflict Resolution</h2>
-            
+          <div className="p-6 space-y-6">
+            <h2 className="text-lg font-headline-md font-semibold text-foreground">Conflict Matrix & Resolution</h2>
+
             {schedules.filter(s => s.conflicts.length > 0).length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <CheckCircle className="w-12 h-12 mx-auto mb-4 opacity-50 text-status-cleared" />
@@ -250,50 +623,61 @@ export default function SchedulePage() {
                 {schedules
                   .filter(s => s.conflicts.length > 0)
                   .map((schedule) => (
-                    <div key={schedule.id} className="bg-status-blocked/10 border border-status-blocked/20 rounded-lg p-4">
+                    <div key={schedule.id} className="bg-status-blocked/10 border border-status-blocked/20 rounded-lg p-5">
                       <div className="flex items-start gap-4">
                         <div className="w-10 h-10 rounded-full bg-status-blocked/20 flex items-center justify-center shrink-0">
                           <AlertTriangle className="w-5 h-5 text-status-blocked" />
                         </div>
                         <div className="flex-1">
-                          <h3 className="font-headline-md font-semibold text-foreground">{schedule.title}</h3>
-                          <p className="text-sm text-muted-foreground mb-2">
-                            {schedule.day} at {schedule.time} • {schedule.room} • {schedule.instructor}
+                          <h3 className="font-headline-md font-semibold text-foreground text-base">{schedule.title}</h3>
+                          <p className="text-sm text-muted-foreground mb-3">
+                            {schedule.day} at {schedule.time} • Room: {schedule.room} • Instructor: {schedule.instructor}
                           </p>
-                          
+
                           <div className="space-y-2">
                             {schedule.conflicts.includes("room_conflict") && (
-                              <div className="flex items-center gap-2 text-sm">
-                                <MapPin className="w-4 h-4 text-status-blocked" />
-                                <span className="text-status-blocked">Room conflict: {schedule.room} is double-booked</span>
+                              <div className="flex items-center gap-2 text-sm text-status-blocked font-medium">
+                                <MapPin className="w-4 h-4" />
+                                <span>Room conflict: {schedule.room} is double-booked during this slot</span>
                               </div>
                             )}
                             {schedule.conflicts.includes("instructor_conflict") && (
-                              <div className="flex items-center gap-2 text-sm">
-                                <Users className="w-4 h-4 text-status-blocked" />
-                                <span className="text-status-blocked">Instructor conflict: {schedule.instructor} is double-booked</span>
+                              <div className="flex items-center gap-2 text-sm text-status-blocked font-medium">
+                                <Users className="w-4 h-4" />
+                                <span>Instructor conflict: {schedule.instructor} is double-booked during this slot</span>
                               </div>
                             )}
                           </div>
 
-                          {/* Recommendations */}
+                          {/* Recommended Solutions */}
                           <div className="mt-4 pt-4 border-t border-status-blocked/20">
-                            <h4 className="text-sm font-medium text-foreground mb-2">Recommended Solutions:</h4>
-                            <div className="space-y-2">
-                              {schedule.conflicts.includes("room_conflict") && (
-                                <button className="w-full px-3 py-2 bg-muted border border-border text-foreground rounded-lg text-sm hover:bg-muted/80 min-h-[44px] flex items-center gap-2">
-                                  <MapPin className="w-4 h-4" />
-                                  Move to Studio B (available)
-                                </button>
-                              )}
-                              {schedule.conflicts.includes("instructor_conflict") && (
-                                <button className="w-full px-3 py-2 bg-muted border border-border text-foreground rounded-lg text-sm hover:bg-muted/80 min-h-[44px] flex items-center gap-2">
-                                  <Users className="w-4 h-4" />
-                                  Assign to Coach Emma (available)
-                                </button>
-                              )}
-                              <button className="w-full px-3 py-2 bg-muted border border-border text-foreground rounded-lg text-sm hover:bg-muted/80 min-h-[44px] flex items-center gap-2">
-                                <Clock className="w-4 h-4" />
+                            <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">Recommended Conflict Fixes:</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                              <button
+                                onClick={() => {
+                                  setSchedules(schedules.map(s => s.id === schedule.id ? { ...s, room: "Studio B", conflicts: [] } : s));
+                                }}
+                                className="px-3 py-2 bg-card border border-border text-foreground rounded-lg text-xs hover:border-primary flex items-center gap-2 transition-colors font-medium"
+                              >
+                                <MapPin className="w-4 h-4 text-primary" />
+                                Reassign to Studio B
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSchedules(schedules.map(s => s.id === schedule.id ? { ...s, instructor: "Coach Emma", conflicts: [] } : s));
+                                }}
+                                className="px-3 py-2 bg-card border border-border text-foreground rounded-lg text-xs hover:border-primary flex items-center gap-2 transition-colors font-medium"
+                              >
+                                <Users className="w-4 h-4 text-primary" />
+                                Reassign to Coach Emma
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSchedules(schedules.map(s => s.id === schedule.id ? { ...s, time: "11:00", conflicts: [] } : s));
+                                }}
+                                className="px-3 py-2 bg-card border border-border text-foreground rounded-lg text-xs hover:border-primary flex items-center gap-2 transition-colors font-medium"
+                              >
+                                <Clock className="w-4 h-4 text-primary" />
                                 Reschedule to 11:00
                               </button>
                             </div>
@@ -307,33 +691,108 @@ export default function SchedulePage() {
           </div>
         )}
 
-        {viewMode === "rooms" && (
-          <div className="p-6">
-            <h2 className="text-lg font-headline-md font-semibold text-foreground mb-4">Room Assignments</h2>
-            
-            <div className="grid grid-cols-2 gap-4">
-              {rooms.map((room) => (
-                <div key={room.id} className="bg-card border border-border rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-headline-md font-semibold text-foreground">{room.name}</h3>
-                    <span className="text-xs bg-muted px-2 py-1 rounded">{room.type}</span>
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Capacity:</span>
-                      <span className="text-foreground">{room.capacity} people</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Utilization:</span>
-                      <span className="text-status-cleared">65%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Today's Classes:</span>
-                      <span className="text-foreground">4</span>
-                    </div>
-                  </div>
+        {viewMode === "policies" && (
+          <div className="p-6 space-y-6">
+            <h2 className="text-lg font-headline-md font-semibold text-foreground flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5 text-primary" />
+              Booking Policies, Late-Cancel Penalties & Automated Waitlists
+            </h2>
+
+            {/* Policy Settings Panel */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-card border border-border rounded-lg p-5 space-y-4">
+                <h3 className="font-semibold text-foreground text-base flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-primary" />
+                  Cancellation & Penalty Engine Configuration
+                </h3>
+
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                    Free Cancellation Window (Hours Before Class)
+                  </label>
+                  <input
+                    type="number"
+                    value={cancellationWindowHours}
+                    onChange={(e) => setCancellationWindowHours(parseInt(e.target.value) || 0)}
+                    className="w-full p-2 bg-muted border border-border rounded-lg text-foreground text-sm"
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">Cancellations within this window trigger late-cancel fee.</p>
                 </div>
-              ))}
+
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                    Late Cancellation Penalty Fee (RWF)
+                  </label>
+                  <input
+                    type="number"
+                    value={lateCancelFeeRwf}
+                    onChange={(e) => setLateCancelFeeRwf(parseInt(e.target.value) || 0)}
+                    className="w-full p-2 bg-muted border border-border rounded-lg text-foreground text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                    No-Show Penalty Fee (RWF)
+                  </label>
+                  <input
+                    type="number"
+                    value={noShowPenaltyRwf}
+                    onChange={(e) => setNoShowPenaltyRwf(parseInt(e.target.value) || 0)}
+                    className="w-full p-2 bg-muted border border-border rounded-lg text-foreground text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                    Max No-Show Strikes Allowed Before Suspension
+                  </label>
+                  <input
+                    type="number"
+                    value={maxNoShowStrikes}
+                    onChange={(e) => setMaxNoShowStrikes(parseInt(e.target.value) || 3)}
+                    className="w-full p-2 bg-muted border border-border rounded-lg text-foreground text-sm"
+                  />
+                </div>
+
+                <button
+                  onClick={() => { setPolicySaved(true); setTimeout(() => setPolicySaved(false), 2000); }}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm font-semibold"
+                >
+                  Save Policy Engine Settings
+                </button>
+                {policySaved && (
+                  <span className="text-xs text-status-cleared font-semibold ml-3">Policy updated successfully!</span>
+                )}
+              </div>
+
+              {/* Waitlist Queue Live Monitor */}
+              <div className="bg-card border border-border rounded-lg p-5 space-y-4">
+                <h3 className="font-semibold text-foreground text-base flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-primary" />
+                  Automated Waitlist Promotion Queue
+                </h3>
+                <p className="text-xs text-muted-foreground">When cancellations occur, members are automatically promoted and notified via Push/SMS.</p>
+
+                <div className="space-y-3">
+                  {waitlistEntries.map((entry) => (
+                    <div key={entry.id} className="p-3 bg-muted/40 border border-border rounded-lg flex items-center justify-between">
+                      <div>
+                        <div className="font-semibold text-sm text-foreground">{entry.memberName}</div>
+                        <div className="text-xs text-muted-foreground">{entry.className} • Joined {entry.joinedAt}</div>
+                      </div>
+                      <span className={cn(
+                        "text-xs px-2 py-0.5 rounded font-medium",
+                        entry.status === "Promoted & Booked"
+                          ? "bg-status-cleared/20 text-status-cleared"
+                          : "bg-amber-500/20 text-amber-700 dark:text-amber-400"
+                      )}>
+                        {entry.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
