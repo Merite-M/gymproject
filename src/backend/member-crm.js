@@ -120,7 +120,10 @@ router.get('/leads', async (req, res) => {
     }
 
     if (search) {
-      query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`);
+      const cleanSearch = String(search).replace(/[,.()%\\/]/g, '').trim();
+      if (cleanSearch) {
+        query = query.or(`first_name.ilike.%${cleanSearch}%,last_name.ilike.%${cleanSearch}%,phone.ilike.%${cleanSearch}%,email.ilike.%${cleanSearch}%`);
+      }
     }
 
     query = query.range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
@@ -328,6 +331,11 @@ router.get('/leads/:leadId', async (req, res) => {
     const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
     if (tenantAccess.error) return res.status(403).json({ error: tenantAccess.error });
 
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(leadId);
+    if (!isUuid) {
+      return res.status(400).json({ error: 'Invalid leadId parameter format' });
+    }
+
     const { data: lead, error: leadErr } = await supabase
       .from('leads')
       .select('*, assigned_staff:profiles!assigned_staff_id(id, first_name, last_name), referred_by:profiles!referred_by_id(id, first_name, last_name, phone, referral_code)')
@@ -347,12 +355,20 @@ router.get('/leads/:leadId', async (req, res) => {
       .eq('tenant_id', tenant_id)
       .order('created_at', { ascending: false });
 
-    // Fetch communication logs
-    const { data: communications } = await supabase
+    // Fetch communication logs safely
+    const cleanPhone = String(lead.phone || '').replace(/[,.()%\\/]/g, '').trim();
+    let commQuery = supabase
       .from('communications_log')
       .select('*')
-      .eq('tenant_id', tenant_id)
-      .or(`profile_id.eq.${leadId},content.ilike.%${lead.phone}%`)
+      .eq('tenant_id', tenant_id);
+
+    if (cleanPhone) {
+      commQuery = commQuery.or(`profile_id.eq.${leadId},content.ilike.%${cleanPhone}%`);
+    } else {
+      commQuery = commQuery.eq('profile_id', leadId);
+    }
+
+    const { data: communications } = await commQuery
       .order('created_at', { ascending: false })
       .limit(20);
 
@@ -523,98 +539,114 @@ router.post('/leads/:leadId/stage', async (req, res) => {
       triggerNotes += ` (Reason: ${updatePayload.lost_reason})`;
 
     } else if (stage === 'closed_won') {
-      // Auto conversion trigger if lead is marked closed_won
-      // Check if profile exists, or create member profile
+      // Auto conversion trigger if lead is marked closed_won (with idempotency guards)
       let profileId = currentLead.converted_profile_id;
-      if (!profileId) {
-        const newRefCode = generateReferralCode(currentLead.first_name);
-        const { data: newProf, error: profErr } = await supabase
-          .from('profiles')
-          .insert({
-            tenant_id,
-            first_name: currentLead.first_name,
-            last_name: currentLead.last_name,
-            email: currentLead.email,
-            phone: currentLead.phone,
-            role: 'member',
-            status: 'active',
-            membership_status: 'active',
-            referral_code: newRefCode,
-            referred_by_id: currentLead.referred_by_id
-          })
-          .select()
-          .single();
 
-        if (!profErr && newProf) {
-          profileId = newProf.id;
-          updatePayload.converted_profile_id = profileId;
-
-          // Create active Standard membership
-          const today = now.split('T')[0];
-          const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-          await supabase.from('memberships').insert({
-            tenant_id,
-            profile_id: profileId,
-            membership_type: 'STANDARD',
-            start_date: today,
-            end_date: nextMonth,
-            status: 'active',
-            price: 30000,
-            billing_interval: 'monthly'
-          });
-        }
-      }
-
-      // Fulfill Referral Reward if lead had a referrer
-      if (currentLead.referred_by_id) {
-        const rewardAmount = 10000;
-        const voucherCode = generateVoucherCode('REF');
-        const voucherExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
-
-        // Create gift voucher
-        const { data: voucher } = await supabase
-          .from('gift_vouchers')
-          .insert({
-            tenant_id,
-            code: voucherCode,
-            initial_balance_rwf: rewardAmount,
-            current_balance_rwf: rewardAmount,
-            expires_at: voucherExpiry
-          })
-          .select()
-          .single();
-
-        if (voucher) {
-          // Update or insert referral_rewards
-          await supabase.from('referral_rewards').upsert({
-            tenant_id,
-            referrer_profile_id: currentLead.referred_by_id,
-            referee_lead_id: currentLead.id,
-            referee_profile_id: profileId,
-            referral_code: currentLead.referral_code_used || 'DIRECT',
-            status: 'rewarded',
-            reward_voucher_id: voucher.id,
-            reward_amount_rwf: rewardAmount,
-            reward_applied_at: now
-          }, { onConflict: 'referrer_profile_id, referee_lead_id' });
-
-          // Send reward notification to Referrer
-          const { data: referrer } = await supabase
+      if (oldStage === 'closed_won' && profileId) {
+        triggerNotes += ' (Lead was already closed_won; skipping duplicate profile/voucher creation)';
+      } else {
+        if (!profileId) {
+          const newRefCode = generateReferralCode(currentLead.first_name);
+          const { data: newProf, error: profErr } = await supabase
             .from('profiles')
-            .select('phone, first_name')
-            .eq('id', currentLead.referred_by_id)
+            .insert({
+              tenant_id,
+              first_name: currentLead.first_name,
+              last_name: currentLead.last_name,
+              email: currentLead.email,
+              phone: currentLead.phone,
+              role: 'member',
+              status: 'active',
+              membership_status: 'active',
+              referral_code: newRefCode,
+              referred_by_id: currentLead.referred_by_id
+            })
+            .select()
             .single();
 
-          if (referrer && referrer.phone) {
-            await supabase.from('notification_queue').insert({
+          if (!profErr && newProf) {
+            profileId = newProf.id;
+            updatePayload.converted_profile_id = profileId;
+
+            // Create active Standard membership
+            const today = now.split('T')[0];
+            const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            await supabase.from('memberships').insert({
               tenant_id,
-              profile_id: currentLead.referred_by_id,
-              channel: 'sms',
-              recipient: referrer.phone,
-              subject: 'Referral Reward Voucher Issued! 🎉',
-              content: `Great news ${referrer.first_name}! Your referral ${currentLead.first_name} joined GymPartner! Your RWF 10,000 credit voucher is ${voucherCode}. Present at front desk to redeem!`,
-              status: 'pending'
+              profile_id: profileId,
+              membership_type: 'STANDARD',
+              start_date: today,
+              end_date: nextMonth,
+              status: 'active',
+              price: 30000,
+              billing_interval: 'monthly'
             });
+          }
+        }
+
+        // Fulfill Referral Reward if lead had a referrer and not yet rewarded
+        if (currentLead.referred_by_id) {
+          // Check if reward was already fulfilled
+          const { data: existingReward } = await supabase
+            .from('referral_rewards')
+            .select('id, status, reward_voucher_id')
+            .eq('tenant_id', tenant_id)
+            .eq('referee_lead_id', currentLead.id)
+            .maybeSingle();
+
+          const isAlreadyRewarded = existingReward && (existingReward.status === 'rewarded' || existingReward.reward_voucher_id);
+
+          if (!isAlreadyRewarded) {
+            const rewardAmount = 10000;
+            const voucherCode = generateVoucherCode('REF');
+            const voucherExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+
+            // Create gift voucher
+            const { data: voucher } = await supabase
+              .from('gift_vouchers')
+              .insert({
+                tenant_id,
+                code: voucherCode,
+                initial_balance_rwf: rewardAmount,
+                current_balance_rwf: rewardAmount,
+                expires_at: voucherExpiry
+              })
+              .select()
+              .single();
+
+            if (voucher) {
+              // Update or insert referral_rewards
+              await supabase.from('referral_rewards').upsert({
+                tenant_id,
+                referrer_profile_id: currentLead.referred_by_id,
+                referee_lead_id: currentLead.id,
+                referee_profile_id: profileId,
+                referral_code: currentLead.referral_code_used || 'DIRECT',
+                status: 'rewarded',
+                reward_voucher_id: voucher.id,
+                reward_amount_rwf: rewardAmount,
+                reward_applied_at: now
+              }, { onConflict: 'referrer_profile_id, referee_lead_id' });
+
+              // Send reward notification to Referrer
+              const { data: referrer } = await supabase
+                .from('profiles')
+                .select('phone, first_name')
+                .eq('id', currentLead.referred_by_id)
+                .single();
+
+              if (referrer && referrer.phone) {
+                await supabase.from('notification_queue').insert({
+                  tenant_id,
+                  profile_id: currentLead.referred_by_id,
+                  channel: 'sms',
+                  recipient: referrer.phone,
+                  subject: 'Referral Reward Voucher Issued! 🎉',
+                  content: `Great news ${referrer.first_name}! Your referral ${currentLead.first_name} joined GymPartner! Your RWF 10,000 credit voucher is ${voucherCode}. Present at front desk to redeem!`,
+                  status: 'pending'
+                });
+              }
+            }
           }
         }
       }
@@ -694,6 +726,11 @@ router.post('/leads/:leadId/convert', async (req, res) => {
       return res.status(404).json({ error: 'Lead not found' });
     }
 
+    // Guard: Check if lead was already converted
+    if (lead.pipeline_stage === 'closed_won' || lead.converted_profile_id) {
+      return res.status(400).json({ error: 'Lead has already been converted to an active member' });
+    }
+
     // 1. Create Profile
     const refCode = generateReferralCode(lead.first_name);
     const { data: profile, error: profErr } = await supabase
@@ -738,56 +775,67 @@ router.post('/leads/:leadId/convert', async (req, res) => {
       .select()
       .single();
 
-    // 3. Fulfill Referral Reward Voucher if lead was referred
+    // 3. Fulfill Referral Reward Voucher if lead was referred and not yet rewarded
     let rewardVoucher = null;
     if (lead.referred_by_id) {
-      const rewardAmount = 10000;
-      const voucherCode = generateVoucherCode('REF');
-      const voucherExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: existingReward } = await supabase
+        .from('referral_rewards')
+        .select('id, status, reward_voucher_id')
+        .eq('tenant_id', tenant_id)
+        .eq('referee_lead_id', lead.id)
+        .maybeSingle();
 
-      const { data: voucher } = await supabase
-        .from('gift_vouchers')
-        .insert({
-          tenant_id,
-          code: voucherCode,
-          initial_balance_rwf: rewardAmount,
-          current_balance_rwf: rewardAmount,
-          expires_at: voucherExpiry
-        })
-        .select()
-        .single();
+      const isAlreadyRewarded = existingReward && (existingReward.status === 'rewarded' || existingReward.reward_voucher_id);
 
-      if (voucher) {
-        rewardVoucher = voucher;
+      if (!isAlreadyRewarded) {
+        const rewardAmount = 10000;
+        const voucherCode = generateVoucherCode('REF');
+        const voucherExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
 
-        await supabase.from('referral_rewards').upsert({
-          tenant_id,
-          referrer_profile_id: lead.referred_by_id,
-          referee_lead_id: lead.id,
-          referee_profile_id: profile.id,
-          referral_code: lead.referral_code_used || 'DIRECT',
-          status: 'rewarded',
-          reward_voucher_id: voucher.id,
-          reward_amount_rwf: rewardAmount,
-          reward_applied_at: now
-        }, { onConflict: 'referrer_profile_id, referee_lead_id' });
-
-        const { data: referrer } = await supabase
-          .from('profiles')
-          .select('phone, first_name')
-          .eq('id', lead.referred_by_id)
+        const { data: voucher } = await supabase
+          .from('gift_vouchers')
+          .insert({
+            tenant_id,
+            code: voucherCode,
+            initial_balance_rwf: rewardAmount,
+            current_balance_rwf: rewardAmount,
+            expires_at: voucherExpiry
+          })
+          .select()
           .single();
 
-        if (referrer && referrer.phone) {
-          await supabase.from('notification_queue').insert({
+        if (voucher) {
+          rewardVoucher = voucher;
+
+          await supabase.from('referral_rewards').upsert({
             tenant_id,
-            profile_id: lead.referred_by_id,
-            channel: 'sms',
-            recipient: referrer.phone,
-            subject: 'Referral Reward Voucher Issued! 🎉',
-            content: `Congratulations ${referrer.first_name}! Your referral ${lead.first_name} has converted to a full member! Here is your RWF 10,000 voucher: ${voucherCode}.`,
-            status: 'pending'
-          });
+            referrer_profile_id: lead.referred_by_id,
+            referee_lead_id: lead.id,
+            referee_profile_id: profile.id,
+            referral_code: lead.referral_code_used || 'DIRECT',
+            status: 'rewarded',
+            reward_voucher_id: voucher.id,
+            reward_amount_rwf: rewardAmount,
+            reward_applied_at: now
+          }, { onConflict: 'referrer_profile_id, referee_lead_id' });
+
+          const { data: referrer } = await supabase
+            .from('profiles')
+            .select('phone, first_name')
+            .eq('id', lead.referred_by_id)
+            .single();
+
+          if (referrer && referrer.phone) {
+            await supabase.from('notification_queue').insert({
+              tenant_id,
+              profile_id: lead.referred_by_id,
+              channel: 'sms',
+              recipient: referrer.phone,
+              subject: 'Referral Reward Voucher Issued! 🎉',
+              content: `Congratulations ${referrer.first_name}! Your referral ${lead.first_name} has converted to a full member! Here is your RWF 10,000 voucher: ${voucherCode}.`,
+              status: 'pending'
+            });
+          }
         }
       }
     }
@@ -914,6 +962,12 @@ router.post('/referrals/validate', async (req, res) => {
     if (!tenant_id || !code) {
       return res.status(400).json({ error: 'Missing tenant_id or code' });
     }
+
+    const authResult = await verifyAuthToken(req);
+    if (authResult.error) return res.status(401).json({ error: authResult.error });
+
+    const tenantAccess = await validateTenantAccess(authResult.user.id, tenant_id);
+    if (tenantAccess.error) return res.status(403).json({ error: tenantAccess.error });
 
     const cleanCode = code.trim().toUpperCase();
     const { data: referrer, error: refErr } = await supabase

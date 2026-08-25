@@ -29,6 +29,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { cn, formatCurrencyDisplay } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
 
 interface Lead {
   id: string;
@@ -201,6 +202,20 @@ export default function LeadsPipelinePage() {
     }
   ]);
 
+  // Helper to attach authorization header from Supabase session
+  const getAuthHeaders = async () => {
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data?.session?.access_token;
+      return {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      };
+    } catch {
+      return { 'Content-Type': 'application/json' };
+    }
+  };
+
   // Fetch real backend leads if online
   useEffect(() => {
     async function loadData() {
@@ -209,7 +224,9 @@ export default function LeadsPipelinePage() {
         const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '00000000-0000-0000-0000-000000000000';
         setWidgetTenantId(tenantId);
 
-        const res = await fetch(`${backendUrl}/api/members/leads?tenant_id=${tenantId}`);
+        const headers = await getAuthHeaders();
+
+        const res = await fetch(`${backendUrl}/api/members/leads?tenant_id=${tenantId}`, { headers });
         if (res.ok) {
           const data = await res.json();
           if (data.leads && data.leads.length > 0) {
@@ -217,7 +234,7 @@ export default function LeadsPipelinePage() {
           }
         }
 
-        const refRes = await fetch(`${backendUrl}/api/members/referrals/list?tenant_id=${tenantId}`);
+        const refRes = await fetch(`${backendUrl}/api/members/referrals/list?tenant_id=${tenantId}`, { headers });
         if (refRes.ok) {
           const refData = await refRes.json();
           if (refData.referrals && refData.referrals.length > 0) {
@@ -298,9 +315,11 @@ export default function LeadsPipelinePage() {
     try {
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '00000000-0000-0000-0000-000000000000';
+      const headers = await getAuthHeaders();
+
       await fetch(`${backendUrl}/api/members/leads/${leadId}/stage`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           tenant_id: tenantId,
           stage: targetStage,
@@ -359,9 +378,11 @@ export default function LeadsPipelinePage() {
     try {
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '00000000-0000-0000-0000-000000000000';
+      const headers = await getAuthHeaders();
+
       await fetch(`${backendUrl}/api/members/leads`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           tenant_id: tenantId,
           first_name: newFirstName,

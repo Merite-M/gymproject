@@ -849,18 +849,43 @@ async function processLeadDripSequences(supabase) {
 
 /**
  * Automatically creates and issues gift vouchers for converted referrals.
+ * Processes referral rewards that are 'converted' or 'pending' where the referee
+ * has converted (lead is 'closed_won' or profile has active membership) and no voucher has been minted yet.
  */
 async function processReferralRewardFulfillment(supabase) {
-    const { data: pendingRewards, error } = await supabase
+    // 1. Fetch rewards with status 'converted' or 'pending' without voucher
+    const { data: candidateRewards, error } = await supabase
         .from('referral_rewards')
-        .select('id, tenant_id, referrer_profile_id, referee_lead_id, referee_profile_id, reward_amount_rwf, status, profiles:referrer_profile_id(id, first_name, phone)')
-        .eq('status', 'converted')
+        .select(`
+            id,
+            tenant_id,
+            referrer_profile_id,
+            referee_lead_id,
+            referee_profile_id,
+            reward_amount_rwf,
+            status,
+            referral_code,
+            profiles:referrer_profile_id(id, first_name, phone),
+            referee_lead:referee_lead_id(id, pipeline_stage, converted_profile_id),
+            referee_profile:referee_profile_id(id, membership_status)
+        `)
+        .in('status', ['converted', 'pending'])
         .is('reward_voucher_id', null);
 
-    if (error || !pendingRewards || pendingRewards.length === 0) return;
+    if (error || !candidateRewards || candidateRewards.length === 0) return;
 
-    for (const reward of pendingRewards) {
+    for (const reward of candidateRewards) {
         try {
+            // Check if conversion condition is satisfied
+            const isLeadWon = reward.referee_lead && reward.referee_lead.pipeline_stage === 'closed_won';
+            const isProfileActive = reward.referee_profile && reward.referee_profile.membership_status === 'active';
+            const isExplicitlyConverted = reward.status === 'converted';
+
+            if (!isLeadWon && !isProfileActive && !isExplicitlyConverted) {
+                // Referee hasn't converted yet, keep pending
+                continue;
+            }
+
             const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
             let rand = '';
             for (let i = 0; i < 6; i++) {
@@ -884,13 +909,14 @@ async function processReferralRewardFulfillment(supabase) {
                 .single();
 
             if (!vError && voucher) {
-                // Update referral reward
+                // Update referral reward to rewarded
                 await supabase
                     .from('referral_rewards')
                     .update({
                         status: 'rewarded',
                         reward_voucher_id: voucher.id,
-                        reward_applied_at: new Date().toISOString()
+                        reward_applied_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
                     })
                     .eq('id', reward.id);
 
@@ -906,6 +932,8 @@ async function processReferralRewardFulfillment(supabase) {
                         status: 'pending'
                     });
                 }
+
+                console.log(`[cron-referral-fulfillment] Successfully issued voucher ${voucherCode} for referral ${reward.id}`);
             }
         } catch (err) {
             console.error(`[cron-referral-fulfillment] Error fulfilling reward ${reward.id}:`, err);
@@ -914,4 +942,5 @@ async function processReferralRewardFulfillment(supabase) {
 }
 
 module.exports = initCron;
+
 

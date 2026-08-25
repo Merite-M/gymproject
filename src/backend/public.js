@@ -480,7 +480,7 @@ router.post('/join', async (req, res) => {
     // Generate unique referral code for the new member
     const newMemberReferralCode = generateCode(`GP-${first_name.slice(0, 3).toUpperCase()}`);
 
-    // Create or find Profile
+    // Create or find Profile with deduplication
     let profile;
     const { data: existingProfile } = await supabase
       .from('profiles')
@@ -490,28 +490,36 @@ router.post('/join', async (req, res) => {
       .maybeSingle();
 
     if (existingProfile) {
-      profile = existingProfile;
-    } else {
-      const { data: newProfile, error: profErr } = await supabase
-        .from('profiles')
-        .insert({
-          tenant_id,
-          first_name: first_name.trim(),
-          last_name: last_name.trim(),
-          email: email ? email.trim() : null,
-          phone: phone.trim(),
-          role: 'member',
-          status: 'active',
-          membership_status: 'active',
-          referral_code: newMemberReferralCode,
-          referred_by_id: referrerProfile ? referrerProfile.id : null
-        })
-        .select()
-        .single();
-
-      if (profErr) throw profErr;
-      profile = newProfile;
+      return res.status(200).json({
+        success: true,
+        message: 'An account with this phone number already exists. Please visit the front desk to manage your plan.',
+        profile: {
+          id: existingProfile.id,
+          first_name: existingProfile.first_name,
+          last_name: existingProfile.last_name
+        }
+      });
     }
+
+    const { data: newProfile, error: profErr } = await supabase
+      .from('profiles')
+      .insert({
+        tenant_id,
+        first_name: first_name.trim(),
+        last_name: last_name.trim(),
+        email: email ? email.trim() : null,
+        phone: phone.trim(),
+        role: 'member',
+        status: 'active',
+        membership_status: 'active',
+        referral_code: newMemberReferralCode,
+        referred_by_id: referrerProfile ? referrerProfile.id : null
+      })
+      .select()
+      .single();
+
+    if (profErr) throw profErr;
+    profile = newProfile;
 
     // Create Membership record
     const planPrices = { standard: 30000, premium: 50000, vip: 80000 };
@@ -536,52 +544,16 @@ router.post('/join', async (req, res) => {
 
     if (memErr) console.error('Membership create error:', memErr);
 
-    // If referee was referred by an existing member, fulfill referral reward!
-    let rewardVoucher = null;
+    // Record referral attribution in pending status (fulfilled by verified cron or staff)
     if (referrerProfile) {
-      const voucherCode = generateCode('VOUCH');
-      const rewardAmount = 10000;
-      const voucherExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
-
-      // Create gift voucher
-      const { data: voucher, error: vouchErr } = await supabase
-        .from('gift_vouchers')
-        .insert({
-          tenant_id,
-          code: voucherCode,
-          initial_balance_rwf: rewardAmount,
-          current_balance_rwf: rewardAmount,
-          expires_at: voucherExpiry
-        })
-        .select()
-        .single();
-
-      if (!vouchErr && voucher) {
-        rewardVoucher = voucher;
-
-        // Record completed referral reward
-        await supabase.from('referral_rewards').insert({
-          tenant_id,
-          referrer_profile_id: referrerProfile.id,
-          referee_profile_id: profile.id,
-          referral_code: referral_code.trim().toUpperCase(),
-          status: 'rewarded',
-          reward_voucher_id: voucher.id,
-          reward_amount_rwf: rewardAmount,
-          reward_applied_at: new Date().toISOString()
-        });
-
-        // Notify Referrer
-        await supabase.from('notification_queue').insert({
-          tenant_id,
-          profile_id: referrerProfile.id,
-          channel: 'sms',
-          recipient: referrerProfile.phone || 'member@example.com',
-          subject: 'Referral Reward Earned! 🎉',
-          content: `Awesome news! Your friend ${first_name} just joined ${tenant.name}. You earned a RWF 10,000 credit voucher: ${voucherCode}. Present it at front desk anytime!`,
-          status: 'pending'
-        });
-      }
+      await supabase.from('referral_rewards').upsert({
+        tenant_id,
+        referrer_profile_id: referrerProfile.id,
+        referee_profile_id: profile.id,
+        referral_code: referral_code.trim().toUpperCase(),
+        status: 'pending',
+        reward_amount_rwf: 10000
+      }, { onConflict: 'referrer_profile_id, referee_profile_id' });
     }
 
     // Welcome notification to new member
