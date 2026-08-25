@@ -18,22 +18,22 @@ import {
   Trash2,
   CheckCircle2,
   TrendingUp,
-  Users,
-  Eye,
   Settings,
   Sparkles,
   ArrowRight,
   ChevronRight,
-  AlertTriangle,
-  Gift,
-  CreditCard,
-  UserX,
   X,
   RefreshCw,
   BarChart3,
-  Layers,
-  HelpCircle
+  Layers
 } from 'lucide-react';
+
+// Helper to deep clone object to prevent mutating static templates
+function clone<T>(obj: T): T {
+  return typeof structuredClone === 'function'
+    ? structuredClone(obj)
+    : JSON.parse(JSON.stringify(obj));
+}
 
 // --- TYPES ---
 export type NodeType = 'trigger' | 'delay' | 'condition' | 'action';
@@ -333,7 +333,7 @@ export default function MarketingCanvasPage() {
     if (workflows.length > 0 && workflows[activeWorkflowIndex]) {
       return workflows[activeWorkflowIndex];
     }
-    return PLAYBOOKS[0] as unknown as MarketingWorkflow;
+    return clone(PLAYBOOKS[0] as unknown as MarketingWorkflow);
   }, [workflows, activeWorkflowIndex]);
 
   const selectedNode = useMemo(() => {
@@ -391,9 +391,9 @@ export default function MarketingCanvasPage() {
               config: row.config || {},
               x: row.config?.x ?? 80,
               y: row.config?.y ?? 100,
-              next_node_id: row.next_node_id,
-              branch_yes_id: row.config?.branch_yes_id,
-              branch_no_id: row.config?.branch_no_id
+              next_node_id: row.next_node_id || row.config?.next_node_id || null,
+              branch_yes_id: row.config?.branch_yes_id || null,
+              branch_no_id: row.config?.branch_no_id || null
             }));
 
             loadedWorkflows.push({
@@ -401,14 +401,14 @@ export default function MarketingCanvasPage() {
               name: wf.name,
               trigger_type: wf.trigger_type,
               is_active: wf.is_active ?? true,
-              nodes: nodes.length > 0 ? nodes : PLAYBOOKS[0].nodes
+              nodes: nodes.length > 0 ? nodes : clone(PLAYBOOKS[0].nodes as unknown as WorkflowNode[])
             });
           }
 
           setWorkflows(loadedWorkflows);
         } else {
           // Default to playbooks if no workflows saved yet
-          setWorkflows(PLAYBOOKS as unknown as MarketingWorkflow[]);
+          setWorkflows(clone(PLAYBOOKS as unknown as MarketingWorkflow[]));
         }
 
         // Fetch real analytics from communications_log
@@ -430,8 +430,8 @@ export default function MarketingCanvasPage() {
 
       } catch (err: any) {
         console.error('Error loading marketing workflows:', err);
-        // Fallback to playbooks
-        setWorkflows(PLAYBOOKS as unknown as MarketingWorkflow[]);
+        // Fallback to cloned playbooks
+        setWorkflows(clone(PLAYBOOKS as unknown as MarketingWorkflow[]));
       } finally {
         setLoading(false);
       }
@@ -440,12 +440,41 @@ export default function MarketingCanvasPage() {
     loadData();
   }, []);
 
-  // Save current workflow to Supabase
+  // Save current workflow to Supabase with ID Mapping for graph connections
   const handleSaveWorkflow = async () => {
     setSaving(true);
     setStatusMessage(null);
     try {
-      const wfToSave = currentWorkflow;
+      const wfToSave = clone(currentWorkflow);
+
+      // 1. Build an ID Mapping Dictionary (old_id -> fresh UUID)
+      const idMap: Record<string, string> = {};
+      const isUUID = (str: string) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+      wfToSave.nodes.forEach(node => {
+        if (isUUID(node.id)) {
+          idMap[node.id] = node.id;
+        } else {
+          idMap[node.id] = crypto.randomUUID();
+        }
+      });
+
+      // 2. Remap node IDs and graph connection edges
+      const remappedNodes = wfToSave.nodes.map(node => {
+        const newId = idMap[node.id];
+        const newNextId = node.next_node_id ? (idMap[node.next_node_id] || node.next_node_id) : null;
+        const newBranchYesId = node.branch_yes_id ? (idMap[node.branch_yes_id] || node.branch_yes_id) : null;
+        const newBranchNoId = node.branch_no_id ? (idMap[node.branch_no_id] || node.branch_no_id) : null;
+
+        return {
+          ...node,
+          id: newId,
+          next_node_id: newNextId,
+          branch_yes_id: newBranchYesId,
+          branch_no_id: newBranchNoId
+        };
+      });
 
       // Upsert parent workflow row
       const { data: wfRow, error: wfError } = await supabase
@@ -464,7 +493,7 @@ export default function MarketingCanvasPage() {
 
       const savedWfId = wfRow.id;
 
-      // Delete existing nodes for this workflow and replace
+      // Delete existing nodes for this workflow before re-inserting
       if (wfToSave.id) {
         await supabase
           .from('workflow_nodes')
@@ -473,13 +502,13 @@ export default function MarketingCanvasPage() {
           .eq('tenant_id', tenantId);
       }
 
-      // Insert child nodes
-      const nodePayloads = wfToSave.nodes.map(n => ({
-        id: n.id.includes('-') && n.id.length > 30 ? n.id : undefined, // uuid if valid
+      // Insert child nodes with mapped UUIDs
+      const nodePayloads = remappedNodes.map(n => ({
+        id: n.id,
         workflow_id: savedWfId,
         tenant_id: tenantId,
         node_type: n.type,
-        next_node_id: n.next_node_id || null,
+        next_node_id: isUUID(n.next_node_id || '') ? n.next_node_id : null,
         config: {
           ...n.config,
           subtype: n.subtype,
@@ -487,8 +516,8 @@ export default function MarketingCanvasPage() {
           description: n.description,
           x: n.x,
           y: n.y,
-          branch_yes_id: n.branch_yes_id,
-          branch_no_id: n.branch_no_id
+          branch_yes_id: isUUID(n.branch_yes_id || '') ? n.branch_yes_id : null,
+          branch_no_id: isUUID(n.branch_no_id || '') ? n.branch_no_id : null
         }
       }));
 
@@ -498,16 +527,20 @@ export default function MarketingCanvasPage() {
 
       if (nodeError) throw nodeError;
 
+      const updatedWorkflow: MarketingWorkflow = {
+        ...wfToSave,
+        id: savedWfId,
+        nodes: remappedNodes
+      };
+
       // Update state in workflows array
       setWorkflows(prev => {
-        const copy = [...prev];
-        copy[activeWorkflowIndex] = {
-          ...wfToSave,
-          id: savedWfId
-        };
+        const copy = clone(prev);
+        copy[activeWorkflowIndex] = updatedWorkflow;
         return copy;
       });
 
+      setSelectedNodeId(null);
       setStatusMessage({ type: 'success', text: `Workflow "${wfToSave.name}" saved & published successfully!` });
     } catch (err: any) {
       console.error('Save workflow error:', err);
@@ -523,7 +556,7 @@ export default function MarketingCanvasPage() {
     const updatedStatus = !currentWorkflow.is_active;
 
     setWorkflows(prev => {
-      const copy = [...prev];
+      const copy = clone(prev);
       copy[activeWorkflowIndex] = {
         ...copy[activeWorkflowIndex],
         is_active: updatedStatus
@@ -540,16 +573,18 @@ export default function MarketingCanvasPage() {
     }
   };
 
-  // Select Playbook template
+  // Select Playbook template with deep cloning
   const handleSelectPlaybook = (pb: typeof PLAYBOOKS[0]) => {
+    const pbCopy = clone(pb);
+
     const newWf: MarketingWorkflow = {
-      name: pb.name,
-      trigger_type: pb.trigger,
+      name: pbCopy.name,
+      trigger_type: pbCopy.trigger,
       is_active: true,
-      nodes: pb.nodes as unknown as WorkflowNode[]
+      nodes: pbCopy.nodes as unknown as WorkflowNode[]
     };
 
-    setWorkflows(prev => [newWf, ...prev]);
+    setWorkflows(prev => [newWf, ...clone(prev)]);
     setActiveWorkflowIndex(0);
     setSelectedNodeId(null);
     setShowPlaybookModal(false);
@@ -606,7 +641,7 @@ export default function MarketingCanvasPage() {
     };
 
     // Auto-link previous node to new node if simple sequential chain
-    const updatedNodes = [...currentWorkflow.nodes];
+    const updatedNodes = clone(currentWorkflow.nodes);
     if (lastNode && !lastNode.next_node_id && lastNode.type !== 'condition') {
       const idx = updatedNodes.findIndex(n => n.id === lastNode.id);
       if (idx !== -1) {
@@ -617,7 +652,7 @@ export default function MarketingCanvasPage() {
     updatedNodes.push(newNode);
 
     setWorkflows(prev => {
-      const copy = [...prev];
+      const copy = clone(prev);
       copy[activeWorkflowIndex] = {
         ...copy[activeWorkflowIndex],
         nodes: updatedNodes
@@ -630,7 +665,7 @@ export default function MarketingCanvasPage() {
 
   // Delete node
   const handleDeleteNode = (nodeId: string) => {
-    const updatedNodes = currentWorkflow.nodes
+    const updatedNodes = clone(currentWorkflow.nodes)
       .filter(n => n.id !== nodeId)
       .map(n => ({
         ...n,
@@ -640,7 +675,7 @@ export default function MarketingCanvasPage() {
       }));
 
     setWorkflows(prev => {
-      const copy = [...prev];
+      const copy = clone(prev);
       copy[activeWorkflowIndex] = {
         ...copy[activeWorkflowIndex],
         nodes: updatedNodes
@@ -653,12 +688,12 @@ export default function MarketingCanvasPage() {
     }
   };
 
-  // Update selected node config
+  // Update selected node config immutably
   const handleUpdateNodeConfig = (key: string, value: any) => {
     if (!selectedNodeId) return;
 
     setWorkflows(prev => {
-      const copy = [...prev];
+      const copy = clone(prev);
       const wf = copy[activeWorkflowIndex];
       const nodeIdx = wf.nodes.findIndex(n => n.id === selectedNodeId);
 
