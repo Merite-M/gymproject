@@ -11,7 +11,8 @@ import {
   Settings, 
   LogOut,
   ScanLine,
-  CreditCard
+  CreditCard,
+  Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +46,12 @@ const navigationItems = [
     href: "/retention",
     icon: Megaphone,
     description: "Automation",
+  },
+  {
+    name: "Canvas",
+    href: "/marketing/canvas",
+    icon: Sparkles,
+    description: "Visual Campaign Builder",
   },
   {
     name: "Settings",
