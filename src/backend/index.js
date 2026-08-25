@@ -304,6 +304,178 @@ app.use("/api/sync", syncRoutes);
 
 initCron(supabase);
 
+
+app.post("/api/kiosk/verify-pin", async (req, res) => {
+  try {
+    const { tenant_id, pin } = req.body;
+    if (!tenant_id || !pin) {
+      return res.status(400).json({ error: "Missing tenant_id or pin" });
+    }
+    if (!supabase) {
+      return res.status(500).json({ error: "Supabase not configured" });
+    }
+
+    const { data: tenant, error } = await supabase
+      .from("tenants")
+      .select("kiosk_admin_pin")
+      .eq("id", tenant_id)
+      .single();
+
+    if (error || !tenant) {
+      return res.status(404).json({ error: "Tenant not found" });
+    }
+
+    const validPin = tenant.kiosk_admin_pin || "1234";
+    if (String(pin).trim() === String(validPin).trim()) {
+      return res.status(200).json({ success: true, verified: true });
+    } else {
+      return res.status(401).json({ success: false, error: "Incorrect Admin PIN" });
+    }
+  } catch (err) {
+    console.error("Kiosk verify pin error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.post("/api/kiosk/checkin", async (req, res) => {
+  try {
+    const { tenant_id, identifier, access_method } = req.body;
+    if (!tenant_id || !identifier) {
+      return res.status(400).json({ error: "Missing tenant_id or search identifier" });
+    }
+    if (!supabase) {
+      return res.status(500).json({ error: "Supabase not configured" });
+    }
+
+    const term = String(identifier).trim();
+    let profile = null;
+
+    const { data: tokenData } = await supabase
+      .from("access_tokens")
+      .select("profile_id")
+      .eq("tenant_id", tenant_id)
+      .eq("is_active", true)
+      .or("token_value.eq." + term + ",pin_code.eq." + term)
+      .limit(1);
+
+    if (tokenData && tokenData.length > 0) {
+      const { data: pData } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", tokenData[0].profile_id)
+        .eq("tenant_id", tenant_id)
+        .single();
+      if (pData) profile = pData;
+    }
+
+    if (!profile) {
+      const { data: phoneProfiles } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("tenant_id", tenant_id)
+        .or("phone.eq." + term + ",phone.ilike.%" + term + "%")
+        .limit(1);
+
+      if (phoneProfiles && phoneProfiles.length > 0) {
+        profile = phoneProfiles[0];
+      }
+    }
+
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        status: "denied_not_found",
+        error: "Member profile or PIN code not found"
+      });
+    }
+
+    let finalStatus = "approved";
+    let reasons = [];
+
+    if (profile.status === "debtor" || profile.membership_status === "canceled" || profile.membership_status === "expired") {
+      finalStatus = "denied";
+      reasons.push("Account status: " + (profile.membership_status || profile.status || "Inactive"));
+    }
+
+    const { data: tab } = await supabase
+      .from("member_tabs")
+      .select("balance")
+      .eq("profile_id", profile.id)
+      .eq("tenant_id", tenant_id)
+      .single();
+
+    if (tab && parseFloat(tab.balance) > 0) {
+      if (finalStatus === "approved") finalStatus = "warning";
+      reasons.push("Outstanding tab balance: " + parseFloat(tab.balance).toFixed(2) + " RWF");
+    }
+
+    if (!profile.waiver_signed) {
+      if (finalStatus === "approved") finalStatus = "warning";
+      reasons.push("Liability Waiver Unsigned");
+    }
+
+    const { data: activeHold } = await supabase
+      .from("membership_holds")
+      .select("*")
+      .eq("profile_id", profile.id)
+      .eq("tenant_id", tenant_id)
+      .eq("status", "active")
+      .single();
+
+    if (activeHold) {
+      if (finalStatus === "approved") finalStatus = "warning";
+      reasons.push("Membership on hold until " + (activeHold.end_date || "indefinitely"));
+    }
+
+    const { data: checkin, error: checkinError } = await supabase
+      .from("check_ins")
+      .insert({
+        tenant_id,
+        profile_id: profile.id,
+        access_method: access_method || "kiosk_pin",
+        status: finalStatus
+      })
+      .select();
+
+    if (checkinError) {
+      return res.status(500).json({ error: checkinError.message });
+    }
+
+    if (finalStatus.startsWith("denied")) {
+      gymEmitter.emit("checkin.denied", {
+        tenant_id,
+        profile_id: profile.id,
+        phone: profile.phone,
+        reason: reasons.length > 0 ? reasons.join("; ") : "Denied"
+      });
+    } else {
+      gymEmitter.emit("checkin.approved", {
+        tenant_id,
+        profile_id: profile.id,
+        member_name: profile.first_name + " " + profile.last_name
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      status: finalStatus,
+      profile: {
+        id: profile.id,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        avatar_url: profile.avatar_url,
+        membership_status: profile.membership_status || profile.status || "active",
+        phone: profile.phone
+      },
+      checkin: checkin ? checkin[0] : null,
+      reasons
+    });
+  } catch (err) {
+    console.error("Kiosk checkin error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 app.listen(port, () => {
 
   console.log(`Backend server running on port ${port}`);
