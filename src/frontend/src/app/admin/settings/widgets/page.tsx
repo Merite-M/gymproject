@@ -12,24 +12,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Code2,
   Copy,
-  Check,
   ArrowLeft,
   Sparkles,
   Calendar,
   UserPlus,
   Palette,
   Eye,
-  Globe,
-  Monitor,
+  ExternalLink,
   CheckCircle2,
-  Layout,
-  ExternalLink
+  Layout
 } from 'lucide-react';
 
 export default function WidgetCustomizerPage() {
   const [tenantSlug, setTenantSlug] = useState<string>('test-gym');
   const [tenantName, setTenantName] = useState<string>('Test Gym');
-  const [loading, setLoading] = useState<boolean>(true);
 
   // Widget customizer states
   const [widgetType, setWidgetType] = useState<'schedule' | 'join'>('schedule');
@@ -67,8 +63,6 @@ export default function WidgetCustomizerPage() {
         }
       } catch (err) {
         console.error('Failed to load tenant details for widgets:', err);
-      } finally {
-        setLoading(false);
       }
     }
     loadTenantInfo();
@@ -85,9 +79,9 @@ export default function WidgetCustomizerPage() {
 <div id="${targetId}"></div>`;
 
   const iframeCodeSnippet = `<iframe
-  src="${backendUrl}/api/public/${tenantSlug}/${widgetType === 'schedule' ? 'schedule' : 'join'}"
+  src="${backendUrl}/api/public/${tenantSlug}/embed/${widgetType}"
   width="100%"
-  height="600"
+  height="620"
   style="border:none; border-radius:12px; overflow:hidden;"
   title="${tenantName} ${widgetType === 'schedule' ? 'Schedule' : 'Join'} Widget">
 </iframe>`;
@@ -130,7 +124,12 @@ export default function WidgetCustomizerPage() {
           <Badge variant="secondary" className="px-3 py-1.5 font-mono text-xs">
             Slug: <span className="font-bold text-foreground ml-1">{tenantSlug}</span>
           </Badge>
-          <Button variant="outline" size="sm" onClick={() => window.open(`${backendUrl}/api/public/${tenantSlug}/schedule`, "_blank")} className="gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(`${backendUrl}/api/public/${tenantSlug}/schedule`, '_blank')}
+            className="gap-2"
+          >
             <ExternalLink className="size-3.5" /> Test Public API
           </Button>
         </div>
@@ -459,7 +458,7 @@ export default function WidgetCustomizerPage() {
 
             <Button
               onClick={handleCopyCode}
-              className="gap-2 font-semibold shadow-xs transition-all"
+              className="gap-2 font-semibold shadow-xs transition-all text-white"
               style={{ backgroundColor: primaryColor }}
             >
               {copied ? <CheckCircle2 className="size-4 text-white" /> : <Copy className="size-4" />}
@@ -473,7 +472,7 @@ export default function WidgetCustomizerPage() {
             <pre className="whitespace-pre-wrap break-all leading-relaxed">{activeSnippet}</pre>
           </div>
           <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-            <span>Requires CORS-open backend endpoint on <code>{backendUrl}</code></span>
+            <span>Served directly from backend gateway at <code>{backendUrl}</code></span>
             <span>Target Tenant: <strong className="text-foreground">{tenantName} ({tenantSlug})</strong></span>
           </div>
         </CardContent>

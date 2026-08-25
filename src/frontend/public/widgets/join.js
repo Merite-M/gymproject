@@ -1,4 +1,14 @@
 (function() {
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
   const currentScript = document.currentScript || (function() {
     const scripts = document.getElementsByTagName('script');
     return scripts[scripts.length - 1];
@@ -21,6 +31,8 @@
       container.id = targetId;
       document.body.appendChild(container);
     }
+
+    const safeColor = escapeHtml(primaryColor);
 
     container.innerHTML = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; border-radius: 12px; background: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); max-width: 460px; margin: 0 auto; color: #0f172a;">
@@ -55,9 +67,9 @@
             <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Select Plan Option</label>
             <select id="gp-join-plan" style="box-sizing: border-box; width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: #ffffff;">
               <option value="trial">7-Day Free VIP Trial Pass (Free)</option>
-              <option value="standard">Standard Monthly Membership (RWF 30,000/mo)</option>
-              <option value="premium">Premium All-Access (RWF 50,000/mo)</option>
-              <option value="vip">VIP Executive (RWF 80,000/mo)</option>
+              <option value="STANDARD">Standard Monthly Membership (RWF 30,000/mo)</option>
+              <option value="PREMIUM">Premium All-Access (RWF 50,000/mo)</option>
+              <option value="VIP">VIP Executive (RWF 80,000/mo)</option>
             </select>
           </div>
 
@@ -66,14 +78,13 @@
             <input id="gp-join-ref" type="text" placeholder="e.g. GP-ALICE88" style="box-sizing: border-box; width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; text-transform: uppercase;" />
           </div>
 
-          <button id="gp-join-submit" style="width: 100%; background: ${primaryColor}; color: #ffffff; font-weight: 600; padding: 12px; border-radius: 8px; border: none; cursor: pointer; font-size: 15px; transition: background 0.2s;">Complete Online Registration</button>
+          <button id="gp-join-submit" style="width: 100%; background: ${safeColor}; color: #ffffff; font-weight: 600; padding: 12px; border-radius: 8px; border: none; cursor: pointer; font-size: 15px; transition: background 0.2s;">Complete Online Registration</button>
           <div id="gp-join-msg" style="margin-top: 12px; font-size: 13px; text-align: center; display: none;"></div>
         </div>
       </div>
     `;
 
-    // Optionally update gym info
-    fetch(`${backendOrigin}/api/public/${tenantSlug}/schedule`)
+    fetch(`${backendOrigin}/api/public/${encodeURIComponent(tenantSlug)}/schedule`)
       .then(r => r.json())
       .then(data => {
         if (data.gym) {
@@ -111,12 +122,12 @@
         last_name: last,
         phone: phone,
         email: email || null,
-        membership_type: isTrial ? 'standard' : plan,
+        membership_type: isTrial ? 'STANDARD' : plan,
         is_free_trial: isTrial,
         referral_code: refCode || null
       };
 
-      fetch(`${backendOrigin}/api/public/${tenantSlug}/join`, {
+      fetch(`${backendOrigin}/api/public/${encodeURIComponent(tenantSlug)}/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

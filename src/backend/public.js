@@ -1,3 +1,4 @@
+const path = require('path');
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const gymEmitter = require('./events');
@@ -22,16 +23,29 @@ async function resolveTenant(tenant_slug) {
   if (!supabase || !tenant_slug) return null;
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant_slug);
 
-  let query = supabase.from("tenants").select("id, name, logo_url, address, contact_email, phone_number, primary_color, secondary_color, branding_settings, operating_hours, default_currency, slug");
+  let query = supabase.from('tenants').select('id, name, logo_url, address, contact_email, phone_number, primary_color, secondary_color, branding_settings, operating_hours, default_currency, slug');
   if (isUuid) {
-    query = query.eq("id", tenant_slug);
+    query = query.eq('id', tenant_slug);
   } else {
-    query = query.eq("slug", tenant_slug);
+    query = query.eq('slug', tenant_slug);
   }
 
   const { data: tenant, error } = await query.single();
   if (error || !tenant) return null;
   return tenant;
+}
+
+/**
+ * Helper: HTML sanitize string
+ */
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 function generateCode(prefix = 'REF') {
@@ -144,16 +158,13 @@ router.post('/schedule', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields: tenant_id, first_name, last_name, phone' });
     }
 
-    // Verify tenant exists
-    const { data: tenant, error: tenantErr } = await supabase
-      .from('tenants')
-      .select('id, name')
-      .eq('id', tenant_id)
-      .single();
+    // Verify tenant exists (accepts slug or UUID)
+    const tenant = await resolveTenant(tenant_id);
 
-    if (tenantErr || !tenant) {
-      return res.status(404).json({ error: 'Invalid gym tenant ID' });
+    if (!tenant) {
+      return res.status(404).json({ error: 'Invalid gym tenant ID or slug' });
     }
+    const realTenantId = tenant.id;
 
     // Check referral code attribution if provided
     let referrerProfileId = null;
@@ -162,7 +173,7 @@ router.post('/schedule', async (req, res) => {
       const { data: referrer } = await supabase
         .from('profiles')
         .select('id, first_name, last_name')
-        .eq('tenant_id', tenant_id)
+        .eq('tenant_id', realTenantId)
         .eq('referral_code', cleanCode)
         .maybeSingle();
 
@@ -175,7 +186,7 @@ router.post('/schedule', async (req, res) => {
     const { data: existingLead } = await supabase
       .from('leads')
       .select('id, pipeline_stage')
-      .eq('tenant_id', tenant_id)
+      .eq('tenant_id', realTenantId)
       .eq('phone', phone.trim())
       .maybeSingle();
 
@@ -207,7 +218,7 @@ router.post('/schedule', async (req, res) => {
 
       // Log stage transition history
       await supabase.from('lead_stage_history').insert({
-        tenant_id,
+        tenant_id: realTenantId,
         lead_id: existingLead.id,
         from_stage: existingLead.pipeline_stage,
         to_stage: 'tour_scheduled',
@@ -220,7 +231,7 @@ router.post('/schedule', async (req, res) => {
       const { data: created, error: insertErr } = await supabase
         .from('leads')
         .insert({
-          tenant_id,
+          tenant_id: realTenantId,
           first_name: first_name.trim(),
           last_name: last_name.trim(),
           email: email ? email.trim() : null,
@@ -242,7 +253,7 @@ router.post('/schedule', async (req, res) => {
 
       // Log initial stage history
       await supabase.from('lead_stage_history').insert({
-        tenant_id,
+        tenant_id: realTenantId,
         lead_id: created.id,
         from_stage: null,
         to_stage: 'tour_scheduled',
@@ -254,7 +265,7 @@ router.post('/schedule', async (req, res) => {
     // If referral code was used, create or update referral attribution record
     if (referrerProfileId && leadRecord) {
       await supabase.from('referral_rewards').upsert({
-        tenant_id,
+        tenant_id: realTenantId,
         referrer_profile_id: referrerProfileId,
         referee_lead_id: leadRecord.id,
         referral_code: referral_code.trim().toUpperCase(),
@@ -269,7 +280,7 @@ router.post('/schedule', async (req, res) => {
     });
 
     await supabase.from('notification_queue').insert({
-      tenant_id,
+      tenant_id: realTenantId,
       profile_id: null,
       channel: 'sms',
       recipient: phone.trim(),
@@ -280,7 +291,7 @@ router.post('/schedule', async (req, res) => {
 
     // Log communication
     await supabase.from('communications_log').insert({
-      tenant_id,
+      tenant_id: realTenantId,
       profile_id: null,
       channel: 'sms',
       direction: 'outbound',
@@ -290,7 +301,7 @@ router.post('/schedule', async (req, res) => {
 
     // Emit event for socket/dashboard listeners
     gymEmitter.emit('lead.tour_scheduled', {
-      tenant_id,
+      tenant_id: realTenantId,
       lead_id: leadRecord.id,
       name: `${first_name} ${last_name}`,
       phone,
@@ -313,6 +324,70 @@ router.post('/schedule', async (req, res) => {
     console.error('[public/schedule] error:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
+});
+
+
+/**
+ * GET /api/public/:tenant_slug/schedule
+ * Unauthenticated public endpoint returning class schedules for a tenant slug or ID.
+ */
+router.get('/:tenant_slug/schedule', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase config missing' });
+
+  try {
+    const { tenant_slug } = req.params;
+    const tenant = await resolveTenant(tenant_slug);
+
+    if (!tenant) {
+      return res.status(404).json({ error: 'Gym tenant not found' });
+    }
+
+    const today = new Date().toISOString();
+    const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: schedules, error: scheduleErr } = await supabase
+      .from('class_schedules')
+      .select('id, category_id, facility_id, trainer_id, title, description, start_time, end_time, capacity_override, is_cancelled, class_categories(name, description, color)')
+      .eq('tenant_id', tenant.id)
+      .gte('start_time', today)
+      .lte('start_time', nextWeek)
+      .order('start_time', { ascending: true })
+      .limit(50);
+
+    if (scheduleErr) {
+      console.error('[public/:tenant_slug/schedule] Error fetching schedules:', scheduleErr);
+    }
+
+    res.json({
+      gym: {
+        id: tenant.id,
+        slug: tenant.slug || tenant.id,
+        name: tenant.name,
+        logo_url: tenant.logo_url,
+        address: tenant.address || 'Kigali, Rwanda',
+        contact_email: tenant.contact_email,
+        phone_number: tenant.phone_number || '+250 788 000 000',
+        primary_color: tenant.primary_color || '#2563eb',
+        secondary_color: tenant.secondary_color || '#1e293b',
+        currency: tenant.default_currency || 'RWF',
+        operating_hours: tenant.operating_hours || 'Mon - Sat: 6:00 AM - 10:00 PM'
+      },
+      schedules: schedules || []
+    });
+  } catch (error) {
+    console.error('[public/:tenant_slug/schedule] error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/public/:tenant_slug/schedule
+ * Unauthenticated public endpoint for tour scheduling by tenant slug.
+ */
+router.post('/:tenant_slug/schedule', async (req, res) => {
+  const { tenant_slug } = req.params;
+  req.body.tenant_id = tenant_slug;
+  return router.handle(req, res);
 });
 
 // ==========================================
@@ -615,88 +690,27 @@ router.post('/join', async (req, res) => {
 });
 
 
-// ==========================================
-// 1B. PUBLIC SCHEDULE & JOIN BY TENANT SLUG
-// ==========================================
-
-/**
- * GET /api/public/:tenant_slug/schedule
- * Unauthenticated public endpoint returning class schedules for a tenant slug or ID.
- */
-router.get("/:tenant_slug/schedule", async (req, res) => {
-  if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
-
-  try {
-    const { tenant_slug } = req.params;
-    const tenant = await resolveTenant(tenant_slug);
-
-    if (!tenant) {
-      return res.status(404).json({ error: "Gym tenant not found" });
-    }
-
-    const today = new Date().toISOString();
-    const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-
-    const { data: schedules, error: scheduleErr } = await supabase
-      .from("class_schedules")
-      .select("id, category_id, facility_id, trainer_id, title, description, start_time, end_time, capacity_override, is_cancelled, class_categories(name, description, color)")
-      .eq("tenant_id", tenant.id)
-      .gte("start_time", today)
-      .lte("start_time", nextWeek)
-      .order("start_time", { ascending: true })
-      .limit(50);
-
-    if (scheduleErr) {
-      console.error("[public/:tenant_slug/schedule] Error fetching schedules:", scheduleErr);
-    }
-
-    res.json({
-      gym: {
-        id: tenant.id,
-        slug: tenant.slug || tenant.id,
-        name: tenant.name,
-        logo_url: tenant.logo_url,
-        address: tenant.address || "Kigali, Rwanda",
-        contact_email: tenant.contact_email,
-        phone_number: tenant.phone_number || "+250 788 000 000",
-        primary_color: tenant.primary_color || "#2563eb",
-        secondary_color: tenant.secondary_color || "#1e293b",
-        currency: tenant.default_currency || "RWF",
-        operating_hours: tenant.operating_hours || "Mon - Sat: 6:00 AM - 10:00 PM"
-      },
-      schedules: schedules || []
-    });
-  } catch (error) {
-    console.error("[public/:tenant_slug/schedule] error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
 /**
  * POST /api/public/:tenant_slug/join
- * Unauthenticated public endpoint for trial signup or self-service join.
+ * Unauthenticated public endpoint for trial signup or self-service join by tenant slug.
  */
-router.post("/:tenant_slug/join", async (req, res) => {
-  if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
+router.post('/:tenant_slug/join', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase config missing' });
 
   try {
     const { tenant_slug } = req.params;
     const tenant = await resolveTenant(tenant_slug);
 
     if (!tenant) {
-      return res.status(404).json({ error: "Gym tenant not found" });
+      return res.status(404).json({ error: 'Gym tenant not found' });
     }
 
-    // Forward request with tenant_id attached to existing POST /join logic
-    req.body.tenant_id = tenant.id;
-
-    // We can directly handle join logic or delegate
     const {
       first_name,
       last_name,
       email,
       phone,
-      membership_type = "standard",
+      membership_type = 'STANDARD',
       is_free_trial = true,
       promo_code,
       referral_code,
@@ -704,19 +718,20 @@ router.post("/:tenant_slug/join", async (req, res) => {
     } = req.body;
 
     if (!first_name || !last_name || !phone) {
-      return res.status(400).json({ error: "Missing required fields: first_name, last_name, phone" });
+      return res.status(400).json({ error: 'Missing required fields: first_name, last_name, phone' });
     }
 
-    // Reuse existing join logic
+    const normalizedMembershipType = String(membership_type).toUpperCase();
+
     // 1. Check referral code if provided
     let referrerProfile = null;
     if (referral_code) {
       const cleanRefCode = referral_code.trim().toUpperCase();
       const { data: refData } = await supabase
-        .from("profiles")
-        .select("id, first_name, last_name, email, phone")
-        .eq("tenant_id", tenant.id)
-        .eq("referral_code", cleanRefCode)
+        .from('profiles')
+        .select('id, first_name, last_name, email, phone')
+        .eq('tenant_id', tenant.id)
+        .eq('referral_code', cleanRefCode)
         .maybeSingle();
 
       if (refData) {
@@ -726,33 +741,33 @@ router.post("/:tenant_slug/join", async (req, res) => {
 
     if (is_free_trial) {
       const { data: existingLead } = await supabase
-        .from("leads")
-        .select("id, pipeline_stage")
-        .eq("tenant_id", tenant.id)
-        .eq("phone", phone.trim())
+        .from('leads')
+        .select('id, pipeline_stage')
+        .eq('tenant_id', tenant.id)
+        .eq('phone', phone.trim())
         .maybeSingle();
 
       let leadRecord;
-      const trialStart = new Date().toISOString().split("T")[0];
-      const trialEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      const trialStart = new Date().toISOString().split('T')[0];
+      const trialEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
       if (existingLead) {
         const { data: updated, error: updateErr } = await supabase
-          .from("leads")
+          .from('leads')
           .update({
             first_name,
             last_name,
             email: email || undefined,
-            pipeline_stage: "trial_started",
+            pipeline_stage: 'trial_started',
             stage_entered_at: new Date().toISOString(),
             trial_start_date: trialStart,
             trial_end_date: trialEnd,
             referred_by_id: referrerProfile ? referrerProfile.id : undefined,
             referral_code_used: referral_code ? referral_code.trim().toUpperCase() : undefined,
-            notes: notes ? "Trial requested via Public API: " + notes : "Trial requested via Public API",
+            notes: notes ? 'Trial requested via Public API: ' + notes : 'Trial requested via Public API',
             updated_at: new Date().toISOString()
           })
-          .eq("id", existingLead.id)
+          .eq('id', existingLead.id)
           .select()
           .single();
 
@@ -760,21 +775,21 @@ router.post("/:tenant_slug/join", async (req, res) => {
         leadRecord = updated;
       } else {
         const { data: created, error: insertErr } = await supabase
-          .from("leads")
+          .from('leads')
           .insert({
             tenant_id: tenant.id,
             first_name: first_name.trim(),
             last_name: last_name.trim(),
             email: email ? email.trim() : null,
             phone: phone.trim(),
-            pipeline_stage: "trial_started",
+            pipeline_stage: 'trial_started',
             stage_entered_at: new Date().toISOString(),
-            source: "public_join_api",
+            source: 'public_join_api',
             trial_start_date: trialStart,
             trial_end_date: trialEnd,
             referred_by_id: referrerProfile ? referrerProfile.id : null,
             referral_code_used: referral_code ? referral_code.trim().toUpperCase() : null,
-            notes: notes ? "Trial requested via Public API: " + notes : "Trial requested via Public API"
+            notes: notes ? 'Trial requested via Public API: ' + notes : 'Trial requested via Public API'
           })
           .select()
           .single();
@@ -783,49 +798,49 @@ router.post("/:tenant_slug/join", async (req, res) => {
         leadRecord = created;
       }
 
-      await supabase.from("notification_queue").insert({
+      await supabase.from('notification_queue').insert({
         tenant_id: tenant.id,
         profile_id: null,
-        channel: "sms",
+        channel: 'sms',
         recipient: phone.trim(),
-        subject: "7-Day Free Trial Activated",
-        content: "Hello " + first_name + "! Your 7-day VIP trial at " + tenant.name + " is now active. Welcome to the gym!",
-        status: "pending"
+        subject: '7-Day Free Trial Activated',
+        content: 'Hello ' + first_name + '! Your 7-day VIP trial at ' + tenant.name + ' is now active. Welcome to the gym!',
+        status: 'pending'
       });
 
       return res.status(201).json({
         success: true,
-        type: "trial",
-        message: "Free trial registered successfully",
+        type: 'trial',
+        message: 'Free trial registered successfully',
         lead: leadRecord
       });
     }
 
     // Direct membership creation
     const { data: existingProfile } = await supabase
-      .from("profiles")
-      .select("id, role")
-      .eq("tenant_id", tenant.id)
-      .eq("phone", phone.trim())
+      .from('profiles')
+      .select('id, first_name, last_name, role, referral_code')
+      .eq('tenant_id', tenant.id)
+      .eq('phone', phone.trim())
       .maybeSingle();
 
     let profile;
-    const newMemberReferralCode = generateCode("GP");
+    const newMemberReferralCode = generateCode('GP');
 
     if (existingProfile) {
       profile = existingProfile;
     } else {
       const { data: newProf, error: profErr } = await supabase
-        .from("profiles")
+        .from('profiles')
         .insert({
           tenant_id: tenant.id,
           first_name: first_name.trim(),
           last_name: last_name.trim(),
           email: email ? email.trim() : null,
           phone: phone.trim(),
-          role: "member",
-          status: "active",
-          membership_status: "active",
+          role: 'member',
+          status: 'active',
+          membership_status: 'active',
           referral_code: newMemberReferralCode,
           referred_by_id: referrerProfile ? referrerProfile.id : null
         })
@@ -836,19 +851,47 @@ router.post("/:tenant_slug/join", async (req, res) => {
       profile = newProf;
     }
 
-    const priceMap = { standard: 30000, premium: 50000, vip: 80000 };
-    const price = priceMap[membership_type] || 30000;
+    // Prevent duplicate active memberships
+    const { data: existingMembership } = await supabase
+      .from('memberships')
+      .select('id, membership_type, start_date, end_date, price, status')
+      .eq('tenant_id', tenant.id)
+      .eq('profile_id', profile.id)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (existingMembership) {
+      return res.status(200).json({
+        success: true,
+        type: 'membership',
+        message: 'Member already has an active membership',
+        profile: {
+          id: profile.id,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          referral_code: profile.referral_code
+        },
+        membership: existingMembership
+      });
+    }
+
+    const priceMap = { STANDARD: 30000, PREMIUM: 50000, VIP: 80000 };
+    const price = priceMap[normalizedMembershipType] || 30000;
+    const startDate = new Date().toISOString().split('T')[0];
+    const endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const { data: membership, error: memErr } = await supabase
-      .from("memberships")
+      .from('memberships')
       .insert({
         tenant_id: tenant.id,
         profile_id: profile.id,
-        membership_type: membership_type,
-        billing_interval: "monthly",
-        start_date: new Date().toISOString().split("T")[0],
+        membership_type: normalizedMembershipType,
+        billing_interval: 'monthly',
+        start_date: startDate,
+        end_date: endDate,
+        join_date: startDate,
         price: price,
-        status: "active"
+        status: 'active'
       })
       .select()
       .single();
@@ -857,8 +900,8 @@ router.post("/:tenant_slug/join", async (req, res) => {
 
     res.status(201).json({
       success: true,
-      type: "membership",
-      message: "Membership created successfully",
+      type: 'membership',
+      message: 'Membership created successfully',
       profile: {
         id: profile.id,
         first_name: profile.first_name,
@@ -868,8 +911,8 @@ router.post("/:tenant_slug/join", async (req, res) => {
       membership: membership || null
     });
   } catch (error) {
-    console.error("[public/:tenant_slug/join] error:", error);
-    res.status(500).json({ error: error.message || "Internal server error" });
+    console.error('[public/:tenant_slug/join] error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
 
@@ -1023,6 +1066,88 @@ router.get('/widget.js', (req, res) => {
   `;
 
   res.send(widgetScript);
+});
+
+
+// ==========================================
+// EMBEDDABLE WIDGET JS & HTML IFRAME ROUTES
+// ==========================================
+router.get(['/schedule.js', '/widgets/schedule.js'], (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  const filePath = path.join(__dirname, '../frontend/public/widgets/schedule.js');
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
+  }
+  res.status(404).send('// Schedule widget script not found');
+});
+
+router.get(['/join.js', '/widgets/join.js'], (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  const filePath = path.join(__dirname, '../frontend/public/widgets/join.js');
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
+  }
+  res.status(404).send('// Join widget script not found');
+});
+
+router.get('/:tenant_slug/embed/schedule', async (req, res) => {
+  if (!supabase) return res.status(500).send('Supabase config missing');
+  try {
+    const { tenant_slug } = req.params;
+    const tenant = await resolveTenant(tenant_slug);
+    if (!tenant) return res.status(404).send('Gym tenant not found');
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(tenant.name)} - Class Schedule</title>
+  <style>
+    body { margin: 0; padding: 12px; background: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="gympartner-schedule-embed"></div>
+  <script src="/widgets/schedule.js" data-tenant-slug="${escapeHtml(tenant.slug || tenant.id)}" data-primary-color="${escapeHtml(tenant.primary_color || '#2563eb')}" data-target="gympartner-schedule-embed"></script>
+</body>
+</html>`;
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (err) {
+    res.status(500).send('Error rendering embed');
+  }
+});
+
+router.get('/:tenant_slug/embed/join', async (req, res) => {
+  if (!supabase) return res.status(500).send('Supabase config missing');
+  try {
+    const { tenant_slug } = req.params;
+    const tenant = await resolveTenant(tenant_slug);
+    if (!tenant) return res.status(404).send('Gym tenant not found');
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(tenant.name)} - Membership Join</title>
+  <style>
+    body { margin: 0; padding: 12px; background: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="gympartner-join-embed"></div>
+  <script src="/widgets/join.js" data-tenant-slug="${escapeHtml(tenant.slug || tenant.id)}" data-primary-color="${escapeHtml(tenant.primary_color || '#2563eb')}" data-target="gympartner-join-embed"></script>
+</body>
+</html>`;
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (err) {
+    res.status(500).send('Error rendering embed');
+  }
 });
 
 module.exports = router;
