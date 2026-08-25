@@ -495,14 +495,17 @@ router.post('/checkout', async (req, res) => {
 
       // Low stock notification
       if (newStock < min_stock_alert) {
-        await supabase.from('notification_queue').insert({
+      if (newStock < min_stock_alert) {
+        const { error: notifError } = await supabase.from('notification_queue').insert({
           tenant_id,
           channel: 'email',
           recipient: 'admin@gym.com',
           subject: 'Low Stock Alert',
           content: `Product "${name}" is low on stock (${newStock} remaining).`,
           status: 'pending'
-        }).catch(err => console.error("Notification queue error:", err));
+        });
+        if (notifError) console.error("Notification queue error:", notifError);
+      }
       }
     }
 
