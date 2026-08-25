@@ -15,9 +15,9 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 /**
  * Helper to validate that the authenticated user belongs to the requested tenant
- * and possesses an authorized administrative role (admin, manager, owner, super_admin, staff).
+ * and possesses an authorized administrative role.
  */
-async function validateAdminTenantAccess(userId, tenantId) {
+async function validateAdminTenantAccess(userId, tenantId, allowedRoles = ['admin', 'manager', 'owner', 'super_admin']) {
     const { data: profile, error } = await supabase
         .from('profiles')
         .select('tenant_id, role')
@@ -32,12 +32,44 @@ async function validateAdminTenantAccess(userId, tenantId) {
         return { error: 'Access denied: You do not belong to this tenant', status: 403 };
     }
 
-    const allowedRoles = ['admin', 'manager', 'owner', 'super_admin', 'staff'];
     if (!allowedRoles.includes(profile.role)) {
-        return { error: 'Access denied: Insufficient permissions for financial reports', status: 403 };
+        return { error: 'Access denied: Insufficient permissions for administrative settings', status: 403 };
     }
 
     return { profile };
+}
+
+/**
+ * Sanitize custom CSS to prevent XSS, HTML injection, javascript expressions,
+ * external dangerous URLs, and data exfiltration.
+ */
+function sanitizeCustomCss(css) {
+    if (!css || typeof css !== 'string') return null;
+    let sanitized = css;
+
+    // 1. Remove HTML tags / script tags
+    sanitized = sanitized.replace(/<[^>]*>/gi, '');
+
+    // 2. Remove JavaScript / VBScript / expression protocols and bindings
+    sanitized = sanitized.replace(/javascript\s*:/gi, '');
+    sanitized = sanitized.replace(/vbscript\s*:/gi, '');
+    sanitized = sanitized.replace(/expression\s*\([^)]*\)/gi, '');
+    sanitized = sanitized.replace(/behavior\s*:/gi, '');
+    sanitized = sanitized.replace(/-moz-binding\s*:/gi, '');
+
+    // 3. Remove @import rules (prevents loading malicious external stylesheets)
+    sanitized = sanitized.replace(/@import\s+[^;]+;/gi, '');
+
+    // 4. Sanitize url(...) references to disallow non-http/https/data URLs
+    sanitized = sanitized.replace(/url\s*\(\s*['"]?\s*([^'")]+?)\s*['"]?\s*\)/gi, (match, url) => {
+        const trimmedUrl = url.trim().toLowerCase();
+        if (trimmedUrl.startsWith('http://') || trimmedUrl.startsWith('https://') || trimmedUrl.startsWith('data:image/')) {
+            return `url("${url.trim()}")`;
+        }
+        return 'none';
+    });
+
+    return sanitized.trim();
 }
 
 // Z-Report (Aggregated across shifts for a date range)
@@ -63,8 +95,8 @@ router.get('/reports/z-report', async (req, res) => {
             return res.status(401).json({ error: 'Invalid or expired token' });
         }
 
-        // Validate tenant binding and administrative permissions
-        const tenantAccess = await validateAdminTenantAccess(user.id, tenant_id);
+        // Validate tenant binding and administrative permissions (staff allowed for report viewing)
+        const tenantAccess = await validateAdminTenantAccess(user.id, tenant_id, ['admin', 'manager', 'owner', 'super_admin', 'staff']);
         if (tenantAccess.error) {
             return res.status(tenantAccess.status).json({ error: tenantAccess.error });
         }
@@ -172,8 +204,8 @@ router.get('/reports/kpi-dashboard', async (req, res) => {
             return res.status(401).json({ error: 'Invalid or expired token' });
         }
 
-        // Validate tenant binding and administrative permissions
-        const tenantAccess = await validateAdminTenantAccess(user.id, tenant_id);
+        // Validate tenant binding and administrative permissions (staff allowed for report viewing)
+        const tenantAccess = await validateAdminTenantAccess(user.id, tenant_id, ['admin', 'manager', 'owner', 'super_admin', 'staff']);
         if (tenantAccess.error) {
             return res.status(tenantAccess.status).json({ error: tenantAccess.error });
         }
@@ -276,8 +308,8 @@ router.get('/reports/financial-history', async (req, res) => {
             return res.status(401).json({ error: 'Invalid or expired token' });
         }
 
-        // Validate tenant binding and administrative permissions
-        const tenantAccess = await validateAdminTenantAccess(user.id, tenant_id);
+        // Validate tenant binding and administrative permissions (staff allowed for report viewing)
+        const tenantAccess = await validateAdminTenantAccess(user.id, tenant_id, ['admin', 'manager', 'owner', 'super_admin', 'staff']);
         if (tenantAccess.error) {
             return res.status(tenantAccess.status).json({ error: tenantAccess.error });
         }
@@ -425,21 +457,24 @@ router.put('/settings/branding', async (req, res) => {
             return res.status(401).json({ error: 'Invalid or expired token' });
         }
 
-        const tenantAccess = await validateAdminTenantAccess(user.id, tenant_id);
+        const tenantAccess = await validateAdminTenantAccess(user.id, tenant_id, ['admin', 'manager', 'owner', 'super_admin']);
         if (tenantAccess.error) {
             return res.status(tenantAccess.status).json({ error: tenantAccess.error });
         }
 
+        const updateData = {
+            updated_at: new Date().toISOString()
+        };
+
+        if (logo_url !== undefined) updateData.logo_url = logo_url || null;
+        if (primary_color !== undefined) updateData.primary_color = primary_color || '#000000';
+        if (secondary_color !== undefined) updateData.secondary_color = secondary_color || '#ffffff';
+        if (custom_css !== undefined) updateData.custom_css = sanitizeCustomCss(custom_css);
+        if (branding_settings !== undefined) updateData.branding_settings = branding_settings;
+
         const { data: tenant, error: updateError } = await supabase
             .from('tenants')
-            .update({
-                logo_url: logo_url || null,
-                primary_color: primary_color || '#000000',
-                secondary_color: secondary_color || '#ffffff',
-                custom_css: custom_css || null,
-                branding_settings: branding_settings || {},
-                updated_at: new Date().toISOString()
-            })
+            .update(updateData)
             .eq('id', tenant_id)
             .select()
             .single();
@@ -487,7 +522,8 @@ router.put('/settings/gateways', async (req, res) => {
             return res.status(401).json({ error: 'Invalid or expired token' });
         }
 
-        const tenantAccess = await validateAdminTenantAccess(user.id, tenant_id);
+        // Privileged write: restrict payment credentials to admin, owner, and super_admin only
+        const tenantAccess = await validateAdminTenantAccess(user.id, tenant_id, ['admin', 'owner', 'super_admin']);
         if (tenantAccess.error) {
             return res.status(tenantAccess.status).json({ error: tenantAccess.error });
         }
@@ -722,7 +758,8 @@ router.post('/settings/test-gateway', async (req, res) => {
             return res.status(401).json({ error: 'Invalid or expired token' });
         }
 
-        const tenantAccess = await validateAdminTenantAccess(user.id, tenant_id);
+        // Privileged operation: restrict testing payment credentials to admin, owner, and super_admin only
+        const tenantAccess = await validateAdminTenantAccess(user.id, tenant_id, ['admin', 'owner', 'super_admin']);
         if (tenantAccess.error) {
             return res.status(tenantAccess.status).json({ error: tenantAccess.error });
         }

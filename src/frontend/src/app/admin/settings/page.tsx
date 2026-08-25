@@ -62,6 +62,7 @@ export default function SettingsPage() {
     primaryColor: '#29C47A',
     secondaryColor: '#2E8BFF',
     customCss: '',
+    brandingSettings: {} as Record<string, any>,
   });
 
   const [gateways, setGateways] = useState({
@@ -126,6 +127,7 @@ export default function SettingsPage() {
           primaryColor: data.branding.primary_color || '#29C47A',
           secondaryColor: data.branding.secondary_color || '#2E8BFF',
           customCss: data.branding.custom_css || '',
+          brandingSettings: data.branding.branding_settings || {},
         });
       }
 
@@ -188,6 +190,7 @@ export default function SettingsPage() {
         primary_color: branding.primaryColor,
         secondary_color: branding.secondaryColor,
         custom_css: branding.customCss,
+        branding_settings: branding.brandingSettings || {},
       });
       setStatusMessage({ type: 'success', text: 'Whitelabel branding settings saved successfully!' });
     } catch (err: any) {
