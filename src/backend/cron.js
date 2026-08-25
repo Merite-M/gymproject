@@ -3,6 +3,11 @@ const fetch = require('node-fetch');
 
 let isRunning = false;
 let isDailyRunning = false;
+let isNightlyRunning = false;
+
+/** Gateway fee rates */
+const PAYPACK_FEE_RATE = 0.0236;
+const MTN_MOMO_FEE_RATE = 0.0177;
 
 function initCron(supabase) {
     if (!supabase) {
@@ -303,6 +308,355 @@ function initCron(supabase) {
             console.error("Daily cron job exception:", e);
         } finally {
             isDailyRunning = false;
+        }
+    });
+
+/**
+ * Calculates start and end of day in UTC aligned with a tenant's local timezone.
+ * Returns local date string (YYYY-MM-DD), todayStart (UTC ISO), todayEnd (UTC ISO),
+ * monthStartISO (UTC ISO), and monthStartStr (YYYY-MM-DD).
+ */
+function getTenantDayBounds(timezone = 'Africa/Kigali') {
+    try {
+        const now = new Date();
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: timezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        const localDate = formatter.format(now); // "YYYY-MM-DD"
+
+        // Compute local timezone offset relative to UTC
+        const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+        const tzDate = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+        const offsetMs = tzDate.getTime() - utcDate.getTime();
+
+        const todayStart = new Date(new Date(`${localDate}T00:00:00.000Z`).getTime() - offsetMs).toISOString();
+        const todayEnd = new Date(new Date(`${localDate}T23:59:59.999Z`).getTime() - offsetMs).toISOString();
+
+        const monthStartStr = `${localDate.substring(0, 7)}-01`;
+        const monthStartISO = new Date(new Date(`${monthStartStr}T00:00:00.000Z`).getTime() - offsetMs).toISOString();
+
+        return { localDate, todayStart, todayEnd, monthStartISO, monthStartStr };
+    } catch (e) {
+        const today = new Date().toISOString().split('T')[0];
+        return {
+            localDate: today,
+            todayStart: `${today}T00:00:00.000Z`,
+            todayEnd: `${today}T23:59:59.999Z`,
+            monthStartISO: `${today.substring(0, 7)}-01T00:00:00.000Z`,
+            monthStartStr: `${today.substring(0, 7)}-01`
+        };
+    }
+}
+
+    // Nightly financial clearing, utilization & owner digest (23:59)
+    cron.schedule('59 23 * * *', async () => {
+        if (isNightlyRunning) {
+            console.log("Nightly clearing cron is already running. Skipping.");
+            return;
+        }
+
+        isNightlyRunning = true;
+        console.log("Running nightly financial clearing & utilization cron...");
+        try {
+            // Get all tenants with timezone
+            const { data: tenants, error: tenantError } = await supabase
+                .from('tenants')
+                .select('id, name, contact_email, timezone');
+
+            if (tenantError) {
+                console.error("[nightly-clearing] Error fetching tenants:", tenantError);
+                return;
+            }
+
+            if (!tenants || tenants.length === 0) {
+                console.log("[nightly-clearing] No tenants found.");
+                return;
+            }
+
+            for (const tenant of tenants) {
+                try {
+                    const bounds = getTenantDayBounds(tenant.timezone || 'Africa/Kigali');
+                    const today = bounds.localDate;
+                    const todayStart = bounds.todayStart;
+                    const todayEnd = bounds.todayEnd;
+                    const monthStartISO = bounds.monthStartISO;
+                    const monthStartStr = bounds.monthStartStr;
+
+                    console.log(`[nightly-clearing] Processing tenant: ${tenant.name} (${tenant.id}) [TZ: ${tenant.timezone || 'Africa/Kigali'}, Day: ${today}]`);
+
+                    // ─── 1. Financial Clearing ───
+                    const { data: todayPayments, error: payError } = await supabase
+                        .from('payments')
+                        .select('amount, method, status')
+                        .eq('tenant_id', tenant.id)
+                        .eq('status', 'completed')
+                        .gte('created_at', todayStart)
+                        .lte('created_at', todayEnd);
+
+                    if (payError) {
+                        console.error(`[nightly-clearing] Payment fetch error for ${tenant.id}:`, payError);
+                    }
+
+                    let grossRevenue = 0;
+                    let gatewayFees = 0;
+
+                    if (todayPayments && todayPayments.length > 0) {
+                        for (const p of todayPayments) {
+                            const amount = parseFloat(p.amount) || 0;
+                            grossRevenue += amount;
+
+                            // Calculate gateway fees based on payment method
+                            const method = (p.method || '').toLowerCase();
+                            if (method === 'momo' || method === 'mtn_momo' || method === 'airtel_money') {
+                                gatewayFees += amount * MTN_MOMO_FEE_RATE;
+                            } else if (method === 'paypack') {
+                                gatewayFees += amount * PAYPACK_FEE_RATE;
+                            }
+                            // cash, card, bank_transfer, member_tab have no gateway fee
+                        }
+                    }
+
+                    const netRevenue = grossRevenue - gatewayFees;
+
+                    // ─── 2. Utilization Matrix ───
+                    const { data: todayCheckins, error: checkinError } = await supabase
+                        .from('check_ins')
+                        .select('created_at')
+                        .eq('tenant_id', tenant.id)
+                        .gte('created_at', todayStart)
+                        .lte('created_at', todayEnd);
+
+                    if (checkinError) {
+                        console.error(`[nightly-clearing] Check-in fetch error for ${tenant.id}:`, checkinError);
+                    }
+
+                    const totalCheckIns = (todayCheckins || []).length;
+
+                    // Calculate peak hour
+                    const hourCounts = {};
+                    for (const ci of (todayCheckins || [])) {
+                        const hour = new Date(ci.created_at).getUTCHours();
+                        hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+                    }
+
+                    let peakHour = null;
+                    let peakHourCount = 0;
+                    for (const [hour, count] of Object.entries(hourCounts)) {
+                        if (count > peakHourCount) {
+                            peakHour = parseInt(hour);
+                            peakHourCount = count;
+                        }
+                    }
+
+                    // ─── 3. KPI Calculations ───
+                    // Active members count
+                    const { count: activeMemberCount, error: memberCountError } = await supabase
+                        .from('profiles')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('tenant_id', tenant.id)
+                        .eq('role', 'member')
+                        .eq('status', 'active');
+
+                    if (memberCountError) {
+                        console.error(`[nightly-clearing] Member count error for ${tenant.id}:`, memberCountError);
+                    }
+
+                    const activeMembers = activeMemberCount || 0;
+
+                    // MRR: sum of active membership prices
+                    const { data: activeMemberships, error: mrrError } = await supabase
+                        .from('memberships')
+                        .select('price, billing_interval')
+                        .eq('tenant_id', tenant.id)
+                        .eq('status', 'active');
+
+                    if (mrrError) {
+                        console.error(`[nightly-clearing] MRR fetch error for ${tenant.id}:`, mrrError);
+                    }
+
+                    let mrr = 0;
+                    if (activeMemberships) {
+                        for (const m of activeMemberships) {
+                            const price = parseFloat(m.price) || 0;
+                            const interval = (m.billing_interval || 'monthly').toLowerCase();
+                            if (interval === 'yearly' || interval === 'annual') {
+                                mrr += price / 12;
+                            } else if (interval === 'quarterly') {
+                                mrr += price / 3;
+                            } else if (interval === 'weekly') {
+                                mrr += price * 4.33;
+                            } else {
+                                // monthly (default)
+                                mrr += price;
+                            }
+                        }
+                    }
+
+                    const arpu = activeMembers > 0 ? mrr / activeMembers : 0;
+
+                    // Churn rate: members cancelled this month / active at start of month
+                    // 1. Primary check on cancelled_at (full ISO timestamp populated by member-crm.js)
+                    const { count: cancelledByTimestamp, error: churnError1 } = await supabase
+                        .from('memberships')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('tenant_id', tenant.id)
+                        .eq('status', 'cancelled')
+                        .gte('cancelled_at', monthStartISO)
+                        .lte('cancelled_at', todayEnd);
+
+                    let cancelledCount = cancelledByTimestamp || 0;
+
+                    // 2. Fallback check: legacy records where cancelled_at is null, check end_date
+                    if (!churnError1) {
+                        const { count: cancelledByEndDate, error: churnError2 } = await supabase
+                            .from('memberships')
+                            .select('id', { count: 'exact', head: true })
+                            .eq('tenant_id', tenant.id)
+                            .eq('status', 'cancelled')
+                            .is('cancelled_at', null)
+                            .gte('end_date', monthStartStr)
+                            .lte('end_date', today);
+
+                        if (!churnError2 && cancelledByEndDate) {
+                            cancelledCount += cancelledByEndDate;
+                        }
+                    } else {
+                        console.error(`[nightly-clearing] Churn calculation error for ${tenant.id}:`, churnError1);
+                    }
+
+                    const totalMemberBase = activeMembers + (cancelledCount || 0);
+                    const churnRatePct = totalMemberBase > 0
+                        ? ((cancelledCount || 0) / totalMemberBase) * 100
+                        : 0;
+
+                    // Average occupancy: check-ins / (active_members * operating_hours ~16h)
+                    const operatingHours = 16;
+                    const avgOccupancyPct = activeMembers > 0
+                        ? Math.min(100, (totalCheckIns / (activeMembers * operatingHours)) * 100)
+                        : 0;
+
+                    // ─── 4. Store Tenant Snapshot ───
+                    const { error: snapError } = await supabase
+                        .from('analytics_snapshots')
+                        .upsert({
+                            tenant_id: tenant.id,
+                            profile_id: null,
+                            snapshot_date: today,
+                            snapshot_type: 'tenant',
+                            gross_revenue: Math.round(grossRevenue * 100) / 100,
+                            gateway_fees: Math.round(gatewayFees * 100) / 100,
+                            net_revenue: Math.round(netRevenue * 100) / 100,
+                            total_check_ins: totalCheckIns,
+                            peak_hour: peakHour,
+                            peak_hour_count: peakHourCount,
+                            avg_occupancy_pct: Math.round(avgOccupancyPct * 100) / 100,
+                            active_members: activeMembers,
+                            mrr: Math.round(mrr * 100) / 100,
+                            arpu: Math.round(arpu * 100) / 100,
+                            churn_rate_pct: Math.round(churnRatePct * 100) / 100,
+                            trailing_4wk_avg_visits: 0,
+                            current_wk_visits: 0
+                        }, { onConflict: 'tenant_id,snapshot_date,snapshot_type' })
+                        .eq('snapshot_type', 'tenant');
+
+                    if (snapError) {
+                        // Fallback: try insert (upsert may fail without unique constraint)
+                        console.warn(`[nightly-clearing] Upsert failed for ${tenant.id}, falling back to insert:`, snapError.message);
+                        const { error: insertError } = await supabase
+                            .from('analytics_snapshots')
+                            .insert({
+                                tenant_id: tenant.id,
+                                profile_id: null,
+                                snapshot_date: today,
+                                snapshot_type: 'tenant',
+                                gross_revenue: Math.round(grossRevenue * 100) / 100,
+                                gateway_fees: Math.round(gatewayFees * 100) / 100,
+                                net_revenue: Math.round(netRevenue * 100) / 100,
+                                total_check_ins: totalCheckIns,
+                                peak_hour: peakHour,
+                                peak_hour_count: peakHourCount,
+                                avg_occupancy_pct: Math.round(avgOccupancyPct * 100) / 100,
+                                active_members: activeMembers,
+                                mrr: Math.round(mrr * 100) / 100,
+                                arpu: Math.round(arpu * 100) / 100,
+                                churn_rate_pct: Math.round(churnRatePct * 100) / 100,
+                                trailing_4wk_avg_visits: 0,
+                                current_wk_visits: 0
+                            });
+
+                        if (insertError) {
+                            console.error(`[nightly-clearing] Insert snapshot error for ${tenant.id}:`, insertError);
+                        }
+                    }
+
+                    // ─── 5. Queue Owner Digest Email ───
+                    const ownerEmail = tenant.contact_email;
+                    if (ownerEmail) {
+                        const peakHourLabel = peakHour !== null ? `${peakHour}:00–${peakHour + 1}:00` : 'N/A';
+                        const digestContent = [
+                            `📊 Daily Executive Summary — ${tenant.name}`,
+                            `Date: ${today}`,
+                            ``,
+                            `💰 FINANCIAL CLEARING`,
+                            `  Gross Revenue: ${grossRevenue.toFixed(2)} RWF`,
+                            `  Gateway Fees:  ${gatewayFees.toFixed(2)} RWF`,
+                            `  Net Revenue:   ${netRevenue.toFixed(2)} RWF`,
+                            ``,
+                            `🏋️ FACILITY UTILIZATION`,
+                            `  Total Check-Ins: ${totalCheckIns}`,
+                            `  Peak Hour: ${peakHourLabel} (${peakHourCount} check-ins)`,
+                            `  Avg Occupancy: ${avgOccupancyPct.toFixed(1)}%`,
+                            ``,
+                            `📈 KEY PERFORMANCE INDICATORS`,
+                            `  MRR: ${mrr.toFixed(0)} RWF`,
+                            `  ARPU: ${arpu.toFixed(0)} RWF`,
+                            `  Active Members: ${activeMembers}`,
+                            `  Monthly Churn Rate: ${churnRatePct.toFixed(1)}%`,
+                        ].join('\n');
+
+                        const { error: notifError } = await supabase
+                            .from('notification_queue')
+                            .insert({
+                                tenant_id: tenant.id,
+                                profile_id: null,
+                                channel: 'email',
+                                recipient: ownerEmail,
+                                subject: `Daily Summary — ${tenant.name} — ${today}`,
+                                content: digestContent,
+                                status: 'pending'
+                            });
+
+                        if (notifError) {
+                            console.error(`[nightly-clearing] Digest queue error for ${tenant.id}:`, notifError);
+                        } else {
+                            // Mark digest as sent in snapshot
+                            await supabase
+                                .from('analytics_snapshots')
+                                .update({ digest_sent_at: new Date().toISOString() })
+                                .eq('tenant_id', tenant.id)
+                                .eq('snapshot_date', today)
+                                .eq('snapshot_type', 'tenant');
+
+                            console.log(`[nightly-clearing] Digest queued for ${tenant.name} → ${ownerEmail}`);
+                        }
+                    } else {
+                        console.log(`[nightly-clearing] No contact_email for tenant ${tenant.name}, skipping digest.`);
+                    }
+
+                    console.log(`[nightly-clearing] ✓ ${tenant.name}: gross=${grossRevenue.toFixed(2)}, fees=${gatewayFees.toFixed(2)}, net=${netRevenue.toFixed(2)}, checkins=${totalCheckIns}, MRR=${mrr.toFixed(0)}, churn=${churnRatePct.toFixed(1)}%`);
+
+                } catch (tenantError) {
+                    console.error(`[nightly-clearing] Error processing tenant ${tenant.id}:`, tenantError);
+                }
+            }
+
+        } catch (e) {
+            console.error("[nightly-clearing] Cron job exception:", e);
+        } finally {
+            isNightlyRunning = false;
         }
     });
 
