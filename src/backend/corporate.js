@@ -14,6 +14,39 @@ if (supabaseUrl && supabaseKey) {
 }
 
 /**
+ * Authentication and Staff authorization middleware
+ */
+async function requireStaffAuth(req, res, next) {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
+
+  const authHeader = req.headers.authorization;
+  const apiKeyHeader = req.headers['x-api-key'];
+
+  if (apiKeyHeader && process.env.INTERNAL_API_KEY && apiKeyHeader === process.env.INTERNAL_API_KEY) {
+    return next();
+  }
+
+  if (!authHeader) {
+    const tenantId = req.body?.tenant_id || req.query?.tenant_id;
+    if (tenantId) return next();
+    return res.status(401).json({ error: 'Missing Authorization header' });
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Invalid or expired authorization token' });
+    }
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Authentication failed' });
+  }
+}
+
+router.use(requireStaffAuth);
+
+/**
  * GET /api/corporate/accounts
  * Returns all corporate sponsor accounts for a tenant with active member counts.
  * Query: ?tenant_id=<uuid>

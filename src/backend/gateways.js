@@ -2,41 +2,64 @@ const fetch = require('node-fetch');
 require('dotenv').config();
 
 /**
- * Normalizes African / East African phone numbers into clean E.164 format (+250788...)
+ * Accurately normalizes East African and international mobile numbers into E.164 format.
+ * Accurately distinguishes Rwandan (078, 079, 072, 073), Kenyan (070, 071, 074, 075, 076, 010, 011), and Ugandan prefixes.
  */
-function normalizePhoneNumber(rawPhone) {
+function normalizePhoneNumber(rawPhone, defaultCountry = 'RW') {
   if (!rawPhone) return '';
-  let cleaned = String(rawPhone).replace(/[^\d+]/g, '');
+  let cleaned = String(rawPhone).trim().replace(/[^\d+]/g, '');
 
   if (cleaned.startsWith('+')) {
     return cleaned;
   }
 
-  // Rwandan local format (e.g. 0788123456 or 0728123456 or 0738123456)
-  if (cleaned.startsWith('07') && cleaned.length === 10) {
-    return `+250${cleaned.substring(1)}`;
-  }
-
-  // Rwandan standard without plus (250788123456)
+  // Already prefixed with country code without '+'
   if (cleaned.startsWith('250') && cleaned.length === 12) {
     return `+${cleaned}`;
   }
-
-  // Kenyan format (07... / 01... -> +254...)
-  if ((cleaned.startsWith('07') || cleaned.startsWith('01')) && cleaned.length === 10) {
-    return `+254${cleaned.substring(1)}`;
+  if (cleaned.startsWith('254') && cleaned.length === 12) {
+    return `+${cleaned}`;
   }
-
-  // Ugandan format (07... -> +256...)
   if (cleaned.startsWith('256') && cleaned.length === 12) {
     return `+${cleaned}`;
   }
 
-  if (!cleaned.startsWith('+')) {
-    return `+${cleaned}`;
+  // 10-digit local format starting with 0
+  if (cleaned.length === 10 && cleaned.startsWith('0')) {
+    const prefix3 = cleaned.substring(0, 3);
+
+    // Kenyan exclusive mobile prefixes (010, 011, 070, 071, 074, 075, 076)
+    if (['010', '011', '070', '071', '074', '075', '076'].includes(prefix3)) {
+      return `+254${cleaned.substring(1)}`;
+    }
+
+    // Ugandan exclusive mobile prefix (077)
+    if (prefix3 === '077') {
+      return `+256${cleaned.substring(1)}`;
+    }
+
+    // Rwandan exclusive/predominant prefixes (078, 079, 072, 073)
+    if (['078', '079', '072', '073'].includes(prefix3)) {
+      if (defaultCountry === 'UG' && prefix3 === '078') {
+        return `+256${cleaned.substring(1)}`;
+      }
+      return `+250${cleaned.substring(1)}`;
+    }
+
+    // Fallback based on tenant default country
+    if (defaultCountry === 'KE') return `+254${cleaned.substring(1)}`;
+    if (defaultCountry === 'UG') return `+256${cleaned.substring(1)}`;
+    return `+250${cleaned.substring(1)}`;
   }
 
-  return cleaned;
+  // 9-digit local format (without leading 0, e.g. 788123456)
+  if (cleaned.length === 9 && cleaned.startsWith('7')) {
+    if (defaultCountry === 'KE') return `+254${cleaned}`;
+    if (defaultCountry === 'UG') return `+256${cleaned}`;
+    return `+250${cleaned}`;
+  }
+
+  return `+${cleaned}`;
 }
 
 /**

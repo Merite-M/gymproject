@@ -115,9 +115,9 @@ export default function MemberProfileClient({
           .select(`
             *,
             master:master_account_id(id, first_name, last_name),
-            dependent:dependent_id(id, first_name, last_name)
+            dependent:dependent_account_id(id, first_name, last_name)
           `)
-          .or(`master_account_id.eq.${resolvedParams.id},dependent_id.eq.${resolvedParams.id}`);
+          .or(`master_account_id.eq.${resolvedParams.id},dependent_account_id.eq.${resolvedParams.id}`);
         if (famError) console.error("Family links fetch error:", famError);
         setFamilyLinks(famData || []);
 
@@ -152,15 +152,22 @@ export default function MemberProfileClient({
     };
 
     fetchMemberData();
-  }, [tenantId, resolvedParams.id]);
+  }, [resolvedParams.id, tenantId]);
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const { error } = await supabase
         .from("profiles")
-        .update(editFormData)
-        .eq("id", profile.id)
+        .update({
+          first_name: editFormData.first_name,
+          last_name: editFormData.last_name,
+          phone: editFormData.phone,
+          status: editFormData.status,
+          pin_code: editFormData.pin_code,
+          medical_clearance: editFormData.medical_clearance,
+        })
+        .eq("id", resolvedParams.id)
         .eq("tenant_id", tenantId);
 
       if (error) throw error;
@@ -171,12 +178,20 @@ export default function MemberProfileClient({
     }
   };
 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
   const handleHoldAction = async (holdId: string, action: string) => {
     try {
-      const res = await fetch(`/api/members/holds/${holdId}/${action}`, {
-        method: "POST",
+      let status = action;
+      if (action === 'approve') status = 'approved';
+      if (action === 'deny') status = 'denied';
+      if (action === 'end') status = 'ended';
+      if (action === 'cancel') status = 'cancelled';
+
+      const res = await fetch(`${API_URL}/api/membership-holds/${holdId}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenant_id: tenantId }),
+        body: JSON.stringify({ tenant_id: tenantId, status }),
       });
       if (!res.ok) throw new Error(await res.text());
 
@@ -194,10 +209,15 @@ export default function MemberProfileClient({
 
   const handleHoldSubmit = async (formData: any) => {
     try {
-      const res = await fetch(`/api/members/${resolvedParams.id}/holds`, {
+      const res = await fetch(`${API_URL}/api/membership-holds`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, tenant_id: tenantId }),
+        body: JSON.stringify({
+          ...formData,
+          tenant_id: tenantId,
+          profile_id: resolvedParams.id,
+          membership_id: memberships[0]?.id
+        }),
       });
       if (!res.ok) throw new Error(await res.text());
 

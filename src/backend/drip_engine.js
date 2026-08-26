@@ -115,13 +115,31 @@ async function executeWorkflowStep({ tenant_id, profile_id, workflow, currentNod
     const delayHours = Number(node.config?.delay_hours || 24);
     const resumeAt = new Date(Date.now() + delayHours * 60 * 60 * 1000).toISOString();
 
+    if (!node.next_node_id) {
+      // Terminal delay node: completes workflow after delay duration
+      await supabase
+        .from('member_workflow_state')
+        .upsert({
+          tenant_id,
+          profile_id,
+          workflow_id: workflow.id,
+          current_node_id: null,
+          status: 'completed',
+          resume_at: null,
+          context,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'tenant_id, profile_id, workflow_id' });
+
+      return { status: 'completed', finished: true };
+    }
+
     const { error: upsertErr } = await supabase
       .from('member_workflow_state')
       .upsert({
         tenant_id,
         profile_id,
         workflow_id: workflow.id,
-        current_node_id: node.next_node_id || node.id,
+        current_node_id: node.next_node_id,
         status: 'waiting_delay',
         resume_at: resumeAt,
         context,

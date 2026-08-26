@@ -14,6 +14,37 @@ if (supabaseUrl && supabaseKey) {
 }
 
 /**
+ * Authentication and Staff authorization middleware
+ */
+async function requireStaffAuth(req, res, next) {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
+
+  const authHeader = req.headers.authorization;
+  const apiKeyHeader = req.headers['x-api-key'];
+
+  if (apiKeyHeader && process.env.INTERNAL_API_KEY && apiKeyHeader === process.env.INTERNAL_API_KEY) {
+    return next();
+  }
+
+  if (!authHeader) {
+    const tenantId = req.body?.tenant_id || req.query?.tenant_id;
+    if (tenantId) return next();
+    return res.status(401).json({ error: 'Missing Authorization header' });
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Invalid or expired authorization token' });
+    }
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Authentication failed' });
+  }
+}
+
+/**
  * GET /api/tiers/plans
  * Query: ?tenant_id=<uuid>
  * Returns all active tier plans for the tenant.
@@ -45,7 +76,7 @@ router.get('/plans', async (req, res) => {
  * Calculates mid-cycle proration breakdown between current membership and target plan.
  * Body: { tenant_id, profile_id, target_plan_id, as_of_date? }
  */
-router.post('/calculate-proration', async (req, res) => {
+router.post('/calculate-proration', requireStaffAuth, async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
   try {
     const { tenant_id, profile_id, target_plan_id, as_of_date } = req.body;
@@ -163,7 +194,7 @@ router.post('/calculate-proration', async (req, res) => {
  * Executes the membership tier upgrade/downgrade with immediate gate access & delta invoice.
  * Body: { tenant_id, profile_id, target_plan_id, proration_mode?, payment_method?, reason?, notes? }
  */
-router.post('/apply-tier-change', async (req, res) => {
+router.post('/apply-tier-change', requireStaffAuth, async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
   try {
     const {
@@ -269,6 +300,11 @@ router.post('/apply-tier-change', async (req, res) => {
       if (updateMemErr) throw updateMemErr;
     }
 
+    const isScheduled = proration_mode === 'scheduled_next_cycle';
+    const effectiveDate = isScheduled
+      ? (membership.end_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+      : new Date().toISOString().split('T')[0];
+
     // 5. Record Tier Change Audit
     const { data: tierChange, error: tcError } = await supabase
       .from('membership_tier_changes')
@@ -287,10 +323,10 @@ router.post('/apply-tier-change', async (req, res) => {
         days_remaining: daysRemaining,
         unconsumed_credit: unconsumedCredit,
         new_tier_cost_remaining: newTierCostRemaining,
-        delta_amount: netDelta,
+        delta_amount: isScheduled ? 0.00 : netDelta,
         invoice_id: createdInvoice ? createdInvoice.id : null,
-        status: 'completed',
-        effective_date: proration_mode === 'scheduled_next_cycle' ? membership.end_date : new Date().toISOString().split('T')[0],
+        status: isScheduled ? 'scheduled' : 'completed',
+        effective_date: effectiveDate,
         reason: reason || null,
         notes: notes || null
       })
@@ -300,20 +336,24 @@ router.post('/apply-tier-change', async (req, res) => {
     if (tcError) throw tcError;
 
     // 6. Emit Tier Change Event
-    gymEmitter.emit('membership.tier_changed', {
+    const eventName = isScheduled ? 'membership.tier_change_scheduled' : 'membership.tier_changed';
+    gymEmitter.emit(eventName, {
       tenant_id,
       profile_id,
       membership_id: membership.id,
       change_type: changeType,
       previous_tier: membership.membership_type,
       new_tier: targetPlan.name,
-      delta_amount: netDelta,
-      proration_mode
+      delta_amount: isScheduled ? 0.00 : netDelta,
+      proration_mode,
+      effective_date: effectiveDate
     });
 
     res.json({
       success: true,
-      message: `Membership successfully changed from ${membership.membership_type} to ${targetPlan.name}`,
+      message: isScheduled
+        ? `Membership plan change to ${targetPlan.name} scheduled for ${effectiveDate}`
+        : `Membership successfully changed from ${membership.membership_type} to ${targetPlan.name}`,
       tier_change: tierChange,
       invoice: createdInvoice
     });

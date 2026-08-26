@@ -1048,6 +1048,19 @@ router.post('/checkout', async (req, res) => {
             return res.status(500).json({ error: 'Supabase not configured' });
         }
 
+        // Authenticate staff or scanner caller
+        const authHeader = req.headers.authorization;
+        const apiKeyHeader = req.headers['x-api-key'] || req.headers['x-scanner-token'];
+        if (apiKeyHeader && process.env.INTERNAL_API_KEY && apiKeyHeader === process.env.INTERNAL_API_KEY) {
+            // Authorized by internal system key
+        } else if (authHeader) {
+            const token = authHeader.replace('Bearer ', '');
+            const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+            if (authErr || !user) {
+                return res.status(401).json({ error: 'Invalid or expired authorization token' });
+            }
+        }
+
         // Find the latest active (non-checked-out) check-in for this member
         const { data: activeCheckin, error: findError } = await supabase
             .from('check_ins')

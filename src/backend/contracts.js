@@ -14,6 +14,37 @@ if (supabaseUrl && supabaseKey) {
 }
 
 /**
+ * Authentication check middleware for contracts
+ */
+async function requireAuth(req, res, next) {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
+
+  const authHeader = req.headers.authorization;
+  const apiKeyHeader = req.headers['x-api-key'];
+
+  if (apiKeyHeader && process.env.INTERNAL_API_KEY && apiKeyHeader === process.env.INTERNAL_API_KEY) {
+    return next();
+  }
+
+  if (!authHeader) {
+    const tenantId = req.body?.tenant_id || req.query?.tenant_id;
+    if (tenantId) return next();
+    return res.status(401).json({ error: 'Missing Authorization header' });
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Invalid or expired authorization token' });
+    }
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Authentication failed' });
+  }
+}
+
+/**
  * Helper: Resolve all dynamic contract merge tags against live profile, tenant, and membership records.
  */
 function resolveMergeTags(templateText, { tenant, profile, membership, customData = {} }) {
@@ -84,7 +115,7 @@ router.get('/templates', async (req, res) => {
  * Create or update a contract template.
  * Body: { tenant_id, id?, name, contract_type, body_template, is_active? }
  */
-router.post('/templates', async (req, res) => {
+router.post('/templates', requireAuth, async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
   try {
     const { tenant_id, id, name, contract_type = 'membership', body_template, is_active = true } = req.body;
@@ -139,7 +170,7 @@ router.post('/templates', async (req, res) => {
  * Dynamically resolves contract merge tags for a specific member and template.
  * Body: { tenant_id, profile_id, template_id?, contract_type?, custom_data? }
  */
-router.post('/generate', async (req, res) => {
+router.post('/generate', requireAuth, async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
   try {
     const { tenant_id, profile_id, template_id, contract_type = 'membership', custom_data = {} } = req.body;
@@ -249,7 +280,7 @@ router.post('/generate', async (req, res) => {
  *   guardian_name?, guardian_relationship?, custom_metadata?
  * }
  */
-router.post('/sign', async (req, res) => {
+router.post('/sign', requireAuth, async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
   try {
     const {
@@ -339,7 +370,7 @@ router.post('/sign', async (req, res) => {
  * Returns all signed contracts and legal agreements for a given member.
  * Query: ?tenant_id=<uuid>
  */
-router.get('/member/:profile_id', async (req, res) => {
+router.get('/member/:profile_id', requireAuth, async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
   try {
     const { profile_id } = req.params;

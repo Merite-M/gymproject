@@ -442,13 +442,14 @@ app.post("/api/kiosk/checkin", async (req, res) => {
     }
 
     if (!profile) {
-      let query = supabase
+      const cleanDigits = term.replace(/[^\d]/g, '');
+      const searchPattern = cleanDigits.length >= 6 ? cleanDigits.slice(-7) : cleanDigits;
+      
+      const { data: phoneProfiles } = await supabase
         .from("profiles")
         .select("*")
-        .eq("tenant_id", tenant_id);
-      
-      const { data: phoneProfiles } = await query
-        .eq("phone", term)
+        .eq("tenant_id", tenant_id)
+        .or(`phone.eq.${term},phone.ilike.%${searchPattern}%`)
         .limit(1);
 
       if (phoneProfiles && phoneProfiles.length > 0) {
