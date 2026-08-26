@@ -297,6 +297,7 @@ app.use("/api/members", memberCrmRoutes);
 
 const publicRoutes = require("./public");
 app.use("/api/public", publicRoutes);
+app.use("/widgets", publicRoutes);
 
 const syncRoutes = require("./sync");
 app.use("/api/sync", syncRoutes);
