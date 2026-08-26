@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { useTenantId } from "@/contexts/AuthContext";
-import { Search } from "lucide-react";
+import { Search, User } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -40,7 +41,8 @@ export default function MembersLayout({
         let query = supabase
           .from("profiles")
           .select("id, first_name, last_name, status")
-          .eq("tenant_id", tenantId);
+          .eq("tenant_id", tenantId)
+          .order("first_name", { ascending: true });
         const { data, error } = await query;
         if (!error && data) {
           setProfiles(data);
@@ -54,7 +56,7 @@ export default function MembersLayout({
   }, [tenantId]);
 
   const filteredProfiles = profiles.filter((p) => {
-    const matchesSearch = (p.first_name + " " + p.last_name)
+    const matchesSearch = `${p.first_name || ""} ${p.last_name || ""}`
       .toLowerCase()
       .includes(searchQuery.toLowerCase());
     const matchesFilter =
@@ -67,20 +69,25 @@ export default function MembersLayout({
   });
 
   return (
-    <div className="flex h-screen bg-canvas-bg font-body-base overflow-hidden">
+    <div className="flex h-screen bg-background text-foreground font-body-base overflow-hidden">
       {/* Master List (Left Pane) */}
-      <div className="w-1/3 min-w-[320px] max-w-[400px] bg-white border-r border-gray-200 flex flex-col h-full z-10">
-        <div className="p-6 border-b border-gray-100 flex-shrink-0">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">Directory</h1>
+      <div className="w-1/3 min-w-[320px] max-w-[380px] bg-surface border-r border-border flex flex-col h-full z-10">
+        <div className="p-5 border-b border-border flex-shrink-0 space-y-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-heading font-bold text-foreground">Member Directory</h1>
+            <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
+              {filteredProfiles.length} Members
+            </Badge>
+          </div>
 
-          <div className="relative mb-6">
+          <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-5 w-5 text-gray-400" />
+              <Search className="h-4 w-4 text-muted-foreground" />
             </div>
             <input
               type="text"
-              placeholder="Search members..."
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              placeholder="Search by name..."
+              className="block w-full pl-9 pr-3 py-2 border border-border rounded-lg leading-5 bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-xs"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -91,10 +98,10 @@ export default function MembersLayout({
               <button
                 key={f}
                 onClick={() => setFilter(f as any)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
                   filter === f
-                    ? "bg-primary text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    ? "bg-primary text-primary-foreground font-bold"
+                    : "bg-surface-container text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {f}
@@ -103,50 +110,51 @@ export default function MembersLayout({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          <ul className="divide-y divide-gray-100">
-            {filteredProfiles.map((profile) => {
-              const isActive = pathname.includes(`/members/${profile.id}`);
-              return (
-                <li key={profile.id}>
-                  <Link
-                    href={`/members/${profile.id}`}
-                    className={`block hover:bg-gray-50 transition-colors ${isActive ? "bg-indigo-50/50 border-l-4 border-indigo-600" : "border-l-4 border-transparent"}`}
-                  >
-                    <div className="px-6 py-4 flex items-center">
-                      <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                        <span className="text-indigo-700 font-medium text-sm">
-                          {profile.first_name[0]}
-                          {profile.last_name[0]}
-                        </span>
-                      </div>
-                      <div className="ml-4 flex-1">
-                        <div className="text-sm font-medium text-gray-900">
-                          {profile.first_name} {profile.last_name}
-                        </div>
-                        <div className="text-xs text-gray-500 flex items-center mt-1">
-                          <span
-                            className={`inline-block w-2 h-2 rounded-full mr-2 ${profile.status === "active" ? "bg-green-500" : "bg-red-500"}`}
-                          ></span>
-                          {profile.status === "active" ? "Active" : "Inactive"}
-                        </div>
-                      </div>
+        <div className="flex-1 overflow-y-auto divide-y divide-border/40">
+          {filteredProfiles.map((profile) => {
+            const isActive = pathname.includes(`/members/${profile.id}`);
+            return (
+              <Link
+                key={profile.id}
+                href={`/members/${profile.id}`}
+                className={`block transition-colors ${
+                  isActive
+                    ? "bg-primary/10 border-l-4 border-primary"
+                    : "hover:bg-surface-container/50 border-l-4 border-transparent"
+                }`}
+              >
+                <div className="px-5 py-3.5 flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-primary/15 text-primary flex items-center justify-center flex-shrink-0 font-bold text-xs font-mono">
+                    {profile.first_name?.[0] || ""}
+                    {profile.last_name?.[0] || ""}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold text-foreground truncate">
+                      {profile.first_name} {profile.last_name}
                     </div>
-                  </Link>
-                </li>
-              );
-            })}
-            {filteredProfiles.length === 0 && (
-              <li className="px-6 py-8 text-center text-gray-500 text-sm">
-                No members found.
-              </li>
-            )}
-          </ul>
+                    <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                      <span
+                        className={`size-1.5 rounded-full ${
+                          profile.status === "active" ? "bg-status-cleared" : "bg-status-blocked"
+                        }`}
+                      />
+                      <span className="capitalize">{profile.status || "active"}</span>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+          {filteredProfiles.length === 0 && (
+            <div className="px-6 py-12 text-center text-muted-foreground text-xs">
+              No members found matching filter.
+            </div>
+          )}
         </div>
       </div>
 
       {/* Detail View (Right Pane) */}
-      <div className="flex-1 overflow-y-auto bg-gray-50">{children}</div>
+      <div className="flex-1 overflow-y-auto bg-background">{children}</div>
     </div>
   );
 }

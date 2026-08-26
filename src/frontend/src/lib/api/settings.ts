@@ -48,12 +48,19 @@ export interface MultiBranchSettings {
   };
 }
 
+export interface CapacitySettings {
+  max_occupancy_limit: number;
+  auto_checkout_minutes: number;
+  capacity_policy: 'warning' | 'hard';
+}
+
 export interface TenantSettingsResponse {
   branding: BrandingSettings;
   gateways: GatewayStatus;
   hardware: HardwareSettings;
   regional: RegionalSettings;
   multibranch: MultiBranchSettings;
+  capacity?: CapacitySettings;
 }
 
 export interface TestGatewayResponse {
@@ -287,6 +294,35 @@ export async function uploadTenantLogo(
 
   if (!res.ok) {
     throw new Error(`[uploadTenantLogo] ${res.status}: ${await res.text()}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Update capacity / occupancy settings (max limit, auto-checkout, policy).
+ */
+export async function updateCapacitySettings(
+  tenantId: string,
+  capacity: CapacitySettings
+): Promise<{ success: boolean; capacity: CapacitySettings }> {
+  const token = await getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/api/admin/settings/capacity`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      tenant_id: tenantId,
+      max_occupancy_limit: capacity.max_occupancy_limit,
+      auto_checkout_minutes: capacity.auto_checkout_minutes,
+      capacity_policy: capacity.capacity_policy
+    })
+  });
+
+  if (!res.ok) {
+    throw new Error(`[updateCapacitySettings] ${res.status}: ${await res.text()}`);
   }
 
   return res.json();

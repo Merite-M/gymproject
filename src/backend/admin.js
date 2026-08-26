@@ -424,6 +424,11 @@ router.get('/settings', async (req, res) => {
             multibranch: {
                 operating_hours: tenant.operating_hours || '',
                 branch_roaming_config: tenant.branch_roaming_config || {}
+            },
+            capacity: {
+                max_occupancy_limit: tenant.max_occupancy_limit ?? 150,
+                auto_checkout_minutes: tenant.auto_checkout_minutes ?? 120,
+                capacity_policy: tenant.capacity_policy || 'warning'
             }
         });
     } catch (error) {
@@ -729,6 +734,69 @@ router.put('/settings/multibranch', async (req, res) => {
         });
     } catch (error) {
         console.error("[settings/multibranch] error:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * PUT /api/admin/settings/capacity
+ * Update capacity / occupancy management settings.
+ * Body: tenant_id, max_occupancy_limit, auto_checkout_minutes, capacity_policy
+ */
+router.put('/settings/capacity', async (req, res) => {
+    if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
+    try {
+        const { tenant_id, max_occupancy_limit, auto_checkout_minutes, capacity_policy } = req.body;
+
+        if (!tenant_id) {
+            return res.status(400).json({ error: 'Missing tenant_id' });
+        }
+
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            return res.status(401).json({ error: 'Missing Authorization header' });
+        }
+
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+        if (authError || !user) {
+            return res.status(401).json({ error: 'Invalid or expired token' });
+        }
+
+        const tenantAccess = await validateAdminTenantAccess(user.id, tenant_id);
+        if (tenantAccess.error) {
+            return res.status(tenantAccess.status).json({ error: tenantAccess.error });
+        }
+
+        // Validate inputs
+        const maxOccupancy = parseInt(max_occupancy_limit) || 150;
+        const autoCheckout = parseInt(auto_checkout_minutes) || 120;
+        const policy = ['warning', 'hard'].includes(capacity_policy) ? capacity_policy : 'warning';
+
+        const { data: tenant, error: updateError } = await supabase
+            .from('tenants')
+            .update({
+                max_occupancy_limit: Math.max(1, maxOccupancy),
+                auto_checkout_minutes: Math.max(15, autoCheckout),
+                capacity_policy: policy,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', tenant_id)
+            .select()
+            .single();
+
+        if (updateError) throw updateError;
+
+        res.json({
+            success: true,
+            capacity: {
+                max_occupancy_limit: tenant.max_occupancy_limit,
+                auto_checkout_minutes: tenant.auto_checkout_minutes,
+                capacity_policy: tenant.capacity_policy
+            }
+        });
+    } catch (error) {
+        console.error("[settings/capacity] error:", error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

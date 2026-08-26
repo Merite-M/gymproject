@@ -131,6 +131,29 @@ async function checkAntiPassback(profile_id, tenant_id) {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── Live Occupancy Helper ───────────────────────────────────────────────────
+// Returns the count of members currently inside the gym:
+// checked-in (approved/warning), not yet checked out, and within the
+// auto-checkout window.
+async function getLiveOccupancy(tenant_id, autoCheckoutMinutes = 120) {
+  const windowStart = new Date(Date.now() - autoCheckoutMinutes * 60 * 1000).toISOString();
+
+  const { count, error } = await supabase
+    .from('check_ins')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenant_id)
+    .in('status', ['approved', 'warning'])
+    .is('checkout_at', null)
+    .gte('created_at', windowStart);
+
+  if (error) {
+    console.error('[getLiveOccupancy] error:', error);
+    return 0;
+  }
+  return count || 0;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 router.post('/unlock', async (req, res) => {
     try {
         const { tenant_id, profile_id, device_id, access_method, geofence_verified } = req.body;
@@ -251,6 +274,57 @@ router.post('/unlock', async (req, res) => {
                     status: 'denied_anti_passback',
                     reason: `Anti-passback: entry already recorded ${Math.round((Date.now() - new Date(recentCheckin.created_at).getTime()) / 1000)}s ago. Please wait ${ANTI_PASSBACK_WINDOW_MS / 1000}s between scans.`
                 });
+            }
+        }
+        // ────────────────────────────────────────────────────────────────────
+
+        // ── Capacity Gating ──────────────────────────────────────────────────
+        if (finalStatus === 'approved' || finalStatus === 'warning') {
+            const { data: tenantCap } = await supabase
+                .from('tenants')
+                .select('max_occupancy_limit, auto_checkout_minutes, capacity_policy')
+                .eq('id', tenant_id)
+                .single();
+
+            if (tenantCap && tenantCap.max_occupancy_limit > 0) {
+                const currentOccupancy = await getLiveOccupancy(tenant_id, tenantCap.auto_checkout_minutes || 120);
+                if (currentOccupancy >= tenantCap.max_occupancy_limit) {
+                    if (tenantCap.capacity_policy === 'hard') {
+                        // Hard gate: deny entry
+                        await supabase.from('check_ins').insert({
+                            tenant_id,
+                            profile_id,
+                            device_id,
+                            access_method: access_method || 'manual_override',
+                            status: 'denied_capacity'
+                        });
+
+                        gymEmitter.emit('capacity.full', {
+                            tenant_id,
+                            profile_id,
+                            current_occupancy: currentOccupancy,
+                            max_limit: tenantCap.max_occupancy_limit
+                        });
+
+                        return res.status(403).json({
+                            success: false,
+                            status: 'denied_capacity',
+                            reason: `Facility is at maximum capacity (${currentOccupancy}/${tenantCap.max_occupancy_limit}). Please wait for a member to leave.`,
+                            occupancy: { current: currentOccupancy, max: tenantCap.max_occupancy_limit }
+                        });
+                    } else {
+                        // Soft gate: allow with warning
+                        if (finalStatus === 'approved') finalStatus = 'warning';
+                        reasons.push(`Facility at capacity (${currentOccupancy}/${tenantCap.max_occupancy_limit})`);
+
+                        gymEmitter.emit('capacity.warning', {
+                            tenant_id,
+                            profile_id,
+                            current_occupancy: currentOccupancy,
+                            max_limit: tenantCap.max_occupancy_limit
+                        });
+                    }
+                }
             }
         }
         // ────────────────────────────────────────────────────────────────────
@@ -743,6 +817,55 @@ router.post('/scanner/checkin', async (req, res) => {
         }
         // ────────────────────────────────────────────────────────────────────
 
+        // ── Capacity Gating ──────────────────────────────────────────────────
+        if (accessStatus === 'approved' || accessStatus === 'warning') {
+            const { data: tenantCap } = await supabase
+                .from('tenants')
+                .select('max_occupancy_limit, auto_checkout_minutes, capacity_policy')
+                .eq('id', tenant_id)
+                .single();
+
+            if (tenantCap && tenantCap.max_occupancy_limit > 0) {
+                const currentOccupancy = await getLiveOccupancy(tenant_id, tenantCap.auto_checkout_minutes || 120);
+                if (currentOccupancy >= tenantCap.max_occupancy_limit) {
+                    if (tenantCap.capacity_policy === 'hard') {
+                        await supabase.from('check_ins').insert({
+                            tenant_id,
+                            profile_id: profile.id,
+                            device_id,
+                            access_method: accessMethod,
+                            status: 'denied_capacity'
+                        });
+
+                        gymEmitter.emit('capacity.full', {
+                            tenant_id,
+                            profile_id: profile.id,
+                            current_occupancy: currentOccupancy,
+                            max_limit: tenantCap.max_occupancy_limit
+                        });
+
+                        return res.status(403).json({
+                            success: false,
+                            access_status: 'denied_capacity',
+                            profile: { id: profile.id, name: `${profile.first_name} ${profile.last_name}` },
+                            reason: `Facility is at maximum capacity (${currentOccupancy}/${tenantCap.max_occupancy_limit}).`,
+                            occupancy: { current: currentOccupancy, max: tenantCap.max_occupancy_limit }
+                        });
+                    } else {
+                        if (accessStatus === 'approved') accessStatus = 'warning';
+                        reasons.push(`Facility at capacity (${currentOccupancy}/${tenantCap.max_occupancy_limit})`);
+                        gymEmitter.emit('capacity.warning', {
+                            tenant_id,
+                            profile_id: profile.id,
+                            current_occupancy: currentOccupancy,
+                            max_limit: tenantCap.max_occupancy_limit
+                        });
+                    }
+                }
+            }
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         // Log check-in
         const { data: checkin, error: checkinError } = await supabase
             .from('check_ins')
@@ -901,6 +1024,165 @@ router.get('/device/:device_id/status', async (req, res) => {
         });
     } catch (error) {
         console.error("Get device status error:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * POST /checkout
+ * Records a member checkout event, updating the check-in record with checkout_at
+ * and checkout_method. Supports manual, kiosk, and scanner checkout.
+ *
+ * Body: { tenant_id, profile_id, checkout_method? }
+ * Response: { success, checkout_at, occupancy }
+ */
+router.post('/checkout', async (req, res) => {
+    try {
+        const { tenant_id, profile_id, checkout_method } = req.body;
+
+        if (!tenant_id || !profile_id) {
+            return res.status(400).json({ error: 'Missing required parameters (tenant_id, profile_id)' });
+        }
+
+        if (!supabase) {
+            return res.status(500).json({ error: 'Supabase not configured' });
+        }
+
+        // Authenticate staff or scanner caller
+        const authHeader = req.headers.authorization;
+        const apiKeyHeader = req.headers['x-api-key'] || req.headers['x-scanner-token'];
+        if (apiKeyHeader && process.env.INTERNAL_API_KEY && apiKeyHeader === process.env.INTERNAL_API_KEY) {
+            // Authorized by internal system key
+        } else if (authHeader) {
+            const token = authHeader.replace('Bearer ', '');
+            const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+            if (authErr || !user) {
+                return res.status(401).json({ error: 'Invalid or expired authorization token' });
+            }
+        }
+
+        // Find the latest active (non-checked-out) check-in for this member
+        const { data: activeCheckin, error: findError } = await supabase
+            .from('check_ins')
+            .select('id, created_at')
+            .eq('tenant_id', tenant_id)
+            .eq('profile_id', profile_id)
+            .in('status', ['approved', 'warning'])
+            .is('checkout_at', null)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (findError || !activeCheckin) {
+            return res.status(404).json({
+                success: false,
+                error: 'No active check-in found for this member'
+            });
+        }
+
+        const checkoutAt = new Date().toISOString();
+
+        const { error: updateError } = await supabase
+            .from('check_ins')
+            .update({
+                checkout_at: checkoutAt,
+                checkout_method: checkout_method || 'manual'
+            })
+            .eq('id', activeCheckin.id);
+
+        if (updateError) {
+            console.error('[checkout] update error:', updateError);
+            return res.status(500).json({ error: 'Failed to record checkout' });
+        }
+
+        // Fetch updated occupancy
+        const { data: tenantCap } = await supabase
+            .from('tenants')
+            .select('max_occupancy_limit, auto_checkout_minutes')
+            .eq('id', tenant_id)
+            .single();
+
+        const currentOccupancy = await getLiveOccupancy(
+            tenant_id,
+            tenantCap?.auto_checkout_minutes || 120
+        );
+
+        gymEmitter.emit('checkout.completed', {
+            tenant_id,
+            profile_id,
+            checkin_id: activeCheckin.id,
+            checkout_at: checkoutAt,
+            current_occupancy: currentOccupancy
+        });
+
+        res.status(200).json({
+            success: true,
+            checkout_at: checkoutAt,
+            checkin_id: activeCheckin.id,
+            duration_minutes: Math.round((new Date(checkoutAt).getTime() - new Date(activeCheckin.created_at).getTime()) / 60000),
+            occupancy: {
+                current: currentOccupancy,
+                max: tenantCap?.max_occupancy_limit || 150
+            }
+        });
+    } catch (error) {
+        console.error('[checkout] error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * GET /occupancy
+ * Returns real-time facility occupancy for a tenant.
+ *
+ * Query: ?tenant_id=<uuid>
+ * Response: { current, max, percentage, policy, threshold_status }
+ */
+router.get('/occupancy', async (req, res) => {
+    try {
+        const { tenant_id } = req.query;
+
+        if (!tenant_id) {
+            return res.status(400).json({ error: 'Missing tenant_id' });
+        }
+
+        if (!supabase) {
+            return res.status(500).json({ error: 'Supabase not configured' });
+        }
+
+        const { data: tenant, error: tenantError } = await supabase
+            .from('tenants')
+            .select('max_occupancy_limit, auto_checkout_minutes, capacity_policy')
+            .eq('id', tenant_id)
+            .single();
+
+        if (tenantError || !tenant) {
+            return res.status(404).json({ error: 'Tenant not found' });
+        }
+
+        const maxLimit = tenant.max_occupancy_limit || 150;
+        const autoCheckoutMinutes = tenant.auto_checkout_minutes || 120;
+        const currentOccupancy = await getLiveOccupancy(tenant_id, autoCheckoutMinutes);
+        const percentage = maxLimit > 0 ? Math.round((currentOccupancy / maxLimit) * 100) : 0;
+
+        let thresholdStatus = 'normal';
+        if (percentage >= 100) thresholdStatus = 'full';
+        else if (percentage >= 90) thresholdStatus = 'critical';
+        else if (percentage >= 80) thresholdStatus = 'warning';
+
+        res.status(200).json({
+            success: true,
+            occupancy: {
+                current: currentOccupancy,
+                max: maxLimit,
+                percentage,
+                policy: tenant.capacity_policy || 'warning',
+                threshold_status: thresholdStatus,
+                auto_checkout_minutes: autoCheckoutMinutes
+            }
+        });
+    } catch (error) {
+        console.error('[occupancy] error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

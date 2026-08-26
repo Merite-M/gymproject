@@ -9,6 +9,7 @@ import {
   updateHardwareSettings,
   updateRegionalSettings,
   updateMultiBranchSettings,
+  updateCapacitySettings,
   testGatewayConnection,
   uploadTenantLogo,
   type HardwareZone,
@@ -36,7 +37,9 @@ import {
   Eye,
   EyeOff,
   RefreshCw,
-  Save
+  Save,
+  Users,
+  ShieldAlert
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -95,6 +98,12 @@ export default function SettingsPage() {
   const [multiBranch, setMultiBranch] = useState({
     operatingHours: '06:00 - 22:00 (Mon-Sat), 08:00 - 18:00 (Sun)',
     roamingPermissions: 'Gold, Platinum, VIP',
+  });
+
+  const [capacity, setCapacity] = useState({
+    maxOccupancyLimit: 150,
+    autoCheckoutMinutes: 120,
+    capacityPolicy: 'warning' as 'warning' | 'hard',
   });
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -166,6 +175,14 @@ export default function SettingsPage() {
         setMultiBranch({
           operatingHours: data.multibranch.operating_hours || '06:00 - 22:00 (Mon-Sat), 08:00 - 18:00 (Sun)',
           roamingPermissions: Array.isArray(roaming) ? roaming.join(', ') : 'Gold, Platinum, VIP',
+        });
+      }
+
+      if (data.capacity) {
+        setCapacity({
+          maxOccupancyLimit: data.capacity.max_occupancy_limit ?? 150,
+          autoCheckoutMinutes: data.capacity.auto_checkout_minutes ?? 120,
+          capacityPolicy: data.capacity.capacity_policy || 'warning',
         });
       }
     } catch (err: any) {
@@ -384,6 +401,27 @@ export default function SettingsPage() {
     }
   };
 
+  /** Save Capacity Settings */
+  const handleSaveCapacity = async () => {
+    if (!tenantId) return;
+    try {
+      setSavingTab('capacity');
+      setStatusMessage(null);
+
+      await updateCapacitySettings(tenantId, {
+        max_occupancy_limit: Number(capacity.maxOccupancyLimit) || 150,
+        auto_checkout_minutes: Number(capacity.autoCheckoutMinutes) || 120,
+        capacity_policy: capacity.capacityPolicy,
+      });
+      setStatusMessage({ type: 'success', text: 'Facility capacity & occupancy thresholds updated!' });
+    } catch (err: any) {
+      console.error('Failed to save capacity settings:', err);
+      setStatusMessage({ type: 'error', text: err.message || 'Failed to save capacity settings.' });
+    } finally {
+      setSavingTab(null);
+    }
+  };
+
   if (initialLoading) {
     return (
       <div className="container mx-auto py-12 flex flex-col items-center justify-center min-h-[400px] text-center">
@@ -448,7 +486,7 @@ export default function SettingsPage() {
 
       {/* Settings Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid grid-cols-2 md:grid-cols-5 gap-1 bg-surface-container p-1 rounded-lg border border-border">
+        <TabsList className="grid grid-cols-2 md:grid-cols-6 gap-1 bg-surface-container p-1 rounded-lg border border-border">
           <TabsTrigger value="branding" className="flex items-center gap-2 py-2.5">
             <Palette className="size-4" />
             <span>Branding</span>
@@ -468,6 +506,10 @@ export default function SettingsPage() {
           <TabsTrigger value="multibranch" className="flex items-center gap-2 py-2.5">
             <Building2 className="size-4" />
             <span>Multi-Branch</span>
+          </TabsTrigger>
+          <TabsTrigger value="capacity" className="flex items-center gap-2 py-2.5">
+            <Users className="size-4" />
+            <span>Occupancy & Capacity</span>
           </TabsTrigger>
         </TabsList>
 
@@ -1049,6 +1091,120 @@ export default function SettingsPage() {
                     <Save className="size-4" />
                   )}
                   Save Multi-Branch
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* TAB 6: CAPACITY & OCCUPANCY */}
+        <TabsContent value="capacity" className="space-y-6">
+          <Card className="border-border bg-card">
+            <CardHeader>
+              <CardTitle className="text-xl font-heading flex items-center gap-2">
+                <Users className="size-5 text-primary" />
+                Realtime Occupancy & Capacity Thresholds
+              </CardTitle>
+              <CardDescription>
+                Configure max facility capacity limits, turnstile gating policies, and auto-checkout timeouts for African gyms.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="maxOccupancyLimit">Maximum Simultaneous Occupancy</Label>
+                  <Input
+                    id="maxOccupancyLimit"
+                    type="number"
+                    min="1"
+                    placeholder="150"
+                    value={capacity.maxOccupancyLimit}
+                    onChange={(e) => setCapacity({ ...capacity, maxOccupancyLimit: parseInt(e.target.value) || 0 })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The total number of members permitted inside before capacity triggers fire.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="autoCheckoutMinutes">Auto-Checkout Timeout (Minutes)</Label>
+                  <Input
+                    id="autoCheckoutMinutes"
+                    type="number"
+                    min="15"
+                    placeholder="120"
+                    value={capacity.autoCheckoutMinutes}
+                    onChange={(e) => setCapacity({ ...capacity, autoCheckoutMinutes: parseInt(e.target.value) || 0 })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Orphaned sessions automatically expire after this period, preventing inflated counter metrics.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <Label>Capacity Enforcement Policy</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div
+                    onClick={() => setCapacity({ ...capacity, capacityPolicy: 'warning' })}
+                    className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                      capacity.capacityPolicy === 'warning'
+                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                        : 'border-border bg-surface hover:bg-surface-container/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 font-medium text-foreground">
+                      <input
+                        type="radio"
+                        name="capacityPolicy"
+                        checked={capacity.capacityPolicy === 'warning'}
+                        onChange={() => setCapacity({ ...capacity, capacityPolicy: 'warning' })}
+                        className="text-primary"
+                      />
+                      <span>Soft Gate (Warning Only)</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2 pl-6">
+                      Members are allowed entry, but front desk receives visual and sound alerts when threshold is exceeded.
+                    </p>
+                  </div>
+
+                  <div
+                    onClick={() => setCapacity({ ...capacity, capacityPolicy: 'hard' })}
+                    className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                      capacity.capacityPolicy === 'hard'
+                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                        : 'border-border bg-surface hover:bg-surface-container/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 font-medium text-foreground">
+                      <input
+                        type="radio"
+                        name="capacityPolicy"
+                        checked={capacity.capacityPolicy === 'hard'}
+                        onChange={() => setCapacity({ ...capacity, capacityPolicy: 'hard' })}
+                        className="text-primary"
+                      />
+                      <span>Hard Gate (Deny Entry)</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2 pl-6">
+                      Turnstiles & QR scanners will reject check-ins until an active visitor checks out.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-border flex justify-end">
+                <Button
+                  onClick={handleSaveCapacity}
+                  disabled={savingTab === 'capacity'}
+                  className="gap-2 min-w-[160px]"
+                >
+                  {savingTab === 'capacity' ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Save className="size-4" />
+                  )}
+                  Save Occupancy Settings
                 </Button>
               </div>
             </CardContent>

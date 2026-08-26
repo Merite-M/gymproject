@@ -476,7 +476,7 @@ export default function MarketingCanvasPage() {
         };
       });
 
-      // Upsert parent workflow row
+      // Upsert parent workflow row with complete JSONB node graph
       const { data: wfRow, error: wfError } = await supabase
         .from('marketing_workflows')
         .upsert({
@@ -484,7 +484,9 @@ export default function MarketingCanvasPage() {
           tenant_id: tenantId,
           name: wfToSave.name,
           trigger_type: wfToSave.trigger_type || 'predictive_churn',
-          is_active: wfToSave.is_active
+          is_active: wfToSave.is_active,
+          nodes: remappedNodes,
+          updated_at: new Date().toISOString()
         })
         .select()
         .single();

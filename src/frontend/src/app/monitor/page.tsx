@@ -18,12 +18,23 @@ interface CheckIn {
   access_method: string;
   status: string;
   created_at: string;
+  checkout_at?: string | null;
+  checkout_method?: string | null;
   profiles?: {
     first_name: string;
     last_name: string;
     avatar_url: string;
     membership_status?: string;
   }
+}
+
+interface OccupancyData {
+  current: number;
+  max: number;
+  percentage: number;
+  policy: string;
+  threshold_status: 'normal' | 'warning' | 'critical' | 'full';
+  auto_checkout_minutes: number;
 }
 
 
@@ -88,6 +99,8 @@ export default function MissionControlMonitor() {
   const [activeCheckIn, setActiveCheckIn] = useState<CheckIn | null>(null);
   const [visualAlertsEnabled, setVisualAlertsEnabled] = useState(true);
   const [soundCuesEnabled, setSoundCuesEnabled] = useState(true);
+  const [occupancy, setOccupancy] = useState<OccupancyData | null>(null);
+  const [checkingOut, setCheckingOut] = useState(false);
 
   const soundCuesEnabledRef = useRef(soundCuesEnabled);
   soundCuesEnabledRef.current = soundCuesEnabled;
@@ -194,8 +207,29 @@ export default function MissionControlMonitor() {
         }
       });
 
+    // ─── Occupancy Polling ─────────────────────────────────────────
+    const fetchOccupancy = async () => {
+      if (!tenantId) return;
+      try {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+        const res = await fetch(`${backendUrl}/api/iot/occupancy?tenant_id=${tenantId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.occupancy) {
+            setOccupancy(data.occupancy);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch occupancy:', err);
+      }
+    };
+    fetchOccupancy();
+    const occupancyInterval = setInterval(fetchOccupancy, 15000); // every 15s
+    // ───────────────────────────────────────────────────────────────
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(occupancyInterval);
     };
   }, []);
 
@@ -329,13 +363,37 @@ export default function MissionControlMonitor() {
                   <div className="flex flex-col">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Occupancy</span>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-body-base font-bold text-primary">44</span>
-                      <span className="text-[10px] text-text-muted">/100</span>
+                      <span className={`text-body-base font-bold ${
+                        !occupancy ? 'text-primary' :
+                        occupancy.threshold_status === 'full' ? 'text-danger-crimson' :
+                        occupancy.threshold_status === 'critical' ? 'text-danger-crimson' :
+                        occupancy.threshold_status === 'warning' ? 'text-warning-amber' :
+                        'text-primary'
+                      }`}>{occupancy?.current ?? '—'}</span>
+                      <span className="text-[10px] text-text-muted">/{occupancy?.max ?? '—'}</span>
                     </div>
                   </div>
                   <div className="w-24 bg-border-hairline rounded-full h-1.5 relative overflow-hidden">
-                    <div className="absolute left-0 top-0 bg-secondary h-full rounded-full" style={{ width: '44%' }}></div>
+                    <div
+                      className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${
+                        !occupancy ? 'bg-secondary' :
+                        occupancy.threshold_status === 'full' ? 'bg-danger-crimson animate-pulse' :
+                        occupancy.threshold_status === 'critical' ? 'bg-danger-crimson' :
+                        occupancy.threshold_status === 'warning' ? 'bg-warning-amber' :
+                        'bg-secondary'
+                      }`}
+                      style={{ width: `${Math.min(occupancy?.percentage ?? 0, 100)}%` }}
+                    />
                   </div>
+                  {occupancy && occupancy.threshold_status !== 'normal' && (
+                    <span className={`text-[10px] font-bold uppercase tracking-widest ${
+                      occupancy.threshold_status === 'full' ? 'text-danger-crimson' :
+                      occupancy.threshold_status === 'critical' ? 'text-danger-crimson' :
+                      'text-warning-amber'
+                    }`}>
+                      {occupancy.threshold_status === 'full' ? 'FULL' : occupancy.threshold_status === 'critical' ? 'CRITICAL' : 'HIGH'}
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="flex space-x-2">
@@ -480,7 +538,44 @@ export default function MissionControlMonitor() {
               {/* Fixed Action Footer */}
               <div className="absolute bottom-0 right-0 w-full lg:w-[35%] p-4 bg-surface/80 backdrop-blur-md border-t border-border-hairline flex gap-3 shadow-[0_-4px_24px_rgba(0,0,0,0.02)]">
                 {activeCheckIn.status === 'approved' ? (
-                  <button className="flex-1 bg-surface-container-lowest border border-border-hairline text-primary rounded-lg py-3 font-semibold text-body-dense hover:bg-surface-muted transition-colors shadow-sm">View Full Profile</button>
+                  <>
+                    <button className="flex-1 bg-surface-container-lowest border border-border-hairline text-primary rounded-lg py-3 font-semibold text-body-dense hover:bg-surface-muted transition-colors shadow-sm">View Full Profile</button>
+                    {!activeCheckIn.checkout_at && (
+                      <button
+                        disabled={checkingOut}
+                        onClick={async () => {
+                          setCheckingOut(true);
+                          try {
+                            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+                            const res = await fetch(`${backendUrl}/api/iot/checkout`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                tenant_id: activeCheckIn.tenant_id,
+                                profile_id: activeCheckIn.profile_id,
+                                checkout_method: 'manual'
+                              })
+                            });
+                            if (res.ok) {
+                              const result = await res.json();
+                              setActiveCheckIn(prev => prev ? { ...prev, checkout_at: result.checkout_at, checkout_method: 'manual' } : null);
+                              if (result.occupancy) {
+                                setOccupancy(prev => prev ? { ...prev, current: result.occupancy.current } : prev);
+                              }
+                            }
+                          } catch (err) {
+                            console.error('Checkout failed:', err);
+                          } finally {
+                            setCheckingOut(false);
+                          }
+                        }}
+                        className="flex-1 bg-primary text-on-primary rounded-lg py-3 font-semibold text-body-dense hover:bg-primary/90 transition-colors shadow-md flex items-center justify-center gap-2"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">logout</span>
+                        {checkingOut ? 'Checking Out…' : 'Check Out'}
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <>
                     <button className="flex-1 bg-primary text-on-primary rounded-lg py-3 font-semibold text-body-dense hover:bg-primary/90 transition-colors shadow-md">Override Entry</button>
