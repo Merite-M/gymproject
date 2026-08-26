@@ -1,3 +1,7 @@
+---
+trigger: always_on
+---
+
 # MCP Tool Usage — Mandatory Full-Context Rule
 
 ## Core Directive
@@ -43,6 +47,7 @@ Never assume, guess, or work from memory when a live data source is available vi
 - Before implementing any UI screen: call `list_screens` and `get_screen` to retrieve the design spec.
 - Reference Stitch screen designs for component layout, color tokens, and interaction patterns.
 - Use `list_design_systems` and `apply_design_system` to ensure every new component uses the established design system.
+- Generate screens from stitch project of this project using tools like generate_screens_from_text or other for a consistent design.
 
 ---
 
@@ -54,7 +59,7 @@ Never assume, guess, or work from memory when a live data source is available vi
 4. **Cross-reference across MCPs.** Read the Linear issue → check the Supabase schema → read the Render logs — then implement.
 5. **Prefer live data over assumptions.** If a table column, env variable, API route, or design spec can be fetched via MCP, fetch it.
 6. **Document as you go.** After implementing, update Postman collections, Linear descriptions, and leave comments so future context fetches are richer.
-
+7. You can use all the tools depending on the task or context you have, because we need to act as a team at a corporate organization or a team of cofounders who can't afford any mistakes.
 ---
 
 ## Codebase Hygiene — Non-Redundancy Rules

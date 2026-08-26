@@ -1,3 +1,5 @@
+import { apiFetch } from '@/lib/api-client';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export interface StaffTask {
@@ -51,11 +53,7 @@ export async function getStaffTasks(params: {
   if (params.assignedRole) query.append('assigned_role', params.assignedRole);
   if (params.priority) query.append('priority', params.priority);
 
-  const res = await fetch(`${API_BASE_URL}/api/tasks?${query.toString()}`);
-  if (!res.ok) {
-    throw new Error(`[getStaffTasks] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
+  const data = await apiFetch<{ tasks: StaffTask[] }>(`${API_BASE_URL}/api/tasks?${query.toString()}`);
   return data.tasks || [];
 }
 
@@ -63,11 +61,7 @@ export async function getStaffTasks(params: {
  * Fetch task KPI counts.
  */
 export async function getStaffTasksSummary(tenantId: string): Promise<TaskSummary> {
-  const res = await fetch(`${API_BASE_URL}/api/tasks/summary?tenant_id=${encodeURIComponent(tenantId)}`);
-  if (!res.ok) {
-    throw new Error(`[getStaffTasksSummary] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
+  const data = await apiFetch<{ summary: TaskSummary }>(`${API_BASE_URL}/api/tasks/summary?tenant_id=${encodeURIComponent(tenantId)}`);
   return data.summary || { urgent: 0, pending: 0, completed: 0, overdue: 0, total: 0 };
 }
 
@@ -85,7 +79,7 @@ export async function createStaffTask(params: {
   dueDate?: string;
   assignedRole?: string;
 }): Promise<StaffTask> {
-  const res = await fetch(`${API_BASE_URL}/api/tasks`, {
+  const data = await apiFetch<{ task: StaffTask }>(`${API_BASE_URL}/api/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -100,10 +94,6 @@ export async function createStaffTask(params: {
       assigned_role: params.assignedRole || 'reception'
     })
   });
-  if (!res.ok) {
-    throw new Error(`[createStaffTask] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
   return data.task;
 }
 
@@ -118,7 +108,7 @@ export async function updateTaskStatus(params: {
   resolutionNotes?: string;
   completedBy?: string;
 }): Promise<StaffTask> {
-  const res = await fetch(`${API_BASE_URL}/api/tasks/${encodeURIComponent(params.taskId)}/status`, {
+  const data = await apiFetch<{ task: StaffTask }>(`${API_BASE_URL}/api/tasks/${encodeURIComponent(params.taskId)}/status`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -129,10 +119,6 @@ export async function updateTaskStatus(params: {
       completed_by: params.completedBy || null
     })
   });
-  if (!res.ok) {
-    throw new Error(`[updateTaskStatus] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
   return data.task;
 }
 
@@ -140,13 +126,9 @@ export async function updateTaskStatus(params: {
  * Trigger automated churn risk detection scan.
  */
 export async function triggerChurnRiskScan(tenantId: string, inactivityDays = 21): Promise<{ tasks_created: number; message: string }> {
-  const res = await fetch(`${API_BASE_URL}/api/tasks/scan-churn-risks`, {
+  return apiFetch<{ tasks_created: number; message: string }>(`${API_BASE_URL}/api/tasks/scan-churn-risks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tenant_id: tenantId, inactivity_days: inactivityDays })
   });
-  if (!res.ok) {
-    throw new Error(`[triggerChurnRiskScan] ${res.status}: ${await res.text()}`);
-  }
-  return res.json();
 }

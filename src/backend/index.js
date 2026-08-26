@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const { rateLimit } = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
@@ -13,6 +14,52 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 app.use(express.json());
+
+// ─── Rate Limiters ───────────────────────────────────────────────────────────
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Too many requests from this IP, please try again later', code: 'RATE_LIMIT_EXCEEDED' },
+  skip: (req) => req.path.includes('/webhook') || req.path === '/health'
+});
+
+const checkinLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Too many verification attempts, please wait a moment', code: 'CHECKIN_RATE_LIMIT_EXCEEDED' }
+});
+
+app.use('/api/', apiLimiter);
+
+// ─── Health Check Endpoint ───────────────────────────────────────────────────
+app.get('/health', async (req, res) => {
+  try {
+    let dbStatus = 'disconnected';
+    if (supabase) {
+      const { error } = await supabase.from('tenants').select('id').limit(1);
+      dbStatus = error ? 'error' : 'connected';
+    }
+    const isHealthy = dbStatus === 'connected' || !supabase;
+    res.status(isHealthy ? 200 : 503).json({
+      status: isHealthy ? 'healthy' : 'degraded',
+      database: dbStatus,
+      uptime: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(503).json({
+      status: 'unhealthy',
+      database: 'error',
+      error: err.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+// ─────────────────────────────────────────────────────────────────────────────
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -108,7 +155,7 @@ app.post('/api/waivers/sign', upload.single('pdf'), async (req, res) => {
   }
 });
 
-app.post('/api/checkin', async (req, res) => {
+app.post('/api/checkin', checkinLimiter, async (req, res) => {
   try {
     const { tenant_id, profile_id, device_id, access_method, user_lat, user_lon } = req.body;
 
@@ -378,7 +425,7 @@ app.use("/api/workflows", dripRoutes);
 initCron(supabase);
 
 
-app.post("/api/kiosk/verify-pin", async (req, res) => {
+app.post("/api/kiosk/verify-pin", checkinLimiter, async (req, res) => {
   try {
     const { tenant_id, pin } = req.body;
     if (!tenant_id || !pin) {
@@ -410,7 +457,7 @@ app.post("/api/kiosk/verify-pin", async (req, res) => {
   }
 });
 
-app.post("/api/kiosk/checkin", async (req, res) => {
+app.post("/api/kiosk/checkin", checkinLimiter, async (req, res) => {
   try {
     const { tenant_id, identifier, access_method } = req.body;
     if (!tenant_id || !identifier) {
@@ -587,7 +634,28 @@ app.post("/api/kiosk/checkin", async (req, res) => {
   }
 });
 
-app.listen(port, () => {
+// Startup Database Connection Verification
+async function testDatabaseConnection() {
+  if (!supabase) {
+    console.warn("⚠️ Supabase credentials missing. Endpoints requiring database will fail.");
+    return false;
+  }
+  try {
+    const { error } = await supabase.from('tenants').select('id').limit(1);
+    if (error) {
+      console.error("⚠️ Database connection check failed:", error.message);
+      return false;
+    }
+    console.log("✓ Database connection verified");
+    return true;
+  } catch (err) {
+    console.error("⚠️ Database connection test exception:", err.message);
+    return false;
+  }
+}
 
-  console.log(`Backend server running on port ${port}`);
+testDatabaseConnection().finally(() => {
+  app.listen(port, () => {
+    console.log(`Backend server running on port ${port}`);
+  });
 });

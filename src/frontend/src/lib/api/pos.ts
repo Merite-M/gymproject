@@ -1,3 +1,5 @@
+import { apiFetch } from '@/lib/api-client';
+
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export interface ProductItem {
@@ -131,80 +133,59 @@ export interface ReceiptData {
 // ----------------------------------------------------
 
 export async function fetchProducts(tenantId: string): Promise<ProductItem[]> {
-  const res = await fetch(`${BACKEND_URL}/api/pos/products?tenant_id=${tenantId}`);
-  if (!res.ok) throw new Error(`[pos/products] ${res.status}: ${await res.text()}`);
-  return res.json();
+  return apiFetch<ProductItem[]>(`${BACKEND_URL}/api/pos/products?tenant_id=${tenantId}`);
 }
 
 export async function fetchShiftStatus(tenantId: string) {
-  const res = await fetch(`${BACKEND_URL}/api/pos/shift/status?tenant_id=${tenantId}`);
-  if (!res.ok) throw new Error(`[pos/shift/status] ${res.status}: ${await res.text()}`);
-  return res.json();
+  return apiFetch(`${BACKEND_URL}/api/pos/shift/status?tenant_id=${tenantId}`);
 }
 
 export async function startShift(tenantId: string, staffId: string, startingCash: number) {
-  const res = await fetch(`${BACKEND_URL}/api/pos/shift/start`, {
+  return apiFetch(`${BACKEND_URL}/api/pos/shift/start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tenant_id: tenantId, staff_id: staffId, starting_cash: startingCash })
   });
-  if (!res.ok) throw new Error(`[pos/shift/start] ${res.status}: ${await res.text()}`);
-  return res.json();
 }
 
 export async function endShift(shiftId: string, actualCash: number) {
-  const res = await fetch(`${BACKEND_URL}/api/pos/shift/end`, {
+  return apiFetch(`${BACKEND_URL}/api/pos/shift/end`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shift_id: shiftId, actual_cash: actualCash })
   });
-  if (!res.ok) throw new Error(`[pos/shift/end] ${res.status}: ${await res.text()}`);
-  return res.json();
 }
 
 export async function fetchXReport(shiftId: string, tenantId: string) {
-  const res = await fetch(`${BACKEND_URL}/api/pos/shift/${shiftId}/x-report?tenant_id=${tenantId}`);
-  if (!res.ok) throw new Error(`[pos/shift/x-report] ${res.status}: ${await res.text()}`);
-  return res.json();
+  return apiFetch(`${BACKEND_URL}/api/pos/shift/${shiftId}/x-report?tenant_id=${tenantId}`);
 }
 
 export async function checkoutPOS(payload: CheckoutPayload): Promise<CheckoutResponse> {
-  const res = await fetch(`${BACKEND_URL}/api/pos/checkout`, {
+  return apiFetch<CheckoutResponse>(`${BACKEND_URL}/api/pos/checkout`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(errorData.error || `[pos/checkout] failed with status ${res.status}`);
-  }
-  return res.json();
 }
 
 export async function fetchMemberTab(profileId: string, tenantId: string): Promise<MemberTabInfo> {
-  const res = await fetch(`${BACKEND_URL}/api/pos/member_tab/${profileId}?tenant_id=${tenantId}`);
-  if (!res.ok) throw new Error(`[pos/member_tab] ${res.status}: ${await res.text()}`);
-  return res.json();
+  return apiFetch<MemberTabInfo>(`${BACKEND_URL}/api/pos/member_tab/${profileId}?tenant_id=${tenantId}`);
 }
 
 export async function updateCreditLimit(profileId: string, tenantId: string, creditLimit: number) {
-  const res = await fetch(`${BACKEND_URL}/api/pos/member_tab/${profileId}/limit`, {
+  return apiFetch(`${BACKEND_URL}/api/pos/member_tab/${profileId}/limit`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tenant_id: tenantId, credit_limit: creditLimit })
   });
-  if (!res.ok) throw new Error(`[pos/member_tab/limit] ${res.status}: ${await res.text()}`);
-  return res.json();
 }
 
 export async function creditMemberTab(tenantId: string, profileId: string, amount: number) {
-  const res = await fetch(`${BACKEND_URL}/api/pos/member-tab/credit`, {
+  return apiFetch(`${BACKEND_URL}/api/pos/member-tab/credit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tenant_id: tenantId, profile_id: profileId, amount })
   });
-  if (!res.ok) throw new Error(`[pos/member-tab/credit] ${res.status}: ${await res.text()}`);
-  return res.json();
 }
 
 // ----------------------------------------------------
@@ -212,9 +193,7 @@ export async function creditMemberTab(tenantId: string, profileId: string, amoun
 // ----------------------------------------------------
 
 export async function fetchSuppliers(tenantId: string): Promise<Supplier[]> {
-  const res = await fetch(`${BACKEND_URL}/api/pos/suppliers?tenant_id=${tenantId}`);
-  if (!res.ok) throw new Error(`[pos/suppliers] ${res.status}: ${await res.text()}`);
-  return res.json();
+  return apiFetch<Supplier[]>(`${BACKEND_URL}/api/pos/suppliers?tenant_id=${tenantId}`);
 }
 
 export async function createSupplier(payload: {
@@ -227,37 +206,29 @@ export async function createSupplier(payload: {
   payment_terms?: string | null;
   notes?: string | null;
 }): Promise<Supplier> {
-  const res = await fetch(`${BACKEND_URL}/api/pos/suppliers`, {
+  return apiFetch<Supplier>(`${BACKEND_URL}/api/pos/suppliers`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  if (!res.ok) throw new Error(`[pos/suppliers/create] ${res.status}: ${await res.text()}`);
-  return res.json();
 }
 
 export async function getSupplier(id: string, tenantId: string): Promise<Supplier & { purchase_orders: PurchaseOrder[] }> {
-  const res = await fetch(`${BACKEND_URL}/api/pos/suppliers/${id}?tenant_id=${tenantId}`);
-  if (!res.ok) throw new Error(`[pos/suppliers/get] ${res.status}: ${await res.text()}`);
-  return res.json();
+  return apiFetch<Supplier & { purchase_orders: PurchaseOrder[] }>(`${BACKEND_URL}/api/pos/suppliers/${id}?tenant_id=${tenantId}`);
 }
 
 export async function updateSupplier(id: string, payload: Partial<Supplier>): Promise<Supplier> {
-  const res = await fetch(`${BACKEND_URL}/api/pos/suppliers/${id}`, {
+  return apiFetch<Supplier>(`${BACKEND_URL}/api/pos/suppliers/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  if (!res.ok) throw new Error(`[pos/suppliers/update] ${res.status}: ${await res.text()}`);
-  return res.json();
 }
 
 export async function deleteSupplier(id: string, tenantId: string) {
-  const res = await fetch(`${BACKEND_URL}/api/pos/suppliers/${id}?tenant_id=${tenantId}`, {
+  return apiFetch(`${BACKEND_URL}/api/pos/suppliers/${id}?tenant_id=${tenantId}`, {
     method: 'DELETE'
   });
-  if (!res.ok) throw new Error(`[pos/suppliers/delete] ${res.status}: ${await res.text()}`);
-  return res.json();
 }
 
 // ----------------------------------------------------
@@ -266,9 +237,7 @@ export async function deleteSupplier(id: string, tenantId: string) {
 
 export async function fetchPurchaseOrders(tenantId: string, status?: string): Promise<PurchaseOrder[]> {
   const url = `${BACKEND_URL}/api/pos/purchase-orders?tenant_id=${tenantId}${status ? `&status=${status}` : ''}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`[pos/purchase-orders] ${res.status}: ${await res.text()}`);
-  return res.json();
+  return apiFetch<PurchaseOrder[]>(url);
 }
 
 export async function createPurchaseOrder(payload: {
@@ -283,19 +252,15 @@ export async function createPurchaseOrder(payload: {
     unit_cost: number;
   }[];
 }): Promise<PurchaseOrder> {
-  const res = await fetch(`${BACKEND_URL}/api/pos/purchase-orders`, {
+  return apiFetch<PurchaseOrder>(`${BACKEND_URL}/api/pos/purchase-orders`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  if (!res.ok) throw new Error(`[pos/purchase-orders/create] ${res.status}: ${await res.text()}`);
-  return res.json();
 }
 
 export async function getPurchaseOrder(id: string, tenantId: string): Promise<PurchaseOrder> {
-  const res = await fetch(`${BACKEND_URL}/api/pos/purchase-orders/${id}?tenant_id=${tenantId}`);
-  if (!res.ok) throw new Error(`[pos/purchase-orders/get] ${res.status}: ${await res.text()}`);
-  return res.json();
+  return apiFetch<PurchaseOrder>(`${BACKEND_URL}/api/pos/purchase-orders/${id}?tenant_id=${tenantId}`);
 }
 
 export async function receivePurchaseOrder(id: string, payload: {
@@ -308,13 +273,11 @@ export async function receivePurchaseOrder(id: string, payload: {
   staff_id?: string | null;
   notes?: string | null;
 }) {
-  const res = await fetch(`${BACKEND_URL}/api/pos/purchase-orders/${id}/receive`, {
+  return apiFetch(`${BACKEND_URL}/api/pos/purchase-orders/${id}/receive`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  if (!res.ok) throw new Error(`[pos/purchase-orders/receive] ${res.status}: ${await res.text()}`);
-  return res.json();
 }
 
 // ----------------------------------------------------
@@ -322,9 +285,7 @@ export async function receivePurchaseOrder(id: string, payload: {
 // ----------------------------------------------------
 
 export async function fetchInvoiceReceipt(invoiceId: string, tenantId: string): Promise<ReceiptData> {
-  const res = await fetch(`${BACKEND_URL}/api/pos/invoices/${invoiceId}/receipt?tenant_id=${tenantId}`);
-  if (!res.ok) throw new Error(`[pos/invoices/receipt] ${res.status}: ${await res.text()}`);
-  return res.json();
+  return apiFetch<ReceiptData>(`${BACKEND_URL}/api/pos/invoices/${invoiceId}/receipt?tenant_id=${tenantId}`);
 }
 
 // ----------------------------------------------------
@@ -332,40 +293,25 @@ export async function fetchInvoiceReceipt(invoiceId: string, tenantId: string): 
 // ----------------------------------------------------
 
 export async function validatePromoCode(tenantId: string, code: string, subtotal: number, apply = false) {
-  const res = await fetch(`${BACKEND_URL}/api/payments/validate-promo`, {
+  return apiFetch(`${BACKEND_URL}/api/payments/validate-promo`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tenant_id: tenantId, code, subtotal, apply })
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(data.error || 'Invalid promo code');
-  }
-  return res.json();
 }
 
 export async function validateGiftVoucher(tenantId: string, code: string, subtotal: number) {
-  const res = await fetch(`${BACKEND_URL}/api/payments/validate-voucher`, {
+  return apiFetch(`${BACKEND_URL}/api/payments/validate-voucher`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tenant_id: tenantId, code, subtotal })
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(data.error || 'Invalid gift voucher');
-  }
-  return res.json();
 }
 
 export async function applyGiftVoucher(tenantId: string, code: string, amountToUse: number) {
-  const res = await fetch(`${BACKEND_URL}/api/payments/apply-gift-voucher`, {
+  return apiFetch(`${BACKEND_URL}/api/payments/apply-gift-voucher`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tenant_id: tenantId, code, amount_to_use: amountToUse })
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(data.error || 'Failed to apply voucher');
-  }
-  return res.json();
 }

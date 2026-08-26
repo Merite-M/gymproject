@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { apiFetch } from '@/lib/api-client';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -85,17 +86,14 @@ async function getAuthToken(): Promise<string> {
  */
 export async function getTenantSettings(tenantId: string): Promise<TenantSettingsResponse> {
   const token = await getAuthToken();
-  const res = await fetch(`${API_BASE_URL}/api/admin/settings?tenant_id=${encodeURIComponent(tenantId)}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`
+  return apiFetch<TenantSettingsResponse>(
+    `${API_BASE_URL}/api/admin/settings?tenant_id=${encodeURIComponent(tenantId)}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
     }
-  });
-
-  if (!res.ok) {
-    throw new Error(`[getTenantSettings] ${res.status}: ${await res.text()}`);
-  }
-
-  return res.json();
+  );
 }
 
 /**
@@ -106,27 +104,24 @@ export async function updateBrandingSettings(
   branding: Partial<BrandingSettings>
 ): Promise<{ success: boolean; branding: BrandingSettings }> {
   const token = await getAuthToken();
-  const res = await fetch(`${API_BASE_URL}/api/admin/settings/branding`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      tenant_id: tenantId,
-      logo_url: branding.logo_url ?? null,
-      primary_color: branding.primary_color ?? '#000000',
-      secondary_color: branding.secondary_color ?? '#ffffff',
-      custom_css: branding.custom_css ?? null,
-      branding_settings: branding.branding_settings ?? {}
-    })
-  });
-
-  if (!res.ok) {
-    throw new Error(`[updateBrandingSettings] ${res.status}: ${await res.text()}`);
-  }
-
-  return res.json();
+  return apiFetch<{ success: boolean; branding: BrandingSettings }>(
+    `${API_BASE_URL}/api/admin/settings/branding`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        tenant_id: tenantId,
+        logo_url: branding.logo_url ?? null,
+        primary_color: branding.primary_color ?? '#000000',
+        secondary_color: branding.secondary_color ?? '#ffffff',
+        custom_css: branding.custom_css ?? null,
+        branding_settings: branding.branding_settings ?? {}
+      })
+    }
+  );
 }
 
 /**
@@ -137,25 +132,22 @@ export async function updateGatewaySettings(
   gateways: GatewaySettings
 ): Promise<{ success: boolean; gateways: GatewayStatus }> {
   const token = await getAuthToken();
-  const res = await fetch(`${API_BASE_URL}/api/admin/settings/gateways`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      tenant_id: tenantId,
-      paypack_api_key: gateways.paypack_api_key || undefined,
-      paypack_secret: gateways.paypack_secret || undefined,
-      sms_gateway_credentials: gateways.sms_gateway_credentials || undefined
-    })
-  });
-
-  if (!res.ok) {
-    throw new Error(`[updateGatewaySettings] ${res.status}: ${await res.text()}`);
-  }
-
-  return res.json();
+  return apiFetch<{ success: boolean; gateways: GatewayStatus }>(
+    `${API_BASE_URL}/api/admin/settings/gateways`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        tenant_id: tenantId,
+        paypack_api_key: gateways.paypack_api_key || undefined,
+        paypack_secret: gateways.paypack_secret || undefined,
+        sms_gateway_credentials: gateways.sms_gateway_credentials || undefined
+      })
+    }
+  );
 }
 
 /**
@@ -166,24 +158,21 @@ export async function updateHardwareSettings(
   hardware: HardwareSettings
 ): Promise<{ success: boolean; hardware: HardwareSettings }> {
   const token = await getAuthToken();
-  const res = await fetch(`${API_BASE_URL}/api/admin/settings/hardware`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      tenant_id: tenantId,
-      shelly_relays_config: hardware.shelly_relays_config ?? {},
-      hardware_zones: hardware.hardware_zones ?? []
-    })
-  });
-
-  if (!res.ok) {
-    throw new Error(`[updateHardwareSettings] ${res.status}: ${await res.text()}`);
-  }
-
-  return res.json();
+  return apiFetch<{ success: boolean; hardware: HardwareSettings }>(
+    `${API_BASE_URL}/api/admin/settings/hardware`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        tenant_id: tenantId,
+        shelly_relays_config: hardware.shelly_relays_config ?? {},
+        hardware_zones: hardware.hardware_zones ?? []
+      })
+    }
+  );
 }
 
 /**
@@ -194,27 +183,24 @@ export async function updateRegionalSettings(
   regional: RegionalSettings
 ): Promise<{ success: boolean; regional: RegionalSettings }> {
   const token = await getAuthToken();
-  const res = await fetch(`${API_BASE_URL}/api/admin/settings/regional`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      tenant_id: tenantId,
-      default_currency: regional.default_currency || 'RWF',
-      tax_rate: regional.tax_rate !== undefined ? regional.tax_rate : 0.18,
-      geofence_lat: regional.geofence_lat ?? null,
-      geofence_lon: regional.geofence_lon ?? null,
-      geofence_radius: regional.geofence_radius ?? null
-    })
-  });
-
-  if (!res.ok) {
-    throw new Error(`[updateRegionalSettings] ${res.status}: ${await res.text()}`);
-  }
-
-  return res.json();
+  return apiFetch<{ success: boolean; regional: RegionalSettings }>(
+    `${API_BASE_URL}/api/admin/settings/regional`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        tenant_id: tenantId,
+        default_currency: regional.default_currency || 'RWF',
+        tax_rate: regional.tax_rate !== undefined ? regional.tax_rate : 0.18,
+        geofence_lat: regional.geofence_lat ?? null,
+        geofence_lon: regional.geofence_lon ?? null,
+        geofence_radius: regional.geofence_radius ?? null
+      })
+    }
+  );
 }
 
 /**
@@ -225,24 +211,21 @@ export async function updateMultiBranchSettings(
   multiBranch: MultiBranchSettings
 ): Promise<{ success: boolean; multibranch: MultiBranchSettings }> {
   const token = await getAuthToken();
-  const res = await fetch(`${API_BASE_URL}/api/admin/settings/multibranch`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      tenant_id: tenantId,
-      operating_hours: multiBranch.operating_hours || '',
-      branch_roaming_config: multiBranch.branch_roaming_config || {}
-    })
-  });
-
-  if (!res.ok) {
-    throw new Error(`[updateMultiBranchSettings] ${res.status}: ${await res.text()}`);
-  }
-
-  return res.json();
+  return apiFetch<{ success: boolean; multibranch: MultiBranchSettings }>(
+    `${API_BASE_URL}/api/admin/settings/multibranch`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        tenant_id: tenantId,
+        operating_hours: multiBranch.operating_hours || '',
+        branch_roaming_config: multiBranch.branch_roaming_config || {}
+      })
+    }
+  );
 }
 
 /**
@@ -253,23 +236,20 @@ export async function testGatewayConnection(
   gatewayType: 'paypack' | 'sms'
 ): Promise<TestGatewayResponse> {
   const token = await getAuthToken();
-  const res = await fetch(`${API_BASE_URL}/api/admin/settings/test-gateway`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      tenant_id: tenantId,
-      gateway_type: gatewayType
-    })
-  });
-
-  if (!res.ok) {
-    throw new Error(`[testGatewayConnection] ${res.status}: ${await res.text()}`);
-  }
-
-  return res.json();
+  return apiFetch<TestGatewayResponse>(
+    `${API_BASE_URL}/api/admin/settings/test-gateway`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        tenant_id: tenantId,
+        gateway_type: gatewayType
+      })
+    }
+  );
 }
 
 /**
@@ -284,19 +264,16 @@ export async function uploadTenantLogo(
   formData.append('tenant_id', tenantId);
   formData.append('logo', file);
 
-  const res = await fetch(`${API_BASE_URL}/api/admin/settings/logo`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`
-    },
-    body: formData
-  });
-
-  if (!res.ok) {
-    throw new Error(`[uploadTenantLogo] ${res.status}: ${await res.text()}`);
-  }
-
-  return res.json();
+  return apiFetch<{ success: boolean; logo_url: string }>(
+    `${API_BASE_URL}/api/admin/settings/logo`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      body: formData
+    }
+  );
 }
 
 /**
@@ -307,23 +284,20 @@ export async function updateCapacitySettings(
   capacity: CapacitySettings
 ): Promise<{ success: boolean; capacity: CapacitySettings }> {
   const token = await getAuthToken();
-  const res = await fetch(`${API_BASE_URL}/api/admin/settings/capacity`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      tenant_id: tenantId,
-      max_occupancy_limit: capacity.max_occupancy_limit,
-      auto_checkout_minutes: capacity.auto_checkout_minutes,
-      capacity_policy: capacity.capacity_policy
-    })
-  });
-
-  if (!res.ok) {
-    throw new Error(`[updateCapacitySettings] ${res.status}: ${await res.text()}`);
-  }
-
-  return res.json();
+  return apiFetch<{ success: boolean; capacity: CapacitySettings }>(
+    `${API_BASE_URL}/api/admin/settings/capacity`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        tenant_id: tenantId,
+        max_occupancy_limit: capacity.max_occupancy_limit,
+        auto_checkout_minutes: capacity.auto_checkout_minutes,
+        capacity_policy: capacity.capacity_policy
+      })
+    }
+  );
 }

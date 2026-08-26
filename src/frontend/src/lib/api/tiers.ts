@@ -1,3 +1,5 @@
+import { apiFetch } from '@/lib/api-client';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export interface MembershipPlan {
@@ -74,11 +76,9 @@ export interface TierChangeRecord {
  * Fetch all available membership plans/tiers for a gym facility.
  */
 export async function getMembershipPlans(tenantId: string): Promise<MembershipPlan[]> {
-  const res = await fetch(`${API_BASE_URL}/api/tiers/plans?tenant_id=${encodeURIComponent(tenantId)}`);
-  if (!res.ok) {
-    throw new Error(`[getMembershipPlans] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
+  const data = await apiFetch<{ plans: MembershipPlan[] }>(
+    `${API_BASE_URL}/api/tiers/plans?tenant_id=${encodeURIComponent(tenantId)}`
+  );
   return data.plans || [];
 }
 
@@ -91,7 +91,7 @@ export async function calculateProration(params: {
   targetPlanId: string;
   asOfDate?: string;
 }): Promise<ProrationCalculation> {
-  const res = await fetch(`${API_BASE_URL}/api/tiers/calculate-proration`, {
+  return apiFetch<ProrationCalculation>(`${API_BASE_URL}/api/tiers/calculate-proration`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -101,11 +101,6 @@ export async function calculateProration(params: {
       as_of_date: params.asOfDate || null
     })
   });
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`[calculateProration] ${res.status}: ${errorText}`);
-  }
-  return res.json();
 }
 
 /**
@@ -125,7 +120,12 @@ export async function applyTierChange(params: {
   tier_change: TierChangeRecord;
   invoice: any | null;
 }> {
-  const res = await fetch(`${API_BASE_URL}/api/tiers/apply-tier-change`, {
+  return apiFetch<{
+    success: boolean;
+    message: string;
+    tier_change: TierChangeRecord;
+    invoice: any | null;
+  }>(`${API_BASE_URL}/api/tiers/apply-tier-change`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -138,11 +138,6 @@ export async function applyTierChange(params: {
       notes: params.notes || null
     })
   });
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`[applyTierChange] ${res.status}: ${errorText}`);
-  }
-  return res.json();
 }
 
 /**
@@ -152,10 +147,8 @@ export async function getTierChangeHistory(
   tenantId: string,
   profileId: string
 ): Promise<TierChangeRecord[]> {
-  const res = await fetch(`${API_BASE_URL}/api/tiers/history/${encodeURIComponent(profileId)}?tenant_id=${encodeURIComponent(tenantId)}`);
-  if (!res.ok) {
-    throw new Error(`[getTierChangeHistory] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
+  const data = await apiFetch<{ history: TierChangeRecord[] }>(
+    `${API_BASE_URL}/api/tiers/history/${encodeURIComponent(profileId)}?tenant_id=${encodeURIComponent(tenantId)}`
+  );
   return data.history || [];
 }
