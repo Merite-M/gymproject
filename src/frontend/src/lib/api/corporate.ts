@@ -1,3 +1,5 @@
+import { apiFetch } from '@/lib/api-client';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export interface CorporateAccount {
@@ -81,11 +83,9 @@ export interface CorporateInvoice {
  * Fetch all corporate sponsor accounts for a tenant.
  */
 export async function getCorporateAccounts(tenantId: string): Promise<CorporateAccount[]> {
-  const res = await fetch(`${API_BASE_URL}/api/corporate/accounts?tenant_id=${encodeURIComponent(tenantId)}`);
-  if (!res.ok) {
-    throw new Error(`[getCorporateAccounts] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
+  const data = await apiFetch<{ accounts: CorporateAccount[] }>(
+    `${API_BASE_URL}/api/corporate/accounts?tenant_id=${encodeURIComponent(tenantId)}`
+  );
   return data.accounts || [];
 }
 
@@ -107,7 +107,7 @@ export async function saveCorporateAccount(params: {
   paymentTermsDays?: number;
   status?: string;
 }): Promise<CorporateAccount> {
-  const res = await fetch(`${API_BASE_URL}/api/corporate/accounts`, {
+  const data = await apiFetch<{ account: CorporateAccount }>(`${API_BASE_URL}/api/corporate/accounts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -126,10 +126,6 @@ export async function saveCorporateAccount(params: {
       status: params.status || 'active'
     })
   });
-  if (!res.ok) {
-    throw new Error(`[saveCorporateAccount] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
   return data.account;
 }
 
@@ -144,11 +140,11 @@ export async function getCorporateAccountDetails(
   members: CorporateMember[];
   invoices: CorporateInvoice[];
 }> {
-  const res = await fetch(`${API_BASE_URL}/api/corporate/accounts/${encodeURIComponent(accountId)}?tenant_id=${encodeURIComponent(tenantId)}`);
-  if (!res.ok) {
-    throw new Error(`[getCorporateAccountDetails] ${res.status}: ${await res.text()}`);
-  }
-  return res.json();
+  return apiFetch<{
+    account: CorporateAccount;
+    members: CorporateMember[];
+    invoices: CorporateInvoice[];
+  }>(`${API_BASE_URL}/api/corporate/accounts/${encodeURIComponent(accountId)}?tenant_id=${encodeURIComponent(tenantId)}`);
 }
 
 /**
@@ -162,21 +158,20 @@ export async function enrollCorporateMember(params: {
   department?: string;
   subsidyCap?: number;
 }): Promise<CorporateMember> {
-  const res = await fetch(`${API_BASE_URL}/api/corporate/accounts/${encodeURIComponent(params.accountId)}/members`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      tenant_id: params.tenantId,
-      profile_id: params.profileId,
-      employee_id_number: params.employeeIdNumber || null,
-      department: params.department || null,
-      subsidy_cap: params.subsidyCap || null
-    })
-  });
-  if (!res.ok) {
-    throw new Error(`[enrollCorporateMember] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
+  const data = await apiFetch<{ member: CorporateMember }>(
+    `${API_BASE_URL}/api/corporate/accounts/${encodeURIComponent(params.accountId)}/members`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenant_id: params.tenantId,
+        profile_id: params.profileId,
+        employee_id_number: params.employeeIdNumber || null,
+        department: params.department || null,
+        subsidy_cap: params.subsidyCap || null
+      })
+    }
+  );
   return data.member;
 }
 
@@ -188,12 +183,12 @@ export async function removeCorporateMember(
   accountId: string,
   profileId: string
 ): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/api/corporate/accounts/${encodeURIComponent(accountId)}/members/${encodeURIComponent(profileId)}?tenant_id=${encodeURIComponent(tenantId)}`, {
-    method: 'DELETE'
-  });
-  if (!res.ok) {
-    throw new Error(`[removeCorporateMember] ${res.status}: ${await res.text()}`);
-  }
+  await apiFetch(
+    `${API_BASE_URL}/api/corporate/accounts/${encodeURIComponent(accountId)}/members/${encodeURIComponent(profileId)}?tenant_id=${encodeURIComponent(tenantId)}`,
+    {
+      method: 'DELETE'
+    }
+  );
 }
 
 /**
@@ -206,20 +201,19 @@ export async function generateCorporateInvoice(params: {
   billingPeriodEnd: string;
   dueDate?: string;
 }): Promise<CorporateInvoice> {
-  const res = await fetch(`${API_BASE_URL}/api/corporate/accounts/${encodeURIComponent(params.accountId)}/invoices/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      tenant_id: params.tenantId,
-      billing_period_start: params.billingPeriodStart,
-      billing_period_end: params.billingPeriodEnd,
-      due_date: params.dueDate || null
-    })
-  });
-  if (!res.ok) {
-    throw new Error(`[generateCorporateInvoice] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
+  const data = await apiFetch<{ invoice: CorporateInvoice }>(
+    `${API_BASE_URL}/api/corporate/accounts/${encodeURIComponent(params.accountId)}/invoices/generate`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenant_id: params.tenantId,
+        billing_period_start: params.billingPeriodStart,
+        billing_period_end: params.billingPeriodEnd,
+        due_date: params.dueDate || null
+      })
+    }
+  );
   return data.invoice;
 }
 
@@ -232,18 +226,17 @@ export async function settleCorporateInvoice(params: {
   paymentMethod: string;
   paymentReference?: string;
 }): Promise<CorporateInvoice> {
-  const res = await fetch(`${API_BASE_URL}/api/corporate/invoices/${encodeURIComponent(params.invoiceId)}/settle`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      tenant_id: params.tenantId,
-      payment_method: params.paymentMethod,
-      payment_reference: params.paymentReference || null
-    })
-  });
-  if (!res.ok) {
-    throw new Error(`[settleCorporateInvoice] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
+  const data = await apiFetch<{ invoice: CorporateInvoice }>(
+    `${API_BASE_URL}/api/corporate/invoices/${encodeURIComponent(params.invoiceId)}/settle`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenant_id: params.tenantId,
+        payment_method: params.paymentMethod,
+        payment_reference: params.paymentReference || null
+      })
+    }
+  );
   return data.invoice;
 }

@@ -1,3 +1,5 @@
+import { apiFetch } from '@/lib/api-client';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export interface BroadcastCampaign {
@@ -47,7 +49,7 @@ export async function sendSingleMessage(params: {
   message: string;
   subject?: string;
 }): Promise<any> {
-  const res = await fetch(`${API_BASE_URL}/api/communications/send-single`, {
+  return apiFetch(`${API_BASE_URL}/api/communications/send-single`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -59,10 +61,6 @@ export async function sendSingleMessage(params: {
       subject: params.subject || null
     })
   });
-  if (!res.ok) {
-    throw new Error(`[sendSingleMessage] ${res.status}: ${await res.text()}`);
-  }
-  return res.json();
 }
 
 /**
@@ -75,7 +73,7 @@ export async function sendBroadcastCampaign(params: {
   targetAudience: string;
   messageTemplate: string;
 }): Promise<any> {
-  const res = await fetch(`${API_BASE_URL}/api/communications/broadcast`, {
+  return apiFetch(`${API_BASE_URL}/api/communications/broadcast`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -86,21 +84,13 @@ export async function sendBroadcastCampaign(params: {
       message_template: params.messageTemplate
     })
   });
-  if (!res.ok) {
-    throw new Error(`[sendBroadcastCampaign] ${res.status}: ${await res.text()}`);
-  }
-  return res.json();
 }
 
 /**
  * Fetch past broadcast campaigns.
  */
 export async function getBroadcastCampaigns(tenantId: string): Promise<BroadcastCampaign[]> {
-  const res = await fetch(`${API_BASE_URL}/api/communications/campaigns?tenant_id=${encodeURIComponent(tenantId)}`);
-  if (!res.ok) {
-    throw new Error(`[getBroadcastCampaigns] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
+  const data = await apiFetch<{ campaigns: BroadcastCampaign[] }>(`${API_BASE_URL}/api/communications/campaigns?tenant_id=${encodeURIComponent(tenantId)}`);
   return data.campaigns || [];
 }
 
@@ -115,11 +105,7 @@ export async function getCommunicationLogs(
   const query = new URLSearchParams({ tenant_id: tenantId, limit: String(limit) });
   if (channel && channel !== 'all') query.append('channel', channel);
 
-  const res = await fetch(`${API_BASE_URL}/api/communications/logs?${query.toString()}`);
-  if (!res.ok) {
-    throw new Error(`[getCommunicationLogs] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
+  const data = await apiFetch<{ logs: NotificationLog[] }>(`${API_BASE_URL}/api/communications/logs?${query.toString()}`);
   return data.logs || [];
 }
 
@@ -127,10 +113,6 @@ export async function getCommunicationLogs(
  * Fetch gateway configuration status.
  */
 export async function getGatewayConfigs(tenantId: string): Promise<GatewayConfig[]> {
-  const res = await fetch(`${API_BASE_URL}/api/communications/config?tenant_id=${encodeURIComponent(tenantId)}`);
-  if (!res.ok) {
-    throw new Error(`[getGatewayConfigs] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
+  const data = await apiFetch<{ configs: GatewayConfig[] }>(`${API_BASE_URL}/api/communications/config?tenant_id=${encodeURIComponent(tenantId)}`);
   return data.configs || [];
 }

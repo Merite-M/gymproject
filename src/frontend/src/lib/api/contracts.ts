@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { apiFetch } from '@/lib/api-client';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -86,11 +86,9 @@ export async function getContractTemplates(
   contractType?: string
 ): Promise<ContractTemplate[]> {
   const typeParam = contractType ? `&contract_type=${encodeURIComponent(contractType)}` : '';
-  const res = await fetch(`${API_BASE_URL}/api/contracts/templates?tenant_id=${encodeURIComponent(tenantId)}${typeParam}`);
-  if (!res.ok) {
-    throw new Error(`[getContractTemplates] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
+  const data = await apiFetch<{ templates: ContractTemplate[] }>(
+    `${API_BASE_URL}/api/contracts/templates?tenant_id=${encodeURIComponent(tenantId)}${typeParam}`
+  );
   return data.templates || [];
 }
 
@@ -104,7 +102,7 @@ export async function generateContract(params: {
   contractType?: string;
   customData?: Record<string, string>;
 }): Promise<GeneratedContract> {
-  const res = await fetch(`${API_BASE_URL}/api/contracts/generate`, {
+  return apiFetch<GeneratedContract>(`${API_BASE_URL}/api/contracts/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -115,10 +113,6 @@ export async function generateContract(params: {
       custom_data: params.customData || {}
     })
   });
-  if (!res.ok) {
-    throw new Error(`[generateContract] ${res.status}: ${await res.text()}`);
-  }
-  return res.json();
 }
 
 /**
@@ -136,7 +130,7 @@ export async function signContract(params: {
   guardianRelationship?: string | null;
   customMetadata?: Record<string, any>;
 }): Promise<{ success: boolean; contract: FullSignedContract }> {
-  const res = await fetch(`${API_BASE_URL}/api/contracts/sign`, {
+  return apiFetch<{ success: boolean; contract: FullSignedContract }>(`${API_BASE_URL}/api/contracts/sign`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -152,10 +146,6 @@ export async function signContract(params: {
       custom_metadata: params.customMetadata || {}
     })
   });
-  if (!res.ok) {
-    throw new Error(`[signContract] ${res.status}: ${await res.text()}`);
-  }
-  return res.json();
 }
 
 /**
@@ -165,11 +155,9 @@ export async function getMemberContracts(
   tenantId: string,
   profileId: string
 ): Promise<SignedContractSummary[]> {
-  const res = await fetch(`${API_BASE_URL}/api/contracts/member/${encodeURIComponent(profileId)}?tenant_id=${encodeURIComponent(tenantId)}`);
-  if (!res.ok) {
-    throw new Error(`[getMemberContracts] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
+  const data = await apiFetch<{ contracts: SignedContractSummary[] }>(
+    `${API_BASE_URL}/api/contracts/member/${encodeURIComponent(profileId)}?tenant_id=${encodeURIComponent(tenantId)}`
+  );
   return data.contracts || [];
 }
 
@@ -180,10 +168,8 @@ export async function getContractById(
   tenantId: string,
   contractId: string
 ): Promise<FullSignedContract> {
-  const res = await fetch(`${API_BASE_URL}/api/contracts/${encodeURIComponent(contractId)}?tenant_id=${encodeURIComponent(tenantId)}`);
-  if (!res.ok) {
-    throw new Error(`[getContractById] ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json();
+  const data = await apiFetch<{ contract: FullSignedContract }>(
+    `${API_BASE_URL}/api/contracts/${encodeURIComponent(contractId)}?tenant_id=${encodeURIComponent(tenantId)}`
+  );
   return data.contract;
 }

@@ -2025,22 +2025,15 @@ router.get('/:id/waivers', async (req, res) => {
       return res.status(403).json({ error: tenantAccess.error });
     }
 
-    // Fetch waiver signatures if table exists
-    let waivers = [];
-    try {
-      const { data: waiverData, error: waiverError } = await supabase
-        .from('waiver_signatures')
-        .select('*')
-        .eq('profile_id', id)
-        .eq('tenant_id', tenant_id)
-        .order('signed_at', { ascending: false });
+    // Fetch signed contracts/waivers from member_contracts
+    const { data: waiverData, error: waiverError } = await supabase
+      .from('member_contracts')
+      .select('id, tenant_id, profile_id, title, status, signed_at, signature_image_url, pdf_url, metadata')
+      .eq('profile_id', id)
+      .eq('tenant_id', tenant_id)
+      .order('signed_at', { ascending: false });
 
-      if (!waiverError && waiverData) {
-        waivers = waiverData;
-      }
-    } catch (err) {
-      // Table might not exist yet, use profile data
-    }
+    const waivers = (!waiverError && waiverData) ? waiverData : [];
 
     // Get current waiver status from profile
     const { data: profile, error: profileError } = await supabase
@@ -2106,34 +2099,31 @@ router.post('/:id/waivers', async (req, res) => {
 
     const expiresAt = new Date();
     expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+    const nowIso = new Date().toISOString();
 
-    // Try to create detailed waiver record if table exists
-    let waiverRecord = null;
-    try {
-      const { data: newWaiver, error: waiverError } = await supabase
-        .from('waiver_signatures')
-        .insert({
-          tenant_id,
-          profile_id: id,
-          waiver_version: '1.0',
+    // Create detailed signed waiver record in member_contracts
+    const { data: newWaiver } = await supabase
+      .from('member_contracts')
+      .insert({
+        tenant_id,
+        profile_id: id,
+        title: `Liability Waiver (${waiver_type})`,
+        rendered_content: `Waiver electronically signed for ${waiver_type}`,
+        status: 'signed',
+        signature_image_url: signature_data,
+        signed_at: nowIso,
+        metadata: {
           waiver_type,
-          signature_data,
-          signed_at: new Date().toISOString(),
-          expires_at: expiresAt.toISOString(),
-          guardian_name,
-          guardian_relationship,
-          verified_by: signed_by,
-          verified_at: new Date().toISOString()
-        })
-        .select()
-        .single();
+          guardian_name: guardian_name || null,
+          guardian_relationship: guardian_relationship || null,
+          signed_by: signed_by || null,
+          expires_at: expiresAt.toISOString()
+        }
+      })
+      .select()
+      .single();
 
-      if (!waiverError && newWaiver) {
-        waiverRecord = newWaiver;
-      }
-    } catch (err) {
-      // Table might not exist, continue with profile update
-    }
+    const waiverRecord = newWaiver || null;
 
     // Update profile waiver status
     const { data: profile, error: profileError } = await supabase

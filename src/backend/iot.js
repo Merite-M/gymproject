@@ -154,6 +154,50 @@ async function getLiveOccupancy(tenant_id, autoCheckoutMinutes = 120) {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── Shelly Relay Trigger with Retry ─────────────────────────────────────────
+async function triggerShellyRelayWithRetry(device, maxRetries = 2, timeoutMs = 3000) {
+  const urlPath = device.trigger_url_path || '/relay/0?turn=on';
+  const triggerUrl = `http://${device.ip_address}${urlPath}`;
+
+  // SSRF Protection Check
+  const safeUrlInfo = await getSafeIpAndHost(triggerUrl);
+  if (!safeUrlInfo.safe) {
+    console.error(`[Hardware Trigger] Blocked unsafe trigger URL: ${triggerUrl}`);
+    return { success: false, error: 'Unsafe device IP address or trigger URL', unsafe: true };
+  }
+
+  const portStr = safeUrlInfo.port ? `:${safeUrlInfo.port}` : '';
+  const safeFetchUrl = `${safeUrlInfo.protocol}//${safeUrlInfo.ip}${portStr}${safeUrlInfo.pathname}${safeUrlInfo.search}`;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => { controller.abort(); }, timeoutMs);
+    try {
+      const response = await fetch(safeFetchUrl, {
+        headers: { 'Host': safeUrlInfo.hostname },
+        method: 'POST',
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+
+      if (response.ok) {
+        return { success: true, attempts: attempt };
+      }
+      console.warn(`[Hardware Trigger] Attempt ${attempt}/${maxRetries} failed with status: ${response.status}`);
+    } catch (err) {
+      clearTimeout(timeout);
+      console.warn(`[Hardware Trigger] Attempt ${attempt}/${maxRetries} network/timeout error:`, err.message);
+    }
+
+    if (attempt < maxRetries) {
+      await new Promise(r => setTimeout(r, 400 * attempt));
+    }
+  }
+
+  return { success: false, error: 'Hardware trigger failed after retries' };
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 router.post('/unlock', async (req, res) => {
     try {
         const { tenant_id, profile_id, device_id, access_method, geofence_verified } = req.body;
@@ -347,42 +391,15 @@ router.post('/unlock', async (req, res) => {
 
         let triggerSuccess = false;
 
-        // Hardware Trigger
+        // Hardware Trigger with Resilience Retry
         if (finalStatus === 'approved' || finalStatus === 'warning') {
-            try {
-                const urlPath = device.trigger_url_path || '/relay/0?turn=on';
-                const triggerUrl = `http://${device.ip_address}${urlPath}`;
-
-                // SSRF Protection Check
-                const safeUrlInfo = await getSafeIpAndHost(triggerUrl);
-                if (!safeUrlInfo.safe) {
-                    console.error(`Blocked unsafe trigger URL: ${triggerUrl}`);
-                    return res.status(400).json({ error: 'Unsafe device IP address or trigger URL' });
-                }
-
-                // Add a small timeout (3s) for the local relay request
-                const controller = new AbortController();
-                const timeout = setTimeout(() => { controller.abort(); }, 3000);
-
-                const portStr = safeUrlInfo.port ? `:${safeUrlInfo.port}` : '';
-                const safeFetchUrl = `${safeUrlInfo.protocol}//${safeUrlInfo.ip}${portStr}${safeUrlInfo.pathname}${safeUrlInfo.search}`;
-
-                const response = await fetch(safeFetchUrl, {
-                    headers: { 'Host': safeUrlInfo.hostname },
-
-                    method: 'POST',
-                    signal: controller.signal
-                });
-
-                clearTimeout(timeout);
-
-                if (response.ok) {
-                    triggerSuccess = true;
-                } else {
-                    console.error(`Hardware trigger failed with status: ${response.status}`);
-                }
-            } catch (err) {
-                console.error("Hardware trigger error:", err);
+            const triggerResult = await triggerShellyRelayWithRetry(device, 2, 3000);
+            if (triggerResult.unsafe) {
+                return res.status(400).json({ error: triggerResult.error });
+            }
+            triggerSuccess = triggerResult.success;
+            if (!triggerSuccess) {
+                console.error(`[unlock] Hardware relay trigger failed for device ${device.id}: ${triggerResult.error}`);
             }
         }
 
@@ -980,6 +997,8 @@ router.get('/device/:device_id/status', async (req, res) => {
         // Try to ping the device if it's a Shelly relay
         let isOnline = device.is_online;
         if (device.device_type === 'shelly_relay' && device.ip_address) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => { controller.abort(); }, 3000);
             try {
                 const statusUrl = `http://${device.ip_address}/status`;
 
@@ -995,10 +1014,10 @@ router.get('/device/:device_id/status', async (req, res) => {
 
                 const response = await fetch(safeFetchUrl, {
                     headers: { 'Host': safeUrlInfo.hostname },
-
                     method: 'GET',
-                    timeout: 3000
+                    signal: controller.signal
                 });
+                clearTimeout(timeout);
                 isOnline = response.ok;
                 
                 // Update device status in database
@@ -1007,6 +1026,7 @@ router.get('/device/:device_id/status', async (req, res) => {
                     .update({ is_online: isOnline, last_seen: new Date().toISOString() })
                     .eq('id', device_id);
             } catch (err) {
+                clearTimeout(timeout);
                 isOnline = false;
                 await supabase
                     .from('hardware_devices')

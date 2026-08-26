@@ -21,59 +21,97 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isDemoMode, setIsDemoMode] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setUser(session.user);
-        
-        // Fetch tenant_id from user metadata or profiles table
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('tenant_id')
-          .eq('id', session.user.id)
-          .single();
-        
-        if (profile?.tenant_id) {
-          setTenantId(profile.tenant_id);
-        } else {
-          // For demo purposes, use a default tenant if none assigned
-          console.warn('No tenant_id found for user, using default for demo');
-          setTenantId('00000000-0000-0000-0000-000000000000');
+      try {
+        const { data: { session } = {}, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          console.warn('[AuthContext] Session retrieval error:', sessionError);
+        }
+
+        if (session?.user && isMounted) {
+          setUser(session.user);
+          
+          try {
+            const { data: profile, error: profileError } = await supabase
+              .from('profiles')
+              .select('tenant_id')
+              .eq('id', session.user.id)
+              .single();
+            
+            if (isMounted) {
+              if (profile?.tenant_id) {
+                setTenantId(profile.tenant_id);
+              } else {
+                if (profileError && profileError.code !== 'PGRST116') {
+                  console.warn('[AuthContext] Profile fetch error:', profileError);
+                }
+                console.warn('No tenant_id found for user, using default for demo');
+                setTenantId('00000000-0000-0000-0000-000000000000');
+              }
+            }
+          } catch (profileErr) {
+            console.error('[AuthContext] Unexpected profile fetch exception:', profileErr);
+            if (isMounted) {
+              setTenantId('00000000-0000-0000-0000-000000000000');
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[AuthContext] checkSession error:', err);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
         }
       }
-      setLoading(false);
     };
     
     checkSession();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setUser(session.user);
-        
-        // Fetch tenant_id when auth state changes
-        supabase
-          .from('profiles')
-          .select('tenant_id')
-          .eq('id', session.user.id)
-          .single()
-          .then(({ data: profile }) => {
-            if (profile?.tenant_id) {
-              setTenantId(profile.tenant_id);
-            } else {
-              // For demo purposes, use a default tenant if none assigned
-              console.warn('No tenant_id found for user, using default for demo');
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      try {
+        if (session?.user && isMounted) {
+          setUser(session.user);
+          
+          try {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('tenant_id')
+              .eq('id', session.user.id)
+              .single();
+
+            if (isMounted) {
+              if (profile?.tenant_id) {
+                setTenantId(profile.tenant_id);
+              } else {
+                setTenantId('00000000-0000-0000-0000-000000000000');
+              }
+            }
+          } catch (profileErr) {
+            console.error('[AuthContext] Auth state change profile fetch error:', profileErr);
+            if (isMounted) {
               setTenantId('00000000-0000-0000-0000-000000000000');
             }
-          });
-      } else {
-        setUser(null);
-        setTenantId(null);
+          }
+        } else if (isMounted) {
+          setUser(null);
+          setTenantId(null);
+        }
+      } catch (err) {
+        console.error('[AuthContext] onAuthStateChange error:', err);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {

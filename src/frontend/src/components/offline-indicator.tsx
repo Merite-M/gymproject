@@ -11,17 +11,59 @@ export function OfflineIndicator() {
   const [queueCount, setQueueCount] = useState(0);
 
   useEffect(() => {
+    let isMounted = true;
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+    const checkServerHealth = async () => {
+      if (!navigator.onLine) {
+        if (isMounted) setStatus("offline");
+        return;
+      }
+
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch(`${API_BASE_URL}/health`, {
+          method: 'GET',
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+
+        if (isMounted) {
+          if (res.ok) {
+            setStatus("online");
+          } else {
+            setStatus("error");
+          }
+        }
+      } catch {
+        if (isMounted) {
+          // If browser is online but server is unreachable, show offline/error status
+          setStatus("offline");
+        }
+      }
+    };
+
     // Monitor online/offline status
-    const handleOnline = () => setStatus("online");
-    const handleOffline = () => setStatus("offline");
+    const handleOnline = () => {
+      checkServerHealth();
+    };
+    const handleOffline = () => {
+      if (isMounted) setStatus("offline");
+    };
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
     // Initial check
-    setStatus(navigator.onLine ? "online" : "offline");
+    checkServerHealth();
+
+    // Periodic connectivity heartbeat every 30s
+    const heartbeatInterval = setInterval(checkServerHealth, 30000);
 
     return () => {
+      isMounted = false;
+      clearInterval(heartbeatInterval);
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };

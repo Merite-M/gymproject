@@ -52,6 +52,8 @@ function initCron(supabase) {
                     const linearApiKey = process.env.LINEAR_API_KEY;
                     const linearTeamId = process.env.LINEAR_TEAM_ID;
                     if (linearApiKey && linearTeamId) {
+                        const controller = new AbortController();
+                        const timeout = setTimeout(() => controller.abort(), 5000);
                         try {
                             const response = await fetch('https://api.linear.app/graphql', {
                                 method: 'POST',
@@ -59,6 +61,7 @@ function initCron(supabase) {
                                     'Content-Type': 'application/json',
                                     'Authorization': linearApiKey
                                 },
+                                signal: controller.signal,
                                 body: JSON.stringify({
                                     query: `
                                         mutation IssueCreate($title: String!, $teamId: String!, $description: String!) {
@@ -82,6 +85,7 @@ function initCron(supabase) {
                                     }
                                 })
                             });
+                            clearTimeout(timeout);
                             const data = await response.json();
                             if (data.errors) {
                                  console.error("Linear API error:", data.errors);
@@ -89,7 +93,8 @@ function initCron(supabase) {
                                  console.log("Created Linear Issue:", data.data?.issueCreate?.issue?.id);
                             }
                         } catch (err) {
-                            console.error("Linear integration failed:", err);
+                            clearTimeout(timeout);
+                            console.error("Linear integration failed or timed out:", err.message);
                         }
                     } else {
                         console.log("No Linear API Key/Team ID configured. Skipping explicit issue creation.");
