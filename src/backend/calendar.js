@@ -675,6 +675,127 @@ router.post('/mark-no-show', authMiddleware, async (req, res) => {
     }
 });
 
+router.get('/rentals/availability', authMiddleware, async (req, res) => {
+    try {
+        if (!supabase) {
+            return res.status(500).json({ error: 'Supabase not configured' });
+        }
+
+        const { tenant_id, facility_id, resource_id, date } = req.query;
+        const targetFacilityId = facility_id || resource_id;
+
+        if (!tenant_id) {
+            return res.status(400).json({ error: 'Missing tenant_id' });
+        }
+
+        const targetDate = date ? new Date(date) : new Date();
+        const startOfDay = new Date(targetDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(targetDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        let facQuery = supabase
+            .from('facilities')
+            .select('id, name, resource_type, max_capacity, hourly_rate_rwf')
+            .eq('tenant_id', tenant_id)
+            .is('deleted_at', null);
+
+        if (targetFacilityId) {
+            facQuery = facQuery.eq('id', targetFacilityId);
+        }
+
+        const { data: facilities, error: facErr } = await facQuery;
+        if (facErr) {
+            return res.status(500).json({ error: facErr.message });
+        }
+
+        let rentalQuery = supabase
+            .from('facility_rentals')
+            .select('id, facility_id, resource_id, profile_id, member_id, start_time, end_time, total_fee, hourly_rate_rwf, status, booking_status, payment_status, notes')
+            .eq('tenant_id', tenant_id)
+            .gte('start_time', startOfDay.toISOString())
+            .lte('start_time', endOfDay.toISOString())
+            .neq('status', 'cancelled');
+
+        if (targetFacilityId) {
+            rentalQuery = rentalQuery.or('facility_id.eq.' + targetFacilityId + ',resource_id.eq.' + targetFacilityId);
+        }
+
+        const { data: rentals, error: rentalErr } = await rentalQuery;
+        if (rentalErr) {
+            return res.status(500).json({ error: rentalErr.message });
+        }
+
+        let classQuery = supabase
+            .from('class_schedules')
+            .select('id, facility_id, title, start_time, end_time')
+            .eq('tenant_id', tenant_id)
+            .eq('is_cancelled', false)
+            .gte('start_time', startOfDay.toISOString())
+            .lte('start_time', endOfDay.toISOString());
+
+        if (targetFacilityId) {
+            classQuery = classQuery.eq('facility_id', targetFacilityId);
+        }
+
+        const { data: classes, error: classErr } = await classQuery;
+        if (classErr) {
+            return res.status(500).json({ error: classErr.message });
+        }
+
+        res.status(200).json({
+            date: targetDate.toISOString().split('T')[0],
+            facilities: facilities || [],
+            rentals: rentals || [],
+            classes: classes || []
+        });
+    } catch (error) {
+        console.error('Get availability error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+router.patch('/rentals/:id', authMiddleware, async (req, res) => {
+    try {
+        if (!supabase) {
+            return res.status(500).json({ error: 'Supabase not configured' });
+        }
+
+        const { id } = req.params;
+        const { tenant_id, status, booking_status, payment_status, notes } = req.body;
+
+        if (!tenant_id) {
+            return res.status(400).json({ error: 'Missing tenant_id' });
+        }
+
+        const updateData = {};
+        if (status !== undefined) updateData.status = status;
+        if (booking_status !== undefined) {
+            updateData.booking_status = booking_status;
+            updateData.status = booking_status;
+        }
+        if (payment_status !== undefined) updateData.payment_status = payment_status;
+        if (notes !== undefined) updateData.notes = notes;
+
+        const { data: rental, error } = await supabase
+            .from('facility_rentals')
+            .update(updateData)
+            .eq('id', id)
+            .eq('tenant_id', tenant_id)
+            .select()
+            .single();
+
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+
+        res.status(200).json({ success: true, rental });
+    } catch (error) {
+        console.error('Update rental error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 router.get('/rentals', authMiddleware, async (req, res) => {
     try {
         if (!supabase) {
@@ -721,11 +842,16 @@ router.post('/rentals', authMiddleware, async (req, res) => {
             return res.status(500).json({ error: 'Supabase not configured' });
         }
 
-        let { tenant_id, facility_id, profile_id, start_time, end_time, notes } = req.body;
+        let { tenant_id, facility_id, resource_id, profile_id, member_id, start_time, end_time, notes, payment_status, booking_status, hourly_rate_rwf } = req.body;
 
-        if (!tenant_id || !facility_id || !profile_id || !start_time || !end_time) {
-            return res.status(400).json({ error: 'Missing tenant_id, facility_id, profile_id, start_time, or end_time' });
+        const actualFacilityId = facility_id || resource_id;
+        const actualMemberId = profile_id || member_id;
+
+        if (!tenant_id || !actualFacilityId || !actualMemberId || !start_time || !end_time) {
+            return res.status(400).json({ error: 'Missing tenant_id, resource_id/facility_id, member_id/profile_id, start_time, or end_time' });
         }
+        facility_id = actualFacilityId;
+        profile_id = actualMemberId;
 
         if (start_time && !start_time.endsWith('Z')) {
             start_time = new Date(start_time).toISOString();
@@ -802,11 +928,16 @@ router.post('/rentals', authMiddleware, async (req, res) => {
             .insert({
                 tenant_id,
                 facility_id,
+                resource_id: facility_id,
                 profile_id,
+                member_id: profile_id,
                 start_time,
                 end_time,
+                hourly_rate_rwf: hourly_rate_rwf !== undefined ? hourly_rate_rwf : hourlyRate,
                 total_fee: totalFee,
-                status: 'confirmed',
+                status: booking_status || 'confirmed',
+                booking_status: booking_status || 'confirmed',
+                payment_status: payment_status || 'unpaid',
                 notes: notes || null
             })
             .select()

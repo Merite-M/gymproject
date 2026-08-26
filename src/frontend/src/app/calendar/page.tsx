@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -252,6 +253,13 @@ const [schedules, setSchedules] = useState<ScheduleItem[]>([
             <CalendarDays className="w-4 h-4" />
             Day View ({selectedDay})
           </button>
+          <Link
+            href="/calendar/rentals"
+            className="flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 border-transparent text-amber-400 hover:text-amber-300 hover:bg-muted/50 transition-colors min-h-[44px] whitespace-nowrap"
+          >
+            <Ticket className="w-4 h-4" />
+            Dedicated Space & Equipment Rental Engine →
+          </Link>
           <button
             onClick={() => setViewMode("rentals")}
             className={cn(
