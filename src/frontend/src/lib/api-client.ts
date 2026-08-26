@@ -1,6 +1,6 @@
 /**
  * GymPartner Resilient API Client
- * Provides timeout handling, exponential backoff retries, user-friendly error mapping,
+ * Provides timeout handling, safe idempotency-aware retries, user-friendly error mapping,
  * and offline detection across all frontend API service calls.
  */
 
@@ -25,7 +25,7 @@ export interface ApiFetchOptions extends RequestInit {
 }
 
 const DEFAULT_TIMEOUT_MS = 12000;
-const DEFAULT_RETRIES = 2;
+const DEFAULT_IDEMPOTENT_RETRIES = 2;
 
 // User-friendly error message dictionary
 const ERROR_CODE_MESSAGES: Record<string, string> = {
@@ -42,9 +42,14 @@ export async function apiFetch<T = any>(
   url: string,
   options: ApiFetchOptions = {}
 ): Promise<T> {
+  const method = (options.method || 'GET').toUpperCase();
+  const isIdempotent = ['GET', 'HEAD', 'OPTIONS'].includes(method);
+
   const {
     timeoutMs = DEFAULT_TIMEOUT_MS,
-    retries = DEFAULT_RETRIES,
+    // By default, only retry idempotent read operations (GET/HEAD).
+    // Mutating write operations (POST/PUT/PATCH/DELETE) default to 0 retries to prevent duplicate financial or state transactions.
+    retries = isIdempotent ? DEFAULT_IDEMPOTENT_RETRIES : 0,
     retryDelayMs = 800,
     ...fetchOptions
   } = options;
@@ -66,6 +71,7 @@ export async function apiFetch<T = any>(
     try {
       const response = await fetch(url, {
         ...fetchOptions,
+        method,
         signal: controller.signal,
       });
 
@@ -88,12 +94,13 @@ export async function apiFetch<T = any>(
         const code = errorPayload.code;
         const friendlyMessage = (code && ERROR_CODE_MESSAGES[code]) || rawMsg;
 
-        // If server error (502, 503, 504) and we have retries left, retry
+        // Only retry transient gateway errors (502, 503, 504) if the method is idempotent and retries remain
         if (
+          isIdempotent &&
           (response.status === 502 || response.status === 503 || response.status === 504) &&
           attempt < retries
         ) {
-          console.warn(`[apiFetch] Server error ${response.status}, retrying attempt ${attempt + 1}/${retries}...`);
+          console.warn(`[apiFetch] Server error ${response.status} on ${method} ${url}, retrying attempt ${attempt + 1}/${retries}...`);
           await new Promise((resolve) => setTimeout(resolve, retryDelayMs * Math.pow(2, attempt)));
           continue;
         }
@@ -113,10 +120,18 @@ export async function apiFetch<T = any>(
           408,
           'TIMEOUT'
         );
+        // Never retry timeouts on non-idempotent operations, as the server may still be processing the write
+        if (!isIdempotent) {
+          throw lastError;
+        }
       } else if (err instanceof APIError) {
         lastError = err;
-        // Don't retry 4xx client errors (e.g. 400 Bad Request, 401 Unauthorized, 404 Not Found)
+        // Never retry client errors (4xx)
         if (err.status >= 400 && err.status < 500) {
+          throw err;
+        }
+        // Non-idempotent requests should not retry on server errors
+        if (!isIdempotent) {
           throw err;
         }
       } else {
@@ -125,10 +140,14 @@ export async function apiFetch<T = any>(
           0,
           'NETWORK_ERROR'
         );
+        // Non-idempotent operations should not retry blindly on network drops after dispatch
+        if (!isIdempotent) {
+          throw lastError;
+        }
       }
 
-      // If we have retries left for transient errors, wait and retry
-      if (attempt < retries) {
+      // If we have retries left for transient idempotent errors, wait and retry
+      if (isIdempotent && attempt < retries) {
         await new Promise((resolve) => setTimeout(resolve, retryDelayMs * Math.pow(2, attempt)));
       }
     }

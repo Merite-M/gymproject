@@ -2025,15 +2025,21 @@ router.get('/:id/waivers', async (req, res) => {
       return res.status(403).json({ error: tenantAccess.error });
     }
 
-    // Fetch signed contracts/waivers from member_contracts
-    const { data: waiverData, error: waiverError } = await supabase
+    // Fetch signed contracts/waivers from member_contracts filtered to waiver types
+    const { data: contractData, error: contractError } = await supabase
       .from('member_contracts')
-      .select('id, tenant_id, profile_id, title, status, signed_at, signature_image_url, pdf_url, metadata')
+      .select('id, tenant_id, profile_id, title, status, signed_at, signature_image_url, pdf_url, metadata, contract_templates(contract_type)')
       .eq('profile_id', id)
       .eq('tenant_id', tenant_id)
       .order('signed_at', { ascending: false });
 
-    const waivers = (!waiverError && waiverData) ? waiverData : [];
+    const waivers = (!contractError && contractData)
+      ? contractData.filter(c => 
+          c.metadata?.waiver_type || 
+          c.contract_templates?.contract_type === 'waiver' ||
+          (c.title && c.title.toLowerCase().includes('waiver'))
+        )
+      : [];
 
     // Get current waiver status from profile
     const { data: profile, error: profileError } = await supabase

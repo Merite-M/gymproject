@@ -70,13 +70,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkSession();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      try {
-        if (session?.user && isMounted) {
-          setUser(session.user);
-          
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
+
+      if (session?.user) {
+        setUser(session.user);
+
+        // Defer database query outside the auth event loop callback to avoid supabase auth lock deadlocks
+        setTimeout(async () => {
+          if (!isMounted) return;
           try {
-            const { data: profile } = await supabase
+            const { data: profile, error: profileError } = await supabase
               .from('profiles')
               .select('tenant_id')
               .eq('id', session.user.id)
@@ -86,6 +90,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (profile?.tenant_id) {
                 setTenantId(profile.tenant_id);
               } else {
+                if (profileError && profileError.code !== 'PGRST116') {
+                  console.warn('[AuthContext] Profile fetch error on auth state change:', profileError);
+                }
                 setTenantId('00000000-0000-0000-0000-000000000000');
               }
             }
@@ -94,17 +101,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (isMounted) {
               setTenantId('00000000-0000-0000-0000-000000000000');
             }
+          } finally {
+            if (isMounted) {
+              setLoading(false);
+            }
           }
-        } else if (isMounted) {
-          setUser(null);
-          setTenantId(null);
-        }
-      } catch (err) {
-        console.error('[AuthContext] onAuthStateChange error:', err);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+        }, 0);
+      } else {
+        setUser(null);
+        setTenantId(null);
+        setLoading(false);
       }
     });
 
