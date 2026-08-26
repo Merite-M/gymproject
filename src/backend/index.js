@@ -27,6 +27,24 @@ if (supabaseUrl && supabaseKey) {
 const gymEmitter = require("./events");
 const upload = multer({ storage: multer.memoryStorage() });
 
+// ─── Live Occupancy Helper (shared logic with iot.js) ────────────────────────
+async function getLiveOccupancy(supabaseClient, tenant_id, autoCheckoutMinutes = 120) {
+  const windowStart = new Date(Date.now() - autoCheckoutMinutes * 60 * 1000).toISOString();
+  const { count, error } = await supabaseClient
+    .from('check_ins')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenant_id)
+    .in('status', ['approved', 'warning'])
+    .is('checkout_at', null)
+    .gte('created_at', windowStart);
+  if (error) {
+    console.error('[getLiveOccupancy] error:', error);
+    return 0;
+  }
+  return count || 0;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 app.post('/api/waivers/sign', upload.single('pdf'), async (req, res) => {
   try {
     const { tenant_id, profile_id } = req.body;
@@ -236,6 +254,42 @@ app.post('/api/checkin', async (req, res) => {
         }
     }
 
+    // ── Capacity Gating ──────────────────────────────────────────────────────
+    if (finalStatus === 'approved' || finalStatus === 'warning') {
+        const { data: tenantCap } = await supabase
+            .from('tenants')
+            .select('max_occupancy_limit, auto_checkout_minutes, capacity_policy')
+            .eq('id', tenant_id)
+            .single();
+
+        if (tenantCap && tenantCap.max_occupancy_limit > 0) {
+            const currentOccupancy = await getLiveOccupancy(supabase, tenant_id, tenantCap.auto_checkout_minutes || 120);
+            if (currentOccupancy >= tenantCap.max_occupancy_limit) {
+                if (tenantCap.capacity_policy === 'hard') {
+                    await supabase.from('check_ins').insert({
+                        tenant_id,
+                        profile_id,
+                        device_id: device_id || null,
+                        access_method: access_method || 'manual_override',
+                        status: 'denied_capacity'
+                    });
+                    gymEmitter.emit('capacity.full', { tenant_id, profile_id, current_occupancy: currentOccupancy, max_limit: tenantCap.max_occupancy_limit });
+                    return res.status(403).json({
+                        success: false,
+                        status: 'denied_capacity',
+                        reason: `Facility is at maximum capacity (${currentOccupancy}/${tenantCap.max_occupancy_limit}).`,
+                        occupancy: { current: currentOccupancy, max: tenantCap.max_occupancy_limit }
+                    });
+                } else {
+                    if (finalStatus === 'approved') finalStatus = 'warning';
+                    reasons.push(`Facility at capacity (${currentOccupancy}/${tenantCap.max_occupancy_limit})`);
+                    gymEmitter.emit('capacity.warning', { tenant_id, profile_id, current_occupancy: currentOccupancy, max_limit: tenantCap.max_occupancy_limit });
+                }
+            }
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const { data: checkin, error: checkinError } = await supabase.from('check_ins').insert({
         tenant_id,
         profile_id,
@@ -301,6 +355,24 @@ app.use("/widgets", publicRoutes);
 
 const syncRoutes = require("./sync");
 app.use("/api/sync", syncRoutes);
+
+const contractsRoutes = require("./contracts");
+app.use("/api/contracts", contractsRoutes);
+
+const corporateRoutes = require("./corporate");
+app.use("/api/corporate", corporateRoutes);
+
+const tierRoutes = require("./tier_proration");
+app.use("/api/tiers", tierRoutes);
+
+const staffTasksRoutes = require("./staff_tasks");
+app.use("/api/tasks", staffTasksRoutes);
+
+const communicationsRoutes = require("./communications");
+app.use("/api/communications", communicationsRoutes);
+
+const { router: dripRoutes } = require("./drip_engine");
+app.use("/api/workflows", dripRoutes);
 
 
 initCron(supabase);
@@ -370,11 +442,13 @@ app.post("/api/kiosk/checkin", async (req, res) => {
     }
 
     if (!profile) {
-      const { data: phoneProfiles } = await supabase
+      let query = supabase
         .from("profiles")
         .select("*")
-        .eq("tenant_id", tenant_id)
-        .or("phone.eq." + term + ",phone.ilike.%" + term + "%")
+        .eq("tenant_id", tenant_id);
+      
+      const { data: phoneProfiles } = await query
+        .eq("phone", term)
         .limit(1);
 
       if (phoneProfiles && phoneProfiles.length > 0) {
@@ -427,6 +501,41 @@ app.post("/api/kiosk/checkin", async (req, res) => {
       if (finalStatus === "approved") finalStatus = "warning";
       reasons.push("Membership on hold until " + (activeHold.end_date || "indefinitely"));
     }
+
+    // ── Capacity Gating ──────────────────────────────────────────────────────
+    if (finalStatus === "approved" || finalStatus === "warning") {
+        const { data: tenantCapK } = await supabase
+            .from("tenants")
+            .select("max_occupancy_limit, auto_checkout_minutes, capacity_policy")
+            .eq("id", tenant_id)
+            .single();
+
+        if (tenantCapK && tenantCapK.max_occupancy_limit > 0) {
+            const currentOccupancy = await getLiveOccupancy(supabase, tenant_id, tenantCapK.auto_checkout_minutes || 120);
+            if (currentOccupancy >= tenantCapK.max_occupancy_limit) {
+                if (tenantCapK.capacity_policy === "hard") {
+                    await supabase.from("check_ins").insert({
+                        tenant_id,
+                        profile_id: profile.id,
+                        access_method: access_method || "kiosk_pin",
+                        status: "denied_capacity"
+                    });
+                    gymEmitter.emit("capacity.full", { tenant_id, profile_id: profile.id, current_occupancy: currentOccupancy, max_limit: tenantCapK.max_occupancy_limit });
+                    return res.status(403).json({
+                        success: false,
+                        status: "denied_capacity",
+                        reason: `Facility is at maximum capacity (${currentOccupancy}/${tenantCapK.max_occupancy_limit}).`,
+                        occupancy: { current: currentOccupancy, max: tenantCapK.max_occupancy_limit }
+                    });
+                } else {
+                    if (finalStatus === "approved") finalStatus = "warning";
+                    reasons.push(`Facility at capacity (${currentOccupancy}/${tenantCapK.max_occupancy_limit})`);
+                    gymEmitter.emit("capacity.warning", { tenant_id, profile_id: profile.id, current_occupancy: currentOccupancy, max_limit: tenantCapK.max_occupancy_limit });
+                }
+            }
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     const { data: checkin, error: checkinError } = await supabase
       .from("check_ins")

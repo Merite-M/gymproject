@@ -116,6 +116,103 @@ function initCron(supabase) {
         }
     });
 
+    // ─── Auto-Checkout Cron (every 15 minutes) ───────────────────────────────
+    // Closes orphaned check-in sessions where a member never checked out
+    // and the session exceeds the tenant's auto_checkout_minutes threshold.
+    let isAutoCheckoutRunning = false;
+    cron.schedule('*/15 * * * *', async () => {
+        if (isAutoCheckoutRunning) return;
+        isAutoCheckoutRunning = true;
+
+        try {
+            // Fetch all tenants with their auto-checkout config
+            const { data: tenants, error: tenantError } = await supabase
+                .from('tenants')
+                .select('id, auto_checkout_minutes');
+
+            if (tenantError || !tenants) {
+                console.error('[auto-checkout] tenant fetch error:', tenantError);
+                return;
+            }
+
+            let totalClosed = 0;
+
+            for (const tenant of tenants) {
+                const autoMinutes = tenant.auto_checkout_minutes || 120;
+                const cutoffTime = new Date(Date.now() - autoMinutes * 60 * 1000).toISOString();
+
+                const { data: orphaned, error: orphanError } = await supabase
+                    .from('check_ins')
+                    .select('id')
+                    .eq('tenant_id', tenant.id)
+                    .in('status', ['approved', 'warning'])
+                    .is('checkout_at', null)
+                    .lt('created_at', cutoffTime);
+
+                if (orphanError || !orphaned || orphaned.length === 0) continue;
+
+                const orphanIds = orphaned.map(o => o.id);
+                const { error: updateError } = await supabase
+                    .from('check_ins')
+                    .update({
+                        checkout_at: new Date().toISOString(),
+                        checkout_method: 'auto_timeout'
+                    })
+                    .in('id', orphanIds);
+
+                if (updateError) {
+                    console.error(`[auto-checkout] update error for tenant ${tenant.id}:`, updateError);
+                } else {
+                    totalClosed += orphanIds.length;
+                }
+            }
+
+            if (totalClosed > 0) {
+                console.log(`[auto-checkout] Closed ${totalClosed} orphaned sessions.`);
+            }
+        } catch (e) {
+            console.error('[auto-checkout] exception:', e);
+        } finally {
+            isAutoCheckoutRunning = false;
+        }
+    });
+
+    // ─── Drip Workflow Delay Step Resume Engine (Runs every minute) ────────────
+    let isDripRunning = false;
+    cron.schedule('* * * * *', async () => {
+        if (isDripRunning) return;
+        isDripRunning = true;
+        try {
+            const now = new Date().toISOString();
+            const { data: waitingMembers, error: waitErr } = await supabase
+                .from('member_workflow_state')
+                .select('*, marketing_workflows(*)')
+                .eq('status', 'waiting_delay')
+                .lte('resume_at', now)
+                .limit(20);
+
+            if (!waitErr && waitingMembers && waitingMembers.length > 0) {
+                const { executeWorkflowStep } = require('./drip_engine');
+                for (const state of waitingMembers) {
+                    if (state.marketing_workflows) {
+                        console.log(`[Drip Engine] Resuming delayed workflow "${state.marketing_workflows.name}" for member ${state.profile_id}...`);
+                        await executeWorkflowStep({
+                            tenant_id: state.tenant_id,
+                            profile_id: state.profile_id,
+                            workflow: state.marketing_workflows,
+                            currentNodeId: state.current_node_id,
+                            context: state.context || {}
+                        });
+                    }
+                }
+            }
+        } catch (dripErr) {
+            console.error('[Drip Engine Cron] error:', dripErr);
+        } finally {
+            isDripRunning = false;
+        }
+    });
+
     // Daily tasks (e.g. run at midnight)
     cron.schedule('0 0 * * *', async () => {
         if (isDailyRunning) {
@@ -295,6 +392,30 @@ function initCron(supabase) {
                                     });
                                 if (notifError) {
                                     console.error(`Error queueing miss you notif for ${profile.id}:`, notifError);
+                                }
+
+                                // Create automated staff follow-up task
+                                const { data: existingTask } = await supabase
+                                    .from('staff_tasks')
+                                    .select('id')
+                                    .eq('profile_id', profile.id)
+                                    .eq('trigger_event', 'member.churn_risk')
+                                    .eq('status', 'pending')
+                                    .limit(1);
+
+                                if (!existingTask || existingTask.length === 0) {
+                                    await supabase.from('staff_tasks').insert({
+                                        tenant_id: profile.tenant_id,
+                                        profile_id: profile.id,
+                                        title: `⚠️ Churn Risk Follow-up: Member inactive 14+ days`,
+                                        description: `Member has not checked in recently. Contact via WhatsApp or Call to check in on their fitness goals.`,
+                                        trigger_event: 'member.churn_risk',
+                                        task_type: 'retention_check',
+                                        priority: 'high',
+                                        status: 'pending',
+                                        due_date: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+                                        assigned_role: 'reception'
+                                    });
                                 }
                             }
                         } catch (e) {

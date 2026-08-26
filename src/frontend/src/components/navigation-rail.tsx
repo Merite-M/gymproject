@@ -13,7 +13,10 @@ import {
   ScanLine,
   CreditCard,
   Sparkles,
-  GitBranch
+  GitBranch,
+  Building2,
+  CheckSquare,
+  Radio
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +32,12 @@ const navigationItems = [
     href: "/members",
     icon: Users,
     description: "Member CRM",
+  },
+  {
+    name: "Corporate B2B",
+    href: "/admin/corporate",
+    icon: Building2,
+    description: "Employer billing",
   },
   {
     name: "Sales & Leads",
@@ -49,10 +58,16 @@ const navigationItems = [
     description: "Classes & conflicts",
   },
   {
-    name: "Retention",
-    href: "/retention",
-    icon: Megaphone,
-    description: "Automation",
+    name: "Messaging & SMS",
+    href: "/admin/communications",
+    icon: Radio,
+    description: "Africa's Talking & WhatsApp",
+  },
+  {
+    name: "Staff Tasks",
+    href: "/admin/tasks",
+    icon: CheckSquare,
+    description: "Task automations",
   },
   {
     name: "Canvas",
