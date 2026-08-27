@@ -5,11 +5,24 @@ import Link from "next/link";
 import { useState } from "react";
 import { User, Search, Filter, Plus, Tag, Gift, Check, X } from "lucide-react";
 import { cn, formatCurrencyDisplay } from "@/lib/utils";
-import { MemberProfilePanel } from "@/components/member-profile-panel";
+import { MemberProfilePanel, type MemberPanelData } from "@/components/member-profile-panel";
 import { TabbedConsole } from "@/components/tabbed-console";
+import { useTenantId } from "@/contexts/AuthContext";
+import type { GiftVoucher } from "@/types/database";
+
+export interface PromoDiscountItem {
+  id?: string;
+  code: string;
+  discount_type: 'percentage' | 'fixed_amount';
+  discount_value: number;
+  description?: string;
+  calculated_discount?: number;
+}
 
 export default function MembersPage() {
-  const [selectedMember, setSelectedMember] = useState<any>(null);
+  const contextTenantId = useTenantId();
+  const tenantId = contextTenantId || process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '2c604504-41c3-406b-82a0-a43700057af8';
+  const [selectedMember, setSelectedMember] = useState<MemberPanelData | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -22,12 +35,12 @@ export default function MembersPage() {
 
   // Promo Code & Gift Voucher state for Sign Up
   const [promoCodeInput, setPromoCodeInput] = useState("");
-  const [appliedPromo, setAppliedPromo] = useState<any>(null);
+  const [appliedPromo, setAppliedPromo] = useState<PromoDiscountItem | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
   const [loadingPromo, setLoadingPromo] = useState(false);
 
   const [voucherCodeInput, setVoucherCodeInput] = useState("");
-  const [appliedVoucher, setAppliedVoucher] = useState<any>(null);
+  const [appliedVoucher, setAppliedVoucher] = useState<Partial<GiftVoucher> & { current_balance_rwf?: number; usable_discount?: number } | null>(null);
   const [voucherError, setVoucherError] = useState<string | null>(null);
   const [loadingVoucher, setLoadingVoucher] = useState(false);
 
@@ -47,7 +60,6 @@ export default function MembersPage() {
     setPromoError(null);
     try {
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '00000000-0000-0000-0000-000000000000';
       const res = await fetch(`${backendUrl}/api/payments/validate-promo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -85,8 +97,8 @@ export default function MembersPage() {
 
   const promoDiscount = appliedPromo
     ? appliedPromo.discount_type === 'percentage'
-      ? Math.round((planPrice * appliedPromo.discount_value) / 100)
-      : Math.min(appliedPromo.discount_value, planPrice)
+      ? Math.round((planPrice * (appliedPromo.discount_value || 0)) / 100)
+      : Math.min(appliedPromo.discount_value || 0, planPrice)
     : 0;
 
   const subtotalAfterPromo = Math.max(0, planPrice - promoDiscount);
@@ -98,7 +110,6 @@ export default function MembersPage() {
     setVoucherError(null);
     try {
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '00000000-0000-0000-0000-000000000000';
       const res = await fetch(`${backendUrl}/api/payments/validate-voucher`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -115,7 +126,7 @@ export default function MembersPage() {
         setAppliedVoucher(data.voucher);
         setVoucherCodeInput("");
       }
-    } catch (err) {
+    } catch {
       const codeUpper = voucherCodeInput.trim().toUpperCase();
       if (codeUpper.startsWith("GV-") || codeUpper === "GIFT10000") {
         const initialVal = 10000;
@@ -138,7 +149,7 @@ export default function MembersPage() {
   const finalPrice = Math.max(0, subtotalAfterPromo - voucherDiscount);
 
   // Mock member data for demonstration
-  const [mockMembers, setMockMembers] = useState<any[]>([
+  const [mockMembers, setMockMembers] = useState<MemberPanelData[]>([
     {
       id: "1",
       name: "Alice Johnson",
@@ -188,7 +199,6 @@ export default function MembersPage() {
     setSubmittingSignUp(true);
     try {
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '00000000-0000-0000-0000-000000000000';
 
       // 1. If promo code used, increment times_used
       if (appliedPromo && appliedPromo.code) {

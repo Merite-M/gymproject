@@ -11,6 +11,7 @@ import {
   fetchSuppliers, createSupplier, updateSupplier, deleteSupplier,
   getSupplier, Supplier, PurchaseOrder
 } from "@/lib/api/pos";
+import { useTenantId } from "@/contexts/AuthContext";
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -36,11 +37,14 @@ export default function SuppliersPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '2c604504-41c3-406b-82a0-a43700057af8';
+  const contextTenantId = useTenantId();
+  const tenantId = contextTenantId || process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '2c604504-41c3-406b-82a0-a43700057af8';
 
   useEffect(() => {
-    loadSuppliersList();
-  }, []);
+    if (tenantId) {
+      loadSuppliersList();
+    }
+  }, [tenantId]);
 
   const loadSuppliersList = async () => {
     setLoading(true);

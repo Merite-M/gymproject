@@ -55,7 +55,7 @@ export interface CheckoutResponse {
     exempt: { gross: number; ex_vat: number; vat: number; rate: number };
     zero_rated: { gross: number; ex_vat: number; vat: number; rate: number };
   };
-  payments: any[];
+  payments: PaymentTender[];
   discounts: {
     promo_code: string | null;
     promo_discount: number;
@@ -128,6 +128,47 @@ export interface ReceiptData {
   };
 }
 
+export interface ShiftStatusInfo {
+  id: string;
+  tenant_id: string;
+  staff_id: string;
+  starting_cash: number;
+  expected_cash: number;
+  actual_cash?: number | null;
+  status: string;
+  shift_start: string;
+  shift_end?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ValidatePromoResponse {
+  success: boolean;
+  valid: boolean;
+  discount_amount?: number;
+  promotion?: {
+    id: string;
+    code: string;
+    discount_type: 'percentage' | 'fixed_amount';
+    discount_value: number;
+    max_discount_amount?: number;
+    description?: string;
+  };
+  error?: string;
+}
+
+export interface ValidateVoucherResponse {
+  success: boolean;
+  valid: boolean;
+  current_balance?: number;
+  voucher?: {
+    id: string;
+    code: string;
+    current_balance: number;
+    initial_value?: number;
+  };
+  error?: string;
+}
+
 // ----------------------------------------------------
 // POS API Functions
 // ----------------------------------------------------
@@ -136,12 +177,12 @@ export async function fetchProducts(tenantId: string): Promise<ProductItem[]> {
   return apiFetch<ProductItem[]>(`${BACKEND_URL}/api/pos/products?tenant_id=${tenantId}`);
 }
 
-export async function fetchShiftStatus(tenantId: string) {
-  return apiFetch(`${BACKEND_URL}/api/pos/shift/status?tenant_id=${tenantId}`);
+export async function fetchShiftStatus(tenantId: string): Promise<ShiftStatusInfo | null> {
+  return apiFetch<ShiftStatusInfo | null>(`${BACKEND_URL}/api/pos/shift/status?tenant_id=${tenantId}`);
 }
 
-export async function startShift(tenantId: string, staffId: string, startingCash: number) {
-  return apiFetch(`${BACKEND_URL}/api/pos/shift/start`, {
+export async function startShift(tenantId: string, staffId: string, startingCash: number): Promise<ShiftStatusInfo> {
+  return apiFetch<ShiftStatusInfo>(`${BACKEND_URL}/api/pos/shift/start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tenant_id: tenantId, staff_id: staffId, starting_cash: startingCash })
@@ -263,6 +304,14 @@ export async function getPurchaseOrder(id: string, tenantId: string): Promise<Pu
   return apiFetch<PurchaseOrder>(`${BACKEND_URL}/api/pos/purchase-orders/${id}?tenant_id=${tenantId}`);
 }
 
+export interface ReceivePurchaseOrderResponse {
+  success: boolean;
+  message?: string;
+  cogs_updates?: Array<{ product_id: string; new_cogs: number }>;
+  purchase_order?: PurchaseOrder;
+  [key: string]: unknown;
+}
+
 export async function receivePurchaseOrder(id: string, payload: {
   tenant_id: string;
   received_items: {
@@ -272,8 +321,8 @@ export async function receivePurchaseOrder(id: string, payload: {
   }[];
   staff_id?: string | null;
   notes?: string | null;
-}) {
-  return apiFetch(`${BACKEND_URL}/api/pos/purchase-orders/${id}/receive`, {
+}): Promise<ReceivePurchaseOrderResponse> {
+  return apiFetch<ReceivePurchaseOrderResponse>(`${BACKEND_URL}/api/pos/purchase-orders/${id}/receive`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -292,24 +341,37 @@ export async function fetchInvoiceReceipt(invoiceId: string, tenantId: string): 
 // Promos & Vouchers API
 // ----------------------------------------------------
 
-export async function validatePromoCode(tenantId: string, code: string, subtotal: number, apply = false) {
-  return apiFetch(`${BACKEND_URL}/api/payments/validate-promo`, {
+export async function validatePromoCode(
+  tenantId: string,
+  code: string,
+  subtotal: number,
+  apply = false
+): Promise<ValidatePromoResponse> {
+  return apiFetch<ValidatePromoResponse>(`${BACKEND_URL}/api/payments/validate-promo`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tenant_id: tenantId, code, subtotal, apply })
   });
 }
 
-export async function validateGiftVoucher(tenantId: string, code: string, subtotal: number) {
-  return apiFetch(`${BACKEND_URL}/api/payments/validate-voucher`, {
+export async function validateGiftVoucher(
+  tenantId: string,
+  code: string,
+  subtotal: number
+): Promise<ValidateVoucherResponse> {
+  return apiFetch<ValidateVoucherResponse>(`${BACKEND_URL}/api/payments/validate-voucher`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tenant_id: tenantId, code, subtotal })
   });
 }
 
-export async function applyGiftVoucher(tenantId: string, code: string, amountToUse: number) {
-  return apiFetch(`${BACKEND_URL}/api/payments/apply-gift-voucher`, {
+export async function applyGiftVoucher(
+  tenantId: string,
+  code: string,
+  amountToUse: number
+): Promise<{ success: boolean; applied_amount: number; remaining_balance: number }> {
+  return apiFetch<{ success: boolean; applied_amount: number; remaining_balance: number }>(`${BACKEND_URL}/api/payments/apply-gift-voucher`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tenant_id: tenantId, code, amount_to_use: amountToUse })

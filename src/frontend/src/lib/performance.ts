@@ -1,9 +1,24 @@
 // Performance optimization utilities and best practices
 
+interface NetworkInformation {
+  effectiveType?: string;
+  saveData?: boolean;
+}
+
+interface NavigatorWithCapabilities extends Navigator {
+  deviceMemory?: number;
+  connection?: NetworkInformation;
+}
+
+interface WindowWithIdleCallback {
+  requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+  cancelIdleCallback?: (id: number) => void;
+}
+
 /**
  * Debounce function to limit how often a function can be called
  */
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
@@ -23,7 +38,7 @@ export function debounce<T extends (...args: any[]) => any>(
 /**
  * Throttle function to limit execution rate
  */
-export function throttle<T extends (...args: any[]) => any>(
+export function throttle<T extends (...args: unknown[]) => unknown>(
   func: T,
   limit: number
 ): (...args: Parameters<T>) => void {
@@ -41,7 +56,7 @@ export function throttle<T extends (...args: any[]) => any>(
 /**
  * Memoize function results
  */
-export function memoize<T extends (...args: any[]) => any>(
+export function memoize<T extends (...args: unknown[]) => unknown>(
   func: T,
   keyGenerator?: (...args: Parameters<T>) => string
 ): T {
@@ -54,7 +69,7 @@ export function memoize<T extends (...args: any[]) => any>(
       return cache.get(key);
     }
     
-    const result = func(...args);
+    const result = func(...args) as ReturnType<T>;
     cache.set(key, result);
     return result;
   }) as T;
@@ -63,7 +78,7 @@ export function memoize<T extends (...args: any[]) => any>(
 /**
  * Request animation frame with cancellation support
  */
-export function rafThrottle<T extends (...args: any[]) => any>(
+export function rafThrottle<T extends (...args: unknown[]) => unknown>(
   func: T
 ): (...args: Parameters<T>) => void {
   let ticking = false;
@@ -163,7 +178,9 @@ export function measurePerformance(
  * Check if network is slow (2G or slower)
  */
 export function isSlowNetwork(): boolean {
-  const connection = (navigator as any).connection;
+  if (typeof navigator === 'undefined') return false;
+  const nav = navigator as NavigatorWithCapabilities;
+  const connection = nav.connection;
   if (!connection) return false;
   
   return connection.effectiveType === '2g' || 
@@ -175,7 +192,9 @@ export function isSlowNetwork(): boolean {
  * Check if device has limited memory
  */
 export function isLowMemoryDevice(): boolean {
-  return (navigator as any).deviceMemory <= 2;
+  if (typeof navigator === 'undefined') return false;
+  const nav = navigator as NavigatorWithCapabilities;
+  return (nav.deviceMemory || 4) <= 2;
 }
 
 /**
@@ -198,42 +217,66 @@ export class VirtualScroller<T> {
   private items: T[];
   private itemHeight: number;
   private containerHeight: number;
-  private scrollTop: number = 0;
+  private bufferSize: number;
   
-  constructor(items: T[], itemHeight: number, containerHeight: number) {
+  constructor(
+    items: T[],
+    itemHeight: number,
+    containerHeight: number,
+    bufferSize: number = 5
+  ) {
     this.items = items;
     this.itemHeight = itemHeight;
     this.containerHeight = containerHeight;
+    this.bufferSize = bufferSize;
   }
   
-  getVisibleItems(): { items: T[]; startIndex: number; endIndex: number } {
-    const startIndex = Math.floor(this.scrollTop / this.itemHeight);
+  getVisibleRange(scrollTop: number): {
+    startIndex: number;
+    endIndex: number;
+    offsetY: number;
+    totalHeight: number;
+  } {
+    const totalHeight = this.items.length * this.itemHeight;
+    const startIndex = Math.max(
+      0,
+      Math.floor(scrollTop / this.itemHeight) - this.bufferSize
+    );
     const visibleCount = Math.ceil(this.containerHeight / this.itemHeight);
-    const endIndex = Math.min(startIndex + visibleCount + 2, this.items.length);
-    const adjustedStartIndex = Math.max(0, startIndex - 2);
+    const endIndex = Math.min(
+      this.items.length - 1,
+      startIndex + visibleCount + this.bufferSize * 2
+    );
+    const offsetY = startIndex * this.itemHeight;
     
     return {
-      items: this.items.slice(adjustedStartIndex, endIndex),
-      startIndex: adjustedStartIndex,
-      endIndex
+      startIndex,
+      endIndex,
+      offsetY,
+      totalHeight
     };
   }
   
-  setScrollTop(scrollTop: number): void {
-    this.scrollTop = scrollTop;
-  }
-  
-  setItems(items: T[]): void {
-    this.items = items;
-  }
-  
-  getTotalHeight(): number {
-    return this.items.length * this.itemHeight;
+  getVisibleItems(scrollTop: number): {
+    items: T[];
+    startIndex: number;
+    offsetY: number;
+    totalHeight: number;
+  } {
+    const range = this.getVisibleRange(scrollTop);
+    const visibleItems = this.items.slice(range.startIndex, range.endIndex + 1);
+    
+    return {
+      items: visibleItems,
+      startIndex: range.startIndex,
+      offsetY: range.offsetY,
+      totalHeight: range.totalHeight
+    };
   }
 }
 
 /**
- * Batch DOM updates to reduce reflows
+ * Batch DOM updates for better performance
  */
 export function batchDOMUpdates(updates: Array<() => void>): void {
   requestAnimationFrame(() => {
@@ -248,19 +291,24 @@ export function requestIdleCallback(
   callback: () => void,
   options?: { timeout?: number }
 ): number {
-  if ('requestIdleCallback' in window) {
-    return (window as any).requestIdleCallback(callback, options);
+  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+    const win = window as WindowWithIdleCallback;
+    if (win.requestIdleCallback) {
+      return win.requestIdleCallback(callback, options);
+    }
   }
-  // Fallback for browsers without requestIdleCallback
   return setTimeout(callback, options?.timeout || 50) as unknown as number;
 }
 
 export function cancelIdleCallback(id: number): void {
-  if ('cancelIdleCallback' in window) {
-    (window as any).cancelIdleCallback(id);
-  } else {
-    clearTimeout(id);
+  if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+    const win = window as WindowWithIdleCallback;
+    if (win.cancelIdleCallback) {
+      win.cancelIdleCallback(id);
+      return;
+    }
   }
+  clearTimeout(id);
 }
 
 /**
@@ -268,7 +316,6 @@ export function cancelIdleCallback(id: number): void {
  */
 export function createWebWorker<T, R>(
   workerFunction: (data: T) => R,
-  workerName: string = 'worker'
 ): Worker {
   const workerCode = `
     self.onmessage = function(e) {
@@ -286,11 +333,9 @@ export function createWebWorker<T, R>(
 /**
  * Optimize list rendering with key strategies
  */
-export function getOptimalListKey(item: any, index: number): string {
-  // Prefer stable unique identifiers
-  if (item.id) return `item-${item.id}`;
-  if (item.key) return `item-${item.key}`;
-  // Fallback to index (less optimal but functional)
+export function getOptimalListKey(item: Record<string, unknown>, index: number): string {
+  if (typeof item.id === 'string' || typeof item.id === 'number') return `item-${item.id}`;
+  if (typeof item.key === 'string' || typeof item.key === 'number') return `item-${item.key}`;
   return `item-${index}`;
 }
 
@@ -331,13 +376,13 @@ export class CacheManager {
     this.cacheName = cacheName;
   }
   
-  async get(key: string): Promise<any> {
+  async get<T = unknown>(key: string): Promise<T | null> {
     const cache = await caches.open(this.cacheName);
     const response = await cache.match(key);
-    return response ? response.json() : null;
+    return response ? ((await response.json()) as T) : null;
   }
   
-  async set(key: string, data: any): Promise<void> {
+  async set<T = unknown>(key: string, data: T): Promise<void> {
     const cache = await caches.open(this.cacheName);
     await cache.put(key, new Response(JSON.stringify(data)));
   }
@@ -437,14 +482,16 @@ export function inlineCriticalCSS(css: string): void {
  * Detect and handle low-end devices
  */
 export function isLowEndDevice(): boolean {
-  const connection = (navigator as any).connection;
+  if (typeof navigator === 'undefined') return false;
+  const nav = navigator as NavigatorWithCapabilities;
+  const connection = nav.connection;
   const hardwareConcurrency = navigator.hardwareConcurrency || 2;
-  const deviceMemory = (navigator as any).deviceMemory || 4;
+  const deviceMemory = nav.deviceMemory || 4;
   
   return (
     hardwareConcurrency <= 2 ||
     deviceMemory <= 2 ||
-    (connection && (connection.effectiveType === '2g' || connection.saveData))
+    Boolean(connection && (connection.effectiveType === '2g' || connection.saveData))
   );
 }
 

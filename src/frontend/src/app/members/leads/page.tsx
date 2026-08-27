@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { cn, formatCurrencyDisplay } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
+import { useTenantId } from "@/contexts/AuthContext";
 
 interface Lead {
   id: string;
@@ -216,12 +217,15 @@ export default function LeadsPipelinePage() {
     }
   };
 
+  const contextTenantId = useTenantId();
+  const currentTenantId = contextTenantId || process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '2c604504-41c3-406b-82a0-a43700057af8';
+
   // Fetch real backend leads if online
   useEffect(() => {
     async function loadData() {
       try {
         const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-        const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '00000000-0000-0000-0000-000000000000';
+        const tenantId = currentTenantId;
         setWidgetTenantId(tenantId);
 
         const headers = await getAuthHeaders();
@@ -314,7 +318,7 @@ export default function LeadsPipelinePage() {
 
     try {
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '00000000-0000-0000-0000-000000000000';
+      const tenantId = currentTenantId;
       const headers = await getAuthHeaders();
 
       await fetch(`${backendUrl}/api/members/leads/${leadId}/stage`, {
@@ -377,7 +381,7 @@ export default function LeadsPipelinePage() {
 
     try {
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '00000000-0000-0000-0000-000000000000';
+      const tenantId = currentTenantId;
       const headers = await getAuthHeaders();
 
       await fetch(`${backendUrl}/api/members/leads`, {

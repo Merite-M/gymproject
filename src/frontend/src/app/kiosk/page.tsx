@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import {
   Scan,
   Keyboard as Keypad,
@@ -430,9 +431,12 @@ export default function KioskPage() {
             {result.profile && (
               <div className="w-full bg-surface-container-high border border-border rounded-2xl p-4 flex items-center gap-4 text-left">
                 {result.profile.avatar_url ? (
-                  <img
+                  <Image
                     src={result.profile.avatar_url}
                     alt="Member"
+                    width={64}
+                    height={64}
+                    unoptimized
                     className="w-16 h-16 rounded-xl object-cover border border-accent/40"
                   />
                 ) : (

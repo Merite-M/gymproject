@@ -2,6 +2,8 @@ const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const router = express.Router();
 const gymEmitter = require("./events");
+const authMiddleware = require('./authMiddleware');
+const { validateTenantAccess: sharedValidateTenantAccess, formatRWF } = require('./shared/utils');
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -11,15 +13,8 @@ if (supabaseUrl && supabaseKey) {
   supabase = createClient(supabaseUrl, supabaseKey);
 }
 
-// Helper: Format RWF Currency
-function formatRWF(amount) {
-  return new Intl.NumberFormat('rw-RW', {
-    style: 'currency',
-    currency: 'RWF',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
+// Apply centralized authentication middleware to all POS routes
+router.use(authMiddleware);
 
 /**
  * Tenant Access & Authentication Validator
@@ -28,43 +23,13 @@ function formatRWF(amount) {
 async function validateTenantAccess(req, tenantId) {
   if (!supabase) return { error: 'Supabase not configured', status: 500 };
   if (!tenantId) return { error: 'Missing tenant_id', status: 400 };
+  if (!req.user) return { error: 'Authentication required', status: 401 };
 
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    // If running in development without auth header, verify tenant exists
-    const { data: tenant, error: tErr } = await supabase
-      .from('tenants')
-      .select('id')
-      .eq('id', tenantId)
-      .single();
-    if (tErr || !tenant) {
-      return { error: 'Invalid tenant_id', status: 404 };
-    }
-    return { authorized: true };
+  const res = await sharedValidateTenantAccess(supabase, req.user.id, tenantId);
+  if (!res.authorized) {
+    return { error: res.error, status: res.status || 403 };
   }
-
-  const token = authHeader.replace('Bearer ', '');
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-  if (authError || !user) {
-    return { error: 'Invalid or expired token', status: 401 };
-  }
-
-  const { data: profile, error: pErr } = await supabase
-    .from('profiles')
-    .select('id, tenant_id, role')
-    .eq('id', user.id)
-    .single();
-
-  if (pErr || !profile) {
-    return { error: 'User profile not found', status: 401 };
-  }
-
-  if (profile.tenant_id !== tenantId && profile.role !== 'super_admin') {
-    return { error: 'Access denied: You do not belong to this tenant', status: 403 };
-  }
-
-  return { user, profile };
+  return { authorized: true, user: req.user, profile: res.profile };
 }
 
 // ==========================================

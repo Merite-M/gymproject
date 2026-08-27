@@ -5,9 +5,11 @@ import { LayoutDashboard, CreditCard, FileText, Users, Snowflake, QrCode } from 
 import { cn } from "@/lib/utils";
 import { MembershipFreeze } from "@/components/membership-freeze";
 import { AccessControlPWA } from "@/components/access-control-pwa";
+import { useTenantId } from "@/contexts/AuthContext";
+import type { MemberPanelData } from "@/components/member-profile-panel";
 
 interface TabbedConsoleProps {
-  member: any;
+  member: MemberPanelData;
 }
 
 type TabType = "overview" | "access_pass" | "membership" | "billing" | "waiver" | "dependents";
@@ -22,7 +24,11 @@ const tabs = [
 ];
 
 export function TabbedConsole({ member }: TabbedConsoleProps) {
+  const contextTenantId = useTenantId();
+  const tenantId = contextTenantId || process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '2c604504-41c3-406b-82a0-a43700057af8';
   const [activeTab, setActiveTab] = useState<TabType>("overview");
+
+  const outstandingBalance = member.outstanding_balance || 0;
 
   return (
     <div className="flex-1 flex flex-col h-full">
@@ -39,7 +45,7 @@ export function TabbedConsole({ member }: TabbedConsoleProps) {
                   "flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap min-h-[44px]",
                   activeTab === tab.id
                     ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
                 )}
               >
                 <Icon className="w-4 h-4" />
@@ -52,12 +58,12 @@ export function TabbedConsole({ member }: TabbedConsoleProps) {
 
       {/* Tab Content */}
       <div className="flex-1 overflow-y-auto">
-                {activeTab === "access_pass" && (
+        {activeTab === "access_pass" && (
           <div className="p-6">
             <AccessControlPWA
-              tenantId={process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || "00000000-0000-0000-0000-000000000000"}
+              tenantId={tenantId}
               profileId={member?.id || "mock-id"}
-              memberFullName={member?.name || `${member?.first_name || 'Member'} ${member?.last_name || ''}`.trim()}
+              memberFullName={member?.name || "Member"}
             />
           </div>
         )}
@@ -81,9 +87,9 @@ export function TabbedConsole({ member }: TabbedConsoleProps) {
                 <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Balance</p>
                 <p className={cn(
                   "text-lg font-mono-id font-semibold",
-                  member.outstanding_balance > 0 ? "text-status-blocked" : "text-status-cleared"
+                  outstandingBalance > 0 ? "text-status-blocked" : "text-status-cleared"
                 )}>
-                  {member.outstanding_balance > 0 ? `RWF ${member.outstanding_balance.toLocaleString()}` : "RWF 0"}
+                  {outstandingBalance > 0 ? `RWF ${outstandingBalance.toLocaleString()}` : "RWF 0"}
                 </p>
               </div>
             </div>
@@ -112,13 +118,13 @@ export function TabbedConsole({ member }: TabbedConsoleProps) {
                 </div>
                 <p className={cn(
                   "text-xl font-mono-id font-bold",
-                  member.outstanding_balance > 0 ? "text-status-blocked" : "text-status-cleared"
+                  outstandingBalance > 0 ? "text-status-blocked" : "text-status-cleared"
                 )}>
-                  {member.outstanding_balance > 0 ? `RWF ${member.outstanding_balance.toLocaleString()}` : "RWF 0"}
+                  {outstandingBalance > 0 ? `RWF ${outstandingBalance.toLocaleString()}` : "RWF 0"}
                 </p>
               </div>
 
-              {member.outstanding_balance > 0 && (
+              {outstandingBalance > 0 && (
                 <button className="w-full px-4 py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/80 min-h-[44px]">
                   Request Payment
                 </button>

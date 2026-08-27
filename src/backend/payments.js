@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
+const { verifyHmacSignature, formatRWF } = require('./shared/utils');
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -10,16 +11,6 @@ let supabase;
 
 if (supabaseUrl && supabaseKey) {
   supabase = createClient(supabaseUrl, supabaseKey);
-}
-
-// RWF Currency formatter
-function formatRWF(amount) {
-  return new Intl.NumberFormat('rw-RW', {
-    style: 'currency',
-    currency: 'RWF',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
 }
 
 module.exports = router;
@@ -30,8 +21,17 @@ router.post('/paypack/webhook', async (req, res) => {
 
     try {
         const payload = req.body;
-        // In a real scenario, verify cryptographic signature here using req.headers
         const signature = req.headers['x-paypack-signature'];
+        const paypackSecret = process.env.PAYPACK_WEBHOOK_SECRET;
+
+        // Verify cryptographic HMAC signature
+        if (paypackSecret) {
+            const isValid = verifyHmacSignature(payload, paypackSecret, signature);
+            if (!isValid) {
+                console.warn('[paypack/webhook] Invalid HMAC signature received');
+                return res.status(401).json({ error: 'Invalid webhook signature' });
+            }
+        }
 
         // Ensure payload has necessary data
         if (!payload || !payload.data || !payload.data.ref) {
@@ -169,8 +169,17 @@ router.post('/momo/webhook', async (req, res) => {
 
     try {
         const payload = req.body;
-        // In a real scenario, verify cryptographic signature here
         const signature = req.headers['x-momo-signature'];
+        const momoSecret = process.env.MOMO_WEBHOOK_SECRET;
+
+        // Verify cryptographic HMAC signature
+        if (momoSecret) {
+            const isValid = verifyHmacSignature(payload, momoSecret, signature);
+            if (!isValid) {
+                console.warn('[momo/webhook] Invalid HMAC signature received');
+                return res.status(401).json({ error: 'Invalid webhook signature' });
+            }
+        }
 
         // MTN MoMo payloads vary, let's assume a standard structure where FinancialTransactionId is the reference
         if (!payload || !payload.financialTransactionId || !payload.externalId) {
@@ -305,6 +314,16 @@ router.post('/airtel/webhook', async (req, res) => {
     try {
         const payload = req.body;
         const signature = req.headers['x-airtel-signature'];
+        const airtelSecret = process.env.AIRTEL_WEBHOOK_SECRET;
+
+        // Verify cryptographic HMAC signature
+        if (airtelSecret) {
+            const isValid = verifyHmacSignature(payload, airtelSecret, signature);
+            if (!isValid) {
+                console.warn('[airtel/webhook] Invalid HMAC signature received');
+                return res.status(401).json({ error: 'Invalid webhook signature' });
+            }
+        }
 
         if (!payload || !payload.transaction_id || !payload.reference) {
             return res.status(400).json({ error: "Invalid payload format" });

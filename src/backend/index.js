@@ -3,6 +3,7 @@ const cors = require('cors');
 const multer = require('multer');
 const { rateLimit } = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
+const { getLiveOccupancy, getDistanceFromLatLonInM } = require('./shared/utils');
 require('dotenv').config();
 
 const app = express();
@@ -74,23 +75,6 @@ if (supabaseUrl && supabaseKey) {
 const gymEmitter = require("./events");
 const upload = multer({ storage: multer.memoryStorage() });
 
-// ─── Live Occupancy Helper (shared logic with iot.js) ────────────────────────
-async function getLiveOccupancy(supabaseClient, tenant_id, autoCheckoutMinutes = 120) {
-  const windowStart = new Date(Date.now() - autoCheckoutMinutes * 60 * 1000).toISOString();
-  const { count, error } = await supabaseClient
-    .from('check_ins')
-    .select('id', { count: 'exact', head: true })
-    .eq('tenant_id', tenant_id)
-    .in('status', ['approved', 'warning'])
-    .is('checkout_at', null)
-    .gte('created_at', windowStart);
-  if (error) {
-    console.error('[getLiveOccupancy] error:', error);
-    return 0;
-  }
-  return count || 0;
-}
-// ─────────────────────────────────────────────────────────────────────────────
 
 app.post('/api/waivers/sign', upload.single('pdf'), async (req, res) => {
   try {
@@ -207,19 +191,7 @@ app.post('/api/checkin', checkinLimiter, async (req, res) => {
       .single();
 
 
-    // Helper function for Haversine distance
-    const getDistanceFromLatLonInM = (lat1, lon1, lat2, lon2) => {
-        const R = 6371e3; // Radius of the earth in m
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a =
-          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-          Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        const d = R * c; // Distance in m
-        return d;
-    };
+
 
     let finalStatus = 'approved';
     let reasons = [];

@@ -4,8 +4,24 @@ import Image from "next/image";
 import { User, CreditCard, Calendar, Phone, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+export interface MemberPanelData {
+  id: string;
+  name: string;
+  email?: string | null;
+  membership_type?: string | null;
+  status: string;
+  photo?: string | null;
+  outstanding_balance?: number;
+  waiver_valid?: boolean;
+  access_token?: string | null;
+  member_since?: string | null;
+  renewal_date?: string | null;
+  phone?: string | null;
+  [key: string]: unknown;
+}
+
 interface MemberProfilePanelProps {
-  member: any;
+  member: MemberPanelData;
 }
 
 export function MemberProfilePanel({ member }: MemberProfilePanelProps) {
@@ -38,9 +54,7 @@ export function MemberProfilePanel({ member }: MemberProfilePanelProps) {
                 "inline-flex items-center px-2 py-1 rounded text-xs font-medium",
                 member.status === "active"
                   ? "bg-status-cleared/10 text-status-cleared"
-                  : member.status === "frozen"
-                  ? "bg-status-action/10 text-status-action"
-                  : "bg-status-blocked/10 text-status-blocked"
+                  : "bg-status-warning/10 text-status-warning"
               )}
             >
               {member.status}
@@ -49,48 +63,48 @@ export function MemberProfilePanel({ member }: MemberProfilePanelProps) {
         </div>
       </div>
 
-      {/* Contact Information */}
-      <div className="space-y-3 pt-4 border-t border-border">
-        <div className="flex items-center gap-3 text-sm">
-          <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
-          <span className="text-muted-foreground">Email:</span>
-          <span className="text-foreground">{member.email}</span>
+      {/* Access Token / RFID / QR */}
+      <div className="bg-muted/50 p-4 rounded-lg">
+        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">
+          Active Pass Token
+        </p>
+        <p className="font-mono text-sm font-semibold text-foreground">
+          {member.access_token}
+        </p>
+      </div>
+
+      {/* Financial & Membership Details */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="p-3 bg-card border border-border rounded-lg">
+          <div className="flex items-center gap-2 text-muted-foreground mb-1">
+            <CreditCard className="w-4 h-4" />
+            <span className="text-xs">Balance Due</span>
+          </div>
+          <p className="text-lg font-mono font-semibold text-foreground">
+            {member.outstanding_balance?.toLocaleString()} RWF
+          </p>
         </div>
+
+        <div className="p-3 bg-card border border-border rounded-lg">
+          <div className="flex items-center gap-2 text-muted-foreground mb-1">
+            <Calendar className="w-4 h-4" />
+            <span className="text-xs">Renewal Date</span>
+          </div>
+          <p className="text-sm font-semibold text-foreground">
+            {member.renewal_date}
+          </p>
+        </div>
+      </div>
+
+      {/* Contact Details */}
+      <div className="space-y-3 pt-4 border-t border-border">
         <div className="flex items-center gap-3 text-sm">
           <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
-          <span className="text-muted-foreground">Phone:</span>
-          <span className="text-foreground">{member.phone || "Not provided"}</span>
-        </div>
-      </div>
-
-      {/* Membership Details */}
-      <div className="space-y-3 pt-4 border-t border-border">
-        <div className="flex items-center gap-3 text-sm">
-          <CreditCard className="w-4 h-4 text-muted-foreground shrink-0" />
-          <span className="text-muted-foreground">Access Token:</span>
-          <span className="font-mono-id text-foreground">{member.access_token || "N/A"}</span>
+          <span className="text-foreground">{member.phone}</span>
         </div>
         <div className="flex items-center gap-3 text-sm">
-          <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
-          <span className="text-muted-foreground">Member Since:</span>
-          <span className="text-foreground">{member.member_since || "N/A"}</span>
-        </div>
-        <div className="flex items-center gap-3 text-sm">
-          <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
-          <span className="text-muted-foreground">Renewal Date:</span>
-          <span className="text-foreground">{member.renewal_date || "N/A"}</span>
-        </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="pt-4 border-t border-border">
-        <div className="grid grid-cols-2 gap-2">
-          <button className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/80 min-h-[44px]">
-            Check In
-          </button>
-          <button className="px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-medium hover:bg-secondary/80 min-h-[44px]">
-            Freeze
-          </button>
+          <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
+          <span className="text-foreground">{member.email}</span>
         </div>
       </div>
     </div>

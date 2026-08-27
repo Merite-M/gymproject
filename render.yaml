@@ -1,5 +1,5 @@
 services:
-  # 1. Render Web Service (Free, always-on Node.js API backend hosting Express/Fastify, WebSockets, background billing crons, IoT triggers, and aggregators)
+  # 1. Render Web Service (Always-on Node.js API backend hosting Express 5, WebSockets, background billing crons, IoT triggers, and payment webhooks)
   - type: web
     name: gym-backend-core
     env: node
@@ -9,10 +9,39 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 3001
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: FRONTEND_URL
+        value: https://gym-frontend-app.onrender.com
+      - key: JWT_SECRET
+        sync: false
+      - key: INTERNAL_API_KEY
+        sync: false
+      - key: PAYPACK_WEBHOOK_SECRET
+        sync: false
+      - key: MOMO_WEBHOOK_SECRET
+        sync: false
+      - key: AIRTEL_WEBHOOK_SECRET
+        sync: false
 
-  # 2. Render Static Site (Free-tier CDN Next.js frontend export)
+  # 2. Render Static Site (Free-tier CDN Next.js frontend static export)
   - type: web
     name: gym-frontend-app
     env: static
     buildCommand: cd src/frontend && npm install && npm run build
     staticPublishPath: src/frontend/out
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: NEXT_PUBLIC_API_URL
+        value: https://gym-backend-core.onrender.com

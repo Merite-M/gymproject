@@ -7,6 +7,8 @@ const ipaddr = require('ipaddr.js');
 const dns = require('dns');
 const { promisify } = require('util');
 const lookupAsync = promisify(dns.lookup);
+const authMiddleware = require('./authMiddleware');
+const { getLiveOccupancy: sharedGetLiveOccupancy } = require('./shared/utils');
 
 require('dotenv').config();
 
@@ -169,21 +171,7 @@ async function checkAntiPassback(profile_id, tenant_id) {
 // checked-in (approved/warning), not yet checked out, and within the
 // auto-checkout window.
 async function getLiveOccupancy(tenant_id, autoCheckoutMinutes = 120) {
-  const windowStart = new Date(Date.now() - autoCheckoutMinutes * 60 * 1000).toISOString();
-
-  const { count, error } = await supabase
-    .from('check_ins')
-    .select('id', { count: 'exact', head: true })
-    .eq('tenant_id', tenant_id)
-    .in('status', ['approved', 'warning'])
-    .is('checkout_at', null)
-    .gte('created_at', windowStart);
-
-  if (error) {
-    console.error('[getLiveOccupancy] error:', error);
-    return 0;
-  }
-  return count || 0;
+  return sharedGetLiveOccupancy(supabase, tenant_id, autoCheckoutMinutes);
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -231,7 +219,7 @@ async function triggerShellyRelayWithRetry(device, maxRetries = 2, timeoutMs = 3
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-router.post('/unlock', async (req, res) => {
+router.post('/unlock', authMiddleware, async (req, res) => {
     try {
         const { tenant_id, profile_id, device_id, access_method, geofence_verified } = req.body;
 
@@ -239,7 +227,10 @@ router.post('/unlock', async (req, res) => {
             return res.status(400).json({ error: 'Missing required parameters (tenant_id, profile_id, device_id)' });
         }
 
-        if (req.user.id !== profile_id) {
+        // Check if user is authorized to unlock for this profile
+        // Users can unlock for themselves, or staff/admin can unlock for others
+        const { data: staffCheck } = await supabase.from('profiles').select('role').eq('id', req.user.id).eq('tenant_id', tenant_id).single();
+        if (req.user.id !== profile_id && (!staffCheck || (staffCheck.role !== 'staff' && staffCheck.role !== 'admin' && staffCheck.role !== 'trainer'))) {
             return res.status(403).json({ error: 'Unauthorized to unlock for this profile' });
         }
 

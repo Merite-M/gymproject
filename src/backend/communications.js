@@ -1,6 +1,7 @@
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const { dispatchMultiChannelMessage, normalizePhoneNumber } = require('./gateways');
+const authMiddleware = require('./authMiddleware');
 require('dotenv').config();
 
 const router = express.Router();
@@ -14,53 +15,28 @@ if (supabaseUrl && supabaseKey) {
 }
 
 /**
- * Authentication and Staff authorization middleware
+ * Enhanced authentication middleware that supports internal API key bypass
+ * for system-to-system communication (webhooks, cron jobs, etc.)
  */
 async function requireStaffAuth(req, res, next) {
   if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
 
-  const authHeader = req.headers.authorization;
   const apiKeyHeader = req.headers['x-api-key'];
 
-  // Check if system master API key matches
+  // Check if system master API key matches for internal system calls
   if (apiKeyHeader && process.env.INTERNAL_API_KEY && apiKeyHeader === process.env.INTERNAL_API_KEY) {
+    // For internal API calls, we need to extract tenant_id from body/query
+    const tenantId = req.body?.tenant_id || req.query?.tenant_id;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Missing tenant_id for internal API call' });
+    }
+    req.internalApiCall = true;
+    req.tenantId = tenantId;
     return next();
   }
 
-  if (!authHeader) {
-    // In dev test mode without auth header, verify tenant_id exists
-    const tenantId = req.body?.tenant_id || req.query?.tenant_id;
-    if (tenantId) return next();
-    return res.status(401).json({ error: 'Missing Authorization header' });
-  }
-
-  const token = authHeader.replace('Bearer ', '');
-  try {
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
-      return res.status(401).json({ error: 'Invalid or expired authorization token' });
-    }
-
-    const { data: profile, error: pError } = await supabase
-      .from('profiles')
-      .select('id, tenant_id, role')
-      .eq('id', user.id)
-      .single();
-
-    if (pError || !profile || !profile.tenant_id) {
-      return res.status(403).json({ error: 'Profile or tenant not found' });
-    }
-
-    const requestTenantId = req.body.tenant_id || req.query.tenant_id;
-    if (requestTenantId && profile.tenant_id !== requestTenantId && profile.role !== 'admin') {
-      return res.status(403).json({ error: 'Tenant access denied' });
-    }
-
-    req.userProfile = profile;
-    next();
-  } catch (err) {
-    return res.status(401).json({ error: 'Authentication failed' });
-  }
+  // Use standard auth middleware for regular user requests
+  return authMiddleware(req, res, next);
 }
 
 /**
@@ -93,10 +69,20 @@ function resolveMergeTags(template, profile = {}, extra = {}) {
 router.post('/send-single', requireStaffAuth, async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
   try {
-    const { tenant_id, profile_id, channel = 'sms', recipient, message, subject } = req.body;
+    // For internal API calls, use the tenant_id from the middleware
+    const tenant_id = req.internalApiCall ? req.tenantId : req.body.tenant_id;
+    const { profile_id, channel = 'sms', recipient, message, subject } = req.body;
 
     if (!tenant_id || !recipient || !message) {
       return res.status(400).json({ error: 'Missing required parameters (tenant_id, recipient, message)' });
+    }
+
+    // For user calls, verify tenant access
+    if (!req.internalApiCall && req.user) {
+      const { data: profile } = await supabase.from('profiles').select('tenant_id, role').eq('id', req.user.id).single();
+      if (!profile || (profile.tenant_id !== tenant_id && profile.role !== 'admin')) {
+        return res.status(403).json({ error: 'Tenant access denied' });
+      }
     }
 
     const dispatchResult = await dispatchMultiChannelMessage({

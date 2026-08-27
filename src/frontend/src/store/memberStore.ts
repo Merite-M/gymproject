@@ -4,19 +4,28 @@ import {
   createMembershipHold,
   updateMembershipHold,
   deleteMembershipHold,
+  CreateHoldInput,
+  UpdateHoldInput,
 } from "../lib/api/members";
+import type {
+  Profile,
+  Membership,
+  MembershipHold,
+  FamilyLink,
+  CheckIn,
+} from "@/types/database";
 
 interface MemberState {
-  profile: any | null;
-  memberships: any[];
-  holds: any[];
-  familyLinks: any[];
-  checkIns: any[];
+  profile: Profile | null;
+  memberships: Membership[];
+  holds: MembershipHold[];
+  familyLinks: FamilyLink[];
+  checkIns: CheckIn[];
   loading: boolean;
   error: string | null;
   fetchMemberData: (profileId: string) => Promise<void>;
-  createHoldRequest: (holdData: any) => Promise<void>;
-  updateHold: (holdId: string, updateData: any) => Promise<void>;
+  createHoldRequest: (holdData: CreateHoldInput) => Promise<void>;
+  updateHold: (holdId: string, updateData: UpdateHoldInput) => Promise<void>;
   deleteHold: (holdId: string) => Promise<void>;
 }
 
@@ -40,11 +49,12 @@ export const useMemberStore = create<MemberState>((set) => ({
         checkIns: data.checkIns,
         loading: false,
       });
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch member details';
+      set({ error: message, loading: false });
     }
   },
-  createHoldRequest: async (holdData: any) => {
+  createHoldRequest: async (holdData: CreateHoldInput) => {
     set({ loading: true, error: null });
     try {
       const data = await createMembershipHold(holdData);
@@ -52,12 +62,13 @@ export const useMemberStore = create<MemberState>((set) => ({
         holds: [...state.holds, data],
         loading: false,
       }));
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create hold request';
+      set({ error: message, loading: false });
       throw err;
     }
   },
-  updateHold: async (holdId: string, updateData: any) => {
+  updateHold: async (holdId: string, updateData: UpdateHoldInput) => {
     set({ loading: true, error: null });
     try {
       const data = await updateMembershipHold(holdId, updateData);
@@ -65,8 +76,9 @@ export const useMemberStore = create<MemberState>((set) => ({
         holds: state.holds.map((h) => (h.id === holdId ? data : h)),
         loading: false,
       }));
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update hold';
+      set({ error: message, loading: false });
       throw err;
     }
   },
@@ -78,8 +90,9 @@ export const useMemberStore = create<MemberState>((set) => ({
         holds: state.holds.filter((h) => h.id !== holdId),
         loading: false,
       }));
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to delete hold';
+      set({ error: message, loading: false });
       throw err;
     }
   },

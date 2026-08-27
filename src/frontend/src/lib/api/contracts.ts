@@ -64,7 +64,7 @@ export interface FullSignedContract {
   ip_address: string;
   user_agent: string;
   pdf_url: string | null;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   created_at: string;
   profiles?: {
     first_name: string;
@@ -128,7 +128,7 @@ export async function signContract(params: {
   signatureData: string;
   guardianName?: string | null;
   guardianRelationship?: string | null;
-  customMetadata?: Record<string, any>;
+  customMetadata?: Record<string, unknown>;
 }): Promise<{ success: boolean; contract: FullSignedContract }> {
   return apiFetch<{ success: boolean; contract: FullSignedContract }>(`${API_BASE_URL}/api/contracts/sign`, {
     method: 'POST',

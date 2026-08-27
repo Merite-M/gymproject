@@ -1,6 +1,8 @@
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const router = express.Router();
+const authMiddleware = require('./authMiddleware');
+const { validateTenantAccess: sharedValidateTenantAccess, formatRWF } = require('./shared/utils');
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -10,48 +12,24 @@ if (supabaseUrl && supabaseKey) {
   supabase = createClient(supabaseUrl, supabaseKey);
 }
 
-// Helper function to verify JWT token and extract user
+// Apply centralized authentication middleware to all member CRM routes
+router.use(authMiddleware);
+
+// Helper function to extract authenticated user from req.user
 async function verifyAuthToken(req) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return { error: 'Missing Authorization header' };
+  if (req.user) {
+    return { user: req.user };
   }
-
-  const token = authHeader.replace('Bearer ', '');
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-  if (authError || !user) {
-    return { error: 'Invalid or expired token' };
-  }
-
-  return { user };
+  return { error: 'Authentication required' };
 }
 
-// Helper function to format RWF currency
-function formatRWF(amount) {
-  return `RWF ${parseFloat(amount).toLocaleString('en-RW', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  })}`;
-}
-
-// Helper function to validate tenant access
+// Helper function to validate tenant access using shared utility
 async function validateTenantAccess(userId, tenantId) {
-  const { data: profile, error } = await supabase
-    .from('profiles')
-    .select('tenant_id, role')
-    .eq('id', userId)
-    .single();
-
-  if (error || !profile) {
-    return { error: 'User profile not found' };
+  const result = await sharedValidateTenantAccess(supabase, userId, tenantId);
+  if (!result.authorized) {
+    return { error: result.error || 'Access denied' };
   }
-
-  if (profile.tenant_id !== tenantId && profile.role !== 'super_admin') {
-    return { error: 'Access denied: Invalid tenant' };
-  }
-
-  return { profile };
+  return { profile: result.profile };
 }
 
 const gymEmitter = require('./events');
