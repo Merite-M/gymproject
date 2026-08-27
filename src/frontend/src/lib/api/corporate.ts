@@ -240,3 +240,70 @@ export async function settleCorporateInvoice(params: {
   );
   return data.invoice;
 }
+
+/**
+ * Bulk enroll corporate employees from CSV parsing or JSON array.
+ */
+export async function bulkEnrollCorporateMembers(params: {
+  tenantId: string;
+  accountId: string;
+  employees: Array<{
+    email: string;
+    first_name?: string;
+    last_name?: string;
+    phone?: string;
+    employee_id_number?: string;
+    department?: string;
+    subsidy_cap?: number;
+    status?: string;
+  }>;
+}): Promise<{
+  success: boolean;
+  message: string;
+  summary: {
+    enrolled: number;
+    updated: number;
+    errors: Array<{ employee: any; error: string }>;
+  };
+}> {
+  return apiFetch(
+    `${API_BASE_URL}/api/corporate/accounts/${encodeURIComponent(params.accountId)}/members/bulk`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenant_id: params.tenantId,
+        employees: params.employees
+      })
+    }
+  );
+}
+
+/**
+ * Generate a B2B Paypack payment link / MoMo auto-debit reference for a corporate invoice.
+ */
+export async function generateCorporatePaypackLink(params: {
+  tenantId: string;
+  invoiceId: string;
+  phoneNumber?: string;
+}): Promise<{
+  success: boolean;
+  payment_url: string;
+  payment_reference: string;
+  amount: number;
+  currency: string;
+  recipient_phone: string;
+  invoice_number: string;
+}> {
+  return apiFetch(
+    `${API_BASE_URL}/api/corporate/invoices/${encodeURIComponent(params.invoiceId)}/paypack-link`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenant_id: params.tenantId,
+        phone_number: params.phoneNumber || null
+      })
+    }
+  );
+}

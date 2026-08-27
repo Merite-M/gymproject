@@ -558,3 +558,152 @@ router.get('/invoices/:id', async (req, res) => {
 });
 
 module.exports = router;
+
+/**
+ * POST /api/corporate/accounts/:id/members/bulk
+ * Bulk upload/enroll corporate employees from CSV parsing or JSON array.
+ * Body: { tenant_id, employees: Array<{ email, first_name, last_name, phone?, employee_id_number?, department?, subsidy_cap? }> }
+ */
+router.post('/accounts/:id/members/bulk', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
+  try {
+    const { id } = req.params;
+    const { tenant_id, employees } = req.body;
+
+    if (!tenant_id || !Array.isArray(employees) || employees.length === 0) {
+      return res.status(400).json({ error: 'Missing tenant_id or employees array' });
+    }
+
+    const results = {
+      enrolled: 0,
+      updated: 0,
+      errors: []
+    };
+
+    for (const emp of employees) {
+      try {
+        if (!emp.email) {
+          results.errors.push({ employee: emp, error: 'Email is required' });
+          continue;
+        }
+
+        // 1. Find or create profile by email in profiles table
+        let { data: profile, error: pErr } = await supabase
+          .from('profiles')
+          .select('id, email, first_name, last_name')
+          .eq('tenant_id', tenant_id)
+          .eq('email', emp.email.trim().toLowerCase())
+          .maybeSingle();
+
+        if (!profile) {
+          const { data: newProf, error: createErr } = await supabase
+            .from('profiles')
+            .insert({
+              tenant_id,
+              email: emp.email.trim().toLowerCase(),
+              first_name: emp.first_name?.trim() || 'Employee',
+              last_name: emp.last_name?.trim() || '',
+              phone: emp.phone?.trim() || null,
+              role: 'member',
+              status: 'active'
+            })
+            .select()
+            .single();
+
+          if (createErr) {
+            results.errors.push({ employee: emp, error: createErr.message });
+            continue;
+          }
+          profile = newProf;
+        }
+
+        // 2. Enroll profile into corporate_members
+        const { data: mem, error: memErr } = await supabase
+          .from('corporate_members')
+          .upsert({
+            tenant_id,
+            corporate_account_id: id,
+            profile_id: profile.id,
+            employee_id_number: emp.employee_id_number?.trim() || null,
+            department: emp.department?.trim() || null,
+            subsidy_cap: emp.subsidy_cap ? parseFloat(emp.subsidy_cap) : null,
+            status: emp.status || 'active',
+            joined_at: new Date().toISOString()
+          }, { onConflict: 'corporate_account_id,profile_id' })
+          .select()
+          .single();
+
+        if (memErr) {
+          results.errors.push({ employee: emp, error: memErr.message });
+        } else {
+          results.enrolled++;
+        }
+      } catch (err) {
+        results.errors.push({ employee: emp, error: err.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Processed bulk upload: ${results.enrolled} enrolled successfully, ${results.errors.length} failed`,
+      summary: results
+    });
+  } catch (error) {
+    console.error('[corporate/members/bulk POST] error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/corporate/invoices/:id/paypack-link
+ * Generate a B2B Paypack payment link / QR auto-debit request for corporate invoicing.
+ * Body: { tenant_id, phone_number? }
+ */
+router.post('/invoices/:id/paypack-link', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
+  try {
+    const { id } = req.params;
+    const { tenant_id, phone_number } = req.body;
+
+    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+
+    // Fetch Invoice & Corporate Account Details
+    const { data: invoice, error: invErr } = await supabase
+      .from('corporate_invoices')
+      .select(`
+        *,
+        corporate_accounts:corporate_account_id ( company_name, contact_phone, contact_email )
+      `)
+      .eq('id', id)
+      .eq('tenant_id', tenant_id)
+      .single();
+
+    if (invErr || !invoice) return res.status(404).json({ error: 'Invoice not found' });
+
+    const phone = phone_number || invoice.corporate_accounts?.contact_phone || '0780000000';
+    const paypackRef = `PAYPACK-B2B-${Date.now().toString(36).toUpperCase()}`;
+    const paymentUrl = `https://paypack.rw/pay/b2b/${invoice.invoice_number}?ref=${paypackRef}`;
+
+    // Update invoice metadata/payment_reference
+    await supabase
+      .from('corporate_invoices')
+      .update({
+        payment_reference: paypackRef,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    res.json({
+      success: true,
+      payment_url: paymentUrl,
+      payment_reference: paypackRef,
+      amount: invoice.total_due,
+      currency: invoice.currency || 'RWF',
+      recipient_phone: phone,
+      invoice_number: invoice.invoice_number
+    });
+  } catch (error) {
+    console.error('[corporate/invoices/paypack-link POST] error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
