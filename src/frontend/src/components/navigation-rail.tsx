@@ -59,7 +59,7 @@ const navigationItems = [
   },
   {
     name: "Messaging & SMS",
-    href: "/admin/communications",
+    href: "/communications",
     icon: Radio,
     description: "Africa's Talking & WhatsApp",
   },

@@ -16,6 +16,38 @@ export interface BroadcastCampaign {
   sent_at: string;
 }
 
+export interface CommunicationLog {
+  id: string;
+  tenant_id: string;
+  profile_id: string | null;
+  workflow_id?: string | null;
+  channel: string;
+  direction: 'outbound' | 'inbound';
+  status: string;
+  content: string;
+  external_message_id?: string | null;
+  error_message?: string | null;
+  retry_count?: number;
+  created_at: string;
+  updated_at?: string;
+  metadata?: {
+    recipient?: string;
+    provider?: string;
+    cost?: string;
+    subject?: string;
+    simulated?: boolean;
+    [key: string]: any;
+  };
+  profile?: {
+    id: string;
+    first_name?: string;
+    last_name?: string;
+    phone?: string;
+    email?: string;
+    avatar_url?: string;
+  };
+}
+
 export interface NotificationLog {
   id: string;
   tenant_id: string;
@@ -115,4 +147,36 @@ export async function getCommunicationLogs(
 export async function getGatewayConfigs(tenantId: string): Promise<GatewayConfig[]> {
   const data = await apiFetch<{ configs: GatewayConfig[] }>(`${API_BASE_URL}/api/communications/config?tenant_id=${encodeURIComponent(tenantId)}`);
   return data.configs || [];
+}
+
+/**
+ * Resend a failed communication message.
+ */
+export async function resendFailedMessage(tenantId: string, logId: string): Promise<any> {
+  return apiFetch(`${API_BASE_URL}/api/communications/resend/${logId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tenant_id: tenantId })
+  });
+}
+
+/**
+ * Fetch detailed communication logs with filtering.
+ */
+export async function getEnhancedCommunicationLogs(params: {
+  tenantId: string;
+  channel?: string;
+  status?: string;
+  profileId?: string;
+  search?: string;
+  limit?: number;
+}): Promise<CommunicationLog[]> {
+  const query = new URLSearchParams({ tenant_id: params.tenantId, limit: String(params.limit || 100) });
+  if (params.channel && params.channel !== 'all') query.append('channel', params.channel);
+  if (params.status && params.status !== 'all') query.append('status', params.status);
+  if (params.profileId) query.append('profile_id', params.profileId);
+  if (params.search) query.append('search', params.search);
+
+  const data = await apiFetch<{ logs: CommunicationLog[] }>(`${API_BASE_URL}/api/communications/logs?${query.toString()}`);
+  return data.logs || [];
 }

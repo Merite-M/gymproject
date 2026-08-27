@@ -290,17 +290,17 @@ router.get('/campaigns', requireStaffAuth, async (req, res) => {
 
 /**
  * GET /api/communications/logs
- * Query: ?tenant_id=<uuid>&channel=<all|sms|whatsapp>&limit=50
+ * Query: ?tenant_id=<uuid>&channel=<all|sms|whatsapp|email|in_app>&status=<all|sent|delivered|failed|pending>&profile_id=<uuid>&search=<text>&limit=100
  */
 router.get('/logs', requireStaffAuth, async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
   try {
-    const { tenant_id, channel, limit = 50 } = req.query;
+    const { tenant_id, channel, status, profile_id, search, limit = 100 } = req.query;
     if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
 
     let query = supabase
-      .from('notification_queue')
-      .select('*')
+      .from('communications_log')
+      .select('*, profile:profiles(id, first_name, last_name, phone, email, avatar_url)')
       .eq('tenant_id', tenant_id)
       .order('created_at', { ascending: false })
       .limit(Number(limit));
@@ -308,13 +308,292 @@ router.get('/logs', requireStaffAuth, async (req, res) => {
     if (channel && channel !== 'all') {
       query = query.eq('channel', channel);
     }
+    if (status && status !== 'all') {
+      query = query.eq('status', status);
+    }
+    if (profile_id) {
+      query = query.eq('profile_id', profile_id);
+    }
+    if (search) {
+      query = query.ilike('content', '%'+search+'%');
+    }
 
-    const { data: logs, error } = await query;
-    if (error) throw error;
+    const { data: commLogs, error } = await query;
 
-    res.json({ success: true, logs: logs || [] });
+    if (error || !commLogs || commLogs.length === 0) {
+      // Fallback to notification_queue if communications_log returns empty or query fails
+      let nqQuery = supabase
+        .from('notification_queue')
+        .select('*, profile:profiles(id, first_name, last_name, phone, email, avatar_url)')
+        .eq('tenant_id', tenant_id)
+        .order('created_at', { ascending: false })
+        .limit(Number(limit));
+
+      if (channel && channel !== 'all') nqQuery = nqQuery.eq('channel', channel);
+      if (status && status !== 'all') nqQuery = nqQuery.eq('status', status);
+      if (profile_id) nqQuery = nqQuery.eq('profile_id', profile_id);
+
+      const { data: nqLogs } = await nqQuery;
+
+      const normalizedNq = (nqLogs || []).map(l => ({
+        id: l.id,
+        tenant_id: l.tenant_id,
+        profile_id: l.profile_id,
+        channel: l.channel,
+        direction: 'outbound',
+        status: l.status === 'sent' ? 'delivered' : l.status,
+        content: l.content,
+        created_at: l.created_at,
+        external_message_id: l.metadata?.message_id || null,
+        error_message: l.error_message || l.metadata?.error || null,
+        retry_count: l.attempts || 0,
+        metadata: {
+          recipient: l.recipient,
+          provider: l.metadata?.provider || 'sms_gateway',
+          cost: l.metadata?.cost || null,
+          subject: l.subject || null,
+          simulated: l.metadata?.simulated || false
+        },
+        profile: l.profile
+      }));
+
+      return res.json({ success: true, logs: normalizedNq });
+    }
+
+    res.json({ success: true, logs: commLogs || [] });
   } catch (error) {
     console.error('[communications/logs GET] error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/communications/resend/:id
+ * Manual trigger to resend a failed message from communications_log or notification_queue.
+ */
+router.post('/resend/:id', requireStaffAuth, async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
+  try {
+    const { id } = req.params;
+    const { tenant_id } = req.body;
+
+    if (!tenant_id) return res.status(400).json({ error: 'Missing tenant_id' });
+
+    // 1. Fetch record from communications_log
+    let { data: commRecord } = await supabase
+      .from('communications_log')
+      .select('*, profile:profiles(id, phone, first_name, last_name)')
+      .eq('id', id)
+      .single();
+
+    let recipient = commRecord?.metadata?.recipient || commRecord?.profile?.phone;
+    let channel = commRecord?.channel || 'sms';
+    let message = commRecord?.content;
+    let profileId = commRecord?.profile_id;
+
+    // 2. If not found in communications_log, fallback to notification_queue
+    if (!commRecord) {
+      const { data: nqRecord } = await supabase
+        .from('notification_queue')
+        .select('*, profile:profiles(id, phone)')
+        .eq('id', id)
+        .single();
+
+      if (!nqRecord) {
+        return res.status(404).json({ error: 'Communication record not found' });
+      }
+
+      recipient = nqRecord.recipient || nqRecord.profile?.phone;
+      channel = nqRecord.channel || 'sms';
+      message = nqRecord.content;
+      profileId = nqRecord.profile_id;
+    }
+
+    if (!recipient || !message) {
+      return res.status(400).json({ error: 'Record missing recipient phone or message body' });
+    }
+
+    // 3. Dispatch resend
+    const dispatchResult = await dispatchMultiChannelMessage({
+      tenant_id,
+      profile_id: profileId,
+      channel: channel === 'auto_fallback' ? 'sms' : channel,
+      recipient,
+      subject: 'Resent Notification',
+      message,
+      metadata: { resend_of: id, triggered_by_staff: true },
+      supabase
+    });
+
+    // 4. Update status in communications_log if present
+    if (commRecord) {
+      await supabase
+        .from('communications_log')
+        .update({
+          status: dispatchResult?.status || 'delivered',
+          retry_count: (commRecord.retry_count || 0) + 1,
+          updated_at: new Date().toISOString(),
+          error_message: null
+        })
+        .eq('id', id);
+    }
+
+    res.json({
+      success: true,
+      result: dispatchResult
+    });
+  } catch (error) {
+    console.error('[communications/resend POST] error:', error);
+    res.status(500).json({ error: error.message || 'Resend failed' });
+  }
+});
+
+/**
+ * POST /api/communications/webhook/sms
+ * Provider delivery status webhook (Africa's Talking / Twilio / Generic SMS gateways)
+ */
+router.post('/webhook/sms', async (req, res) => {
+  if (!supabase) return res.status(200).send('OK');
+  try {
+    const { id, status, phoneNumber, messageId, failureReason } = req.body;
+    console.log('[SMS Provider Webhook] Received update:', req.body);
+
+    const targetMsgId = id || messageId || req.body.id;
+    const rawStatus = String(status || req.body.status || '').toLowerCase();
+
+    let mappedStatus = 'sent';
+    if (['success', 'delivered', 'sent'].includes(rawStatus)) mappedStatus = 'delivered';
+    else if (['failed', 'rejected', 'undelivered'].includes(rawStatus)) mappedStatus = 'failed';
+
+    if (targetMsgId) {
+      // Update communications_log
+      await supabase
+        .from('communications_log')
+        .update({
+          status: mappedStatus,
+          error_message: failureReason || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('external_message_id', targetMsgId);
+
+      // Also update notification_queue metadata if applicable
+      const { data: nq } = await supabase
+        .from('notification_queue')
+        .select('id, metadata')
+        .contains('metadata', { message_id: targetMsgId })
+        .limit(1);
+
+      if (nq && nq.length > 0) {
+        await supabase
+          .from('notification_queue')
+          .update({
+            status: mappedStatus === 'delivered' ? 'sent' : mappedStatus,
+            error_message: failureReason || null
+          })
+          .eq('id', nq[0].id);
+      }
+    }
+
+    res.status(200).json({ status: 'ACKNOWLEDGED' });
+  } catch (error) {
+    console.error('[SMS Webhook] error:', error);
+    res.status(200).json({ status: 'ACKNOWLEDGED' });
+  }
+});
+
+/**
+ * GET /api/communications/in-app
+ * Query: ?tenant_id=<uuid>&profile_id=<uuid>&unread_only=true
+ * Returns in-app notifications for the member PWA feed
+ */
+router.get('/in-app', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
+  try {
+    const { tenant_id, profile_id, unread_only } = req.query;
+    if (!tenant_id || !profile_id) {
+      return res.status(400).json({ error: 'Missing tenant_id or profile_id' });
+    }
+
+    let query = supabase
+      .from('communications_log')
+      .select('*')
+      .eq('tenant_id', tenant_id)
+      .eq('profile_id', profile_id)
+      .eq('channel', 'in_app')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (unread_only === 'true') {
+      query = query.neq('status', 'read');
+    }
+
+    let { data: items, error } = await query;
+
+    // Fallback to notification_queue in_app items if empty
+    if (!items || items.length === 0) {
+      const { data: nqItems } = await supabase
+        .from('notification_queue')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .eq('profile_id', profile_id)
+        .eq('channel', 'in_app')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      items = (nqItems || []).map(n => ({
+        id: n.id,
+        tenant_id: n.tenant_id,
+        profile_id: n.profile_id,
+        channel: 'in_app',
+        direction: 'outbound',
+        status: n.status === 'sent' ? 'delivered' : n.status,
+        content: n.content,
+        created_at: n.created_at,
+        metadata: { subject: n.subject, ...n.metadata }
+      }));
+    }
+
+    const unreadCount = items.filter(i => i.status !== 'read').length;
+
+    res.json({
+      success: true,
+      notifications: items,
+      unread_count: unreadCount
+    });
+  } catch (error) {
+    console.error('[communications/in-app GET] error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * PATCH /api/communications/in-app/read
+ * Mark in-app notifications as read for a member
+ */
+router.patch('/in-app/read', async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
+  try {
+    const { tenant_id, profile_id, notification_ids } = req.body;
+    if (!tenant_id || !profile_id) {
+      return res.status(400).json({ error: 'Missing tenant_id or profile_id' });
+    }
+
+    let query = supabase
+      .from('communications_log')
+      .update({ status: 'read', updated_at: new Date().toISOString() })
+      .eq('tenant_id', tenant_id)
+      .eq('profile_id', profile_id)
+      .eq('channel', 'in_app');
+
+    if (Array.isArray(notification_ids) && notification_ids.length > 0) {
+      query = query.in('id', notification_ids);
+    }
+
+    await query;
+
+    res.json({ success: true, message: 'Notifications marked as read' });
+  } catch (error) {
+    console.error('[communications/in-app/read PATCH] error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
