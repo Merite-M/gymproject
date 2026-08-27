@@ -82,7 +82,7 @@ export default function WidgetCustomizerPage() {
   src="${backendUrl}/api/public/${tenantSlug}/embed/${widgetType}"
   width="100%"
   height="620"
-  style="border:none; border-radius:12px; overflow:hidden;"
+  className="border-none rounded-xl overflow-hidden"
   title="${tenantName} ${widgetType === 'schedule' ? 'Schedule' : 'Join'} Widget">
 </iframe>`;
 

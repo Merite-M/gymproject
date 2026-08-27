@@ -271,7 +271,7 @@ export default function MissionControlMonitor() {
         </div>
         <div className="px-gutter mb-6">
           <button className="w-full bg-primary-container text-on-primary-container rounded-lg py-2 px-3 flex items-center justify-center space-x-2 border border-surface-tint/30 text-label-caps font-bold uppercase tracking-widest">
-            <span className="material-symbols-outlined text-sm" style={{fontVariationSettings: "'FILL' 1"}}>qr_code_scanner</span>
+            <span className="material-symbols-outlined material-symbols-filled text-sm">qr_code_scanner</span>
             <span>Scanner Active</span>
           </button>
         </div>
@@ -285,7 +285,7 @@ export default function MissionControlMonitor() {
             </li>
             <li>
               <Link className="flex items-center space-x-3 px-3 py-2 bg-primary-container text-on-primary-container rounded-lg mx-2 scale-95 duration-150 font-medium" href="#">
-                <span className="material-symbols-outlined" style={{fontVariationSettings: "'FILL' 1"}}>list_alt</span>
+                <span className="material-symbols-outlined material-symbols-filled">list_alt</span>
                 <span>Activity Log</span>
               </Link>
             </li>
@@ -428,7 +428,7 @@ export default function MissionControlMonitor() {
                               (log.profiles?.first_name?.[0] || '?') + (log.profiles?.last_name?.[0] || '?')
                             )}
                           </div>
-                          {isActive && <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-primary rounded-full border-2 border-white flex items-center justify-center"><span className="material-symbols-outlined text-white text-[8px]" style={{fontVariationSettings: "'FILL' 1"}}>check</span></div>}
+                          {isActive && <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-primary rounded-full border-2 border-white flex items-center justify-center"><span className="material-symbols-outlined material-symbols-filled text-white text-[8px]">check</span></div>}
                         </div>
                         <div>
                           <div className="font-medium text-primary text-sm">{log.profiles?.first_name} {log.profiles?.last_name}</div>
@@ -482,7 +482,7 @@ export default function MissionControlMonitor() {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <h2 className="text-headline-md font-bold text-primary">{activeCheckIn.profiles?.first_name} {activeCheckIn.profiles?.last_name}</h2>
-                    {visualAlertsEnabled && activeCheckIn.status === 'approved' && <span className="material-symbols-outlined text-secondary text-[20px]" style={{fontVariationSettings: "'FILL' 1"}}>verified</span>}
+                    {visualAlertsEnabled && activeCheckIn.status === 'approved' && <span className="material-symbols-outlined material-symbols-filled text-secondary text-[20px]">verified</span>}
                   </div>
                   <div className="flex items-center gap-3 mb-6">
                     <span className="text-[12px] font-mono-id text-text-muted">ID: {activeCheckIn.profile_id.split('-')[0].toUpperCase()}</span>
@@ -494,7 +494,7 @@ export default function MissionControlMonitor() {
                 {visualAlertsEnabled && activeCheckIn.status !== 'approved' && (
                   <div className={`p-4 rounded-xl border mb-6 ${getStatusVisuals(activeCheckIn.status).bg} ${getStatusVisuals(activeCheckIn.status).outline}`}>
                     <div className="flex items-start gap-3">
-                      <span className={`material-symbols-outlined ${getStatusVisuals(activeCheckIn.status).color.replace('bg-', 'text-')}`} style={{fontVariationSettings: "'FILL' 1"}}>error</span>
+                      <span className={`material-symbols-outlined material-symbols-filled ${getStatusVisuals(activeCheckIn.status).color.replace('bg-', 'text-')}`} >error</span>
                       <div>
                         <h4 className={`text-body-base font-bold ${getStatusVisuals(activeCheckIn.status).color.replace('bg-', 'text-')}`}>{getStatusVisuals(activeCheckIn.status).label}</h4>
                         <p className={`text-body-dense mt-1 opacity-80 ${getStatusVisuals(activeCheckIn.status).color.replace('bg-', 'text-')}`}>This account requires immediate attention at the front desk. Action needed to grant facility access.</p>
@@ -524,7 +524,7 @@ export default function MissionControlMonitor() {
                   <h4 className="text-[11px] font-bold uppercase tracking-widest text-text-muted mb-4">Required Documents</h4>
                   <div className="flex items-center justify-between p-3 border border-border-hairline rounded-lg bg-surface-container-lowest">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-success-soft flex items-center justify-center text-secondary"><span className="material-symbols-outlined text-[16px]" style={{fontVariationSettings: "'FILL' 1"}}>check_circle</span></div>
+                      <div className="w-8 h-8 rounded-full bg-success-soft flex items-center justify-center text-secondary"><span className="material-symbols-outlined material-symbols-filled text-[16px]">check_circle</span></div>
                       <div>
                         <p className="text-body-dense font-medium text-primary">Liability Waiver</p>
                         <p className="text-[11px] text-text-muted">Signed Jan 15, 2024</p>

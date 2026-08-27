@@ -88,8 +88,7 @@ export function NavigationRail() {
 
   return (
     <nav 
-      className="fixed left-0 top-0 bottom-0 w-[240px] bg-surface border-r border-border flex flex-col z-50"
-      style={{ width: 'var(--spacing-navigation-rail, 240px)' }}
+      className="fixed left-0 top-0 bottom-0 w-[var(--spacing-navigation-rail,240px)] bg-surface border-r border-border flex flex-col z-50"
     >
       {/* Logo/Brand */}
       <div className="p-6 border-b border-border">

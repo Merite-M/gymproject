@@ -201,16 +201,16 @@ export default function RosterPage() {
 
   if (loading || !tenantId || !staffId)
     return (
-      <div className="flex items-center justify-center h-full min-h-screen bg-[#fcf8fa]">
-        <Loader2 className="animate-spin w-8 h-8 text-[#0f172a]" />
+      <div className="flex items-center justify-center h-full min-h-screen bg-background">
+        <Loader2 className="animate-spin w-8 h-8 text-foreground" />
       </div>
     );
 
   if (featureDisabled) {
     return (
-      <div className="flex items-center justify-center h-full min-h-screen flex-col bg-[#fcf8fa]">
+      <div className="flex items-center justify-center h-full min-h-screen flex-col bg-background">
         <AlertCircle size={48} className="text-slate-400 mb-4" />
-        <h2 className="text-2xl font-bold text-[#0f172a] mb-2">
+        <h2 className="text-2xl font-bold text-foreground mb-2">
           Feature Disabled
         </h2>
         <p className="text-slate-500">
@@ -225,39 +225,39 @@ export default function RosterPage() {
     tasks.length > 0 ? (completedCount / tasks.length) * 100 : 0;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC]">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white border-b border-[#E2E8F0] sticky top-0 z-10">
+      <header className="bg-white border-b border-border sticky top-0 z-10">
         <div className="max-w-[1600px] mx-auto px-6 py-4 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-[#0f172a] tracking-tight">
+            <h1 className="text-2xl font-bold text-foreground tracking-tight">
               Shift Operations
             </h1>
-            <p className="text-sm text-[#475569] mt-1 font-medium flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#10B981]"></span>
+            <p className="text-sm text-muted-foreground mt-1 font-medium flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-status-cleared"></span>
               Staff Member: {staffName}
             </p>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="text-right mr-4 hidden sm:block">
-              <p className="text-xs uppercase tracking-wider font-bold text-[#64748B]">
+              <p className="text-xs uppercase tracking-wider font-bold text-muted-foreground">
                 Status
               </p>
-              <p className="text-sm font-semibold text-[#0f172a]">
+              <p className="text-sm font-semibold text-foreground">
                 {shift ? "On Shift" : "Off-Shift"}
               </p>
             </div>
             {!shift ? (
               <button
                 onClick={startShift}
-                className="bg-[#0f172a] hover:bg-[#1E293B] text-white h-10 px-6 rounded shadow-sm font-semibold flex items-center gap-2 transition-all"
+                className="bg-foreground hover:bg-foreground/90 text-white h-10 px-6 rounded shadow-sm font-semibold flex items-center gap-2 transition-all"
               >
                 <Play size={18} fill="currentColor" /> Start Shift
               </button>
             ) : (
-              <div className="flex items-center gap-4 bg-[#F1F5F9] p-1.5 rounded-md border border-[#E2E8F0]">
-                <div className="px-3 flex items-center gap-2 text-[#475569] text-sm font-medium">
+              <div className="flex items-center gap-4 bg-muted p-1.5 rounded-md border border-border">
+                <div className="px-3 flex items-center gap-2 text-muted-foreground text-sm font-medium">
                   <Clock size={16} />
                   <span className="font-mono">
                     {new Date(shift.shift_start).toLocaleTimeString([], {
@@ -268,7 +268,7 @@ export default function RosterPage() {
                 </div>
                 <button
                   onClick={endShift}
-                  className="bg-white border border-[#E2E8F0] hover:border-[#EF4444] hover:text-[#EF4444] text-[#0f172a] h-8 px-4 rounded shadow-sm font-semibold flex items-center gap-2 transition-all"
+                  className="bg-white border border-border hover:border-destructive hover:text-destructive text-foreground h-8 px-4 rounded shadow-sm font-semibold flex items-center gap-2 transition-all"
                 >
                   <Square size={14} fill="currentColor" /> End Shift
                 </button>
@@ -283,26 +283,26 @@ export default function RosterPage() {
         <div className="flex-1 lg:w-[75%] max-w-4xl">
           <div className="mb-6 flex justify-between items-end">
             <div>
-              <h2 className="text-xl font-bold text-[#0f172a]">
+              <h2 className="text-xl font-bold text-foreground">
                 Shift Checklist
               </h2>
-              <p className="text-sm text-[#475569] mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 Complete mandatory assignments before shift end.
               </p>
             </div>
             {shift && tasks.length > 0 && (
               <div className="text-right">
-                <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider mb-1">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
                   Progress
                 </p>
                 <div className="flex items-center gap-3">
-                  <div className="w-32 h-2 bg-[#E2E8F0] rounded-full overflow-hidden">
+                  <div className="w-32 h-2 bg-border rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-[#10B981] rounded-full"
+                      className="h-full bg-status-cleared rounded-full"
                       style={{ width: `${progressPercent}%` }}
                     ></div>
                   </div>
-                  <span className="text-sm font-mono font-medium text-[#0f172a]">
+                  <span className="text-sm font-mono font-medium text-foreground">
                     {completedCount}/{tasks.length}
                   </span>
                 </div>
@@ -311,14 +311,14 @@ export default function RosterPage() {
           </div>
 
           {!shift ? (
-            <div className="bg-white rounded-lg border border-[#E2E8F0] p-12 text-center shadow-sm">
-              <div className="w-16 h-16 bg-[#F1F5F9] rounded-full flex items-center justify-center mx-auto mb-4">
-                <Clock size={24} className="text-[#64748B]" />
+            <div className="bg-white rounded-lg border border-border p-12 text-center shadow-sm">
+              <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                <Clock size={24} className="text-muted-foreground" />
               </div>
-              <h3 className="text-lg font-semibold text-[#0f172a] mb-2">
+              <h3 className="text-lg font-semibold text-foreground mb-2">
                 You are currently off-shift
               </h3>
-              <p className="text-[#475569] max-w-sm mx-auto">
+              <p className="text-muted-foreground max-w-sm mx-auto">
                 Start your shift to view your assigned task checklist and begin
                 logging operations.
               </p>
@@ -326,7 +326,7 @@ export default function RosterPage() {
           ) : (
             <div className="space-y-4">
               {tasks.length === 0 ? (
-                <div className="bg-white rounded border border-[#E2E8F0] p-8 text-center text-[#475569]">
+                <div className="bg-white rounded border border-border p-8 text-center text-muted-foreground">
                   No specific tasks assigned for this shift profile.
                 </div>
               ) : (
@@ -335,40 +335,40 @@ export default function RosterPage() {
                   return (
                     <div
                       key={task.id}
-                      className={`bg-white rounded-lg border shadow-sm transition-all overflow-hidden ${isDone ? "border-[#E2E8F0] opacity-75" : "border-[#0f172a]/20"}`}
+                      className={`bg-white rounded-lg border shadow-sm transition-all overflow-hidden ${isDone ? "border-border opacity-75" : "border-foreground/20"}`}
                     >
                       <div className="p-5 sm:p-6 flex flex-col sm:flex-row gap-4 sm:items-start justify-between">
                         <div className="flex gap-4">
                           <div className="pt-1 flex-shrink-0">
                             {isDone ? (
-                              <div className="w-6 h-6 rounded-full bg-[#D1FAE5] text-[#006c49] flex items-center justify-center border border-[#10B981]">
+                              <div className="w-6 h-6 rounded-full bg-success-soft text-status-cleared-foreground flex items-center justify-center border border-status-cleared">
                                 <Check size={14} strokeWidth={3} />
                               </div>
                             ) : (
-                              <div className="w-6 h-6 rounded-full border-2 border-[#E2E8F0] bg-[#F8FAFC]"></div>
+                              <div className="w-6 h-6 rounded-full border-2 border-border bg-background"></div>
                             )}
                           </div>
 
                           <div>
                             <div className="flex items-center gap-3 mb-1">
                               <h3
-                                className={`font-semibold text-base ${isDone ? "text-[#64748B] line-through" : "text-[#0f172a]"}`}
+                                className={`font-semibold text-base ${isDone ? "text-muted-foreground line-through" : "text-foreground"}`}
                               >
                                 {task.task_template?.name}
                               </h3>
                               {task.task_template?.is_mandatory && !isDone && (
-                                <span className="bg-[#FEE2E2] text-[#EF4444] text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-[#EF4444]/20">
+                                <span className="bg-destructive/10 text-destructive text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-destructive/20">
                                   Required
                                 </span>
                               )}
                             </div>
-                            <p className="text-sm text-[#475569] max-w-xl">
+                            <p className="text-sm text-muted-foreground max-w-xl">
                               {task.task_template?.description}
                             </p>
 
                             {isDone && task.completed_at && (
-                              <div className="flex items-center gap-2 mt-3 text-xs font-medium text-[#64748B]">
-                                <Check size={14} className="text-[#10B981]" />
+                              <div className="flex items-center gap-2 mt-3 text-xs font-medium text-muted-foreground">
+                                <Check size={14} className="text-status-cleared" />
                                 Completed at{" "}
                                 <span className="font-mono">
                                   {new Date(
@@ -381,10 +381,10 @@ export default function RosterPage() {
                         </div>
 
                         {!isDone && (
-                          <div className="flex flex-col sm:items-end gap-3 mt-4 sm:mt-0 pt-4 sm:pt-0 border-t border-[#E2E8F0] sm:border-0">
+                          <div className="flex flex-col sm:items-end gap-3 mt-4 sm:mt-0 pt-4 sm:pt-0 border-t border-border sm:border-0">
                             {task.task_template?.requires_photo_evidence && (
                               <label
-                                className={`cursor-pointer w-full sm:w-auto px-4 py-2 text-sm font-semibold rounded border transition-colors flex items-center justify-center gap-2 ${photoFiles[task.id] ? "bg-[#F1F5F9] border-[#0f172a] text-[#0f172a]" : "bg-white border-[#E2E8F0] text-[#0f172a] hover:bg-[#F8FAFC]"}`}
+                                className={`cursor-pointer w-full sm:w-auto px-4 py-2 text-sm font-semibold rounded border transition-colors flex items-center justify-center gap-2 ${photoFiles[task.id] ? "bg-muted border-foreground text-foreground" : "bg-white border-border text-foreground hover:bg-background"}`}
                               >
                                 <Camera size={16} />
                                 {photoFiles[task.id]
@@ -420,12 +420,12 @@ export default function RosterPage() {
                               }
                               className={`w-full sm:w-auto px-6 py-2 rounded text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
                                 completingTask === task.id
-                                  ? "bg-[#E2E8F0] text-[#64748B]"
+                                  ? "bg-border text-muted-foreground"
                                   : task.task_template
                                         ?.requires_photo_evidence &&
                                       !photoFiles[task.id]
-                                    ? "bg-[#F1F5F9] text-[#94A3B8] cursor-not-allowed border border-[#E2E8F0]"
-                                    : "bg-[#0f172a] text-white shadow-sm hover:bg-[#1E293B]"
+                                    ? "bg-muted text-muted-foreground/60 cursor-not-allowed border border-border"
+                                    : "bg-foreground text-white shadow-sm hover:bg-foreground/90"
                               }`}
                             >
                               {completingTask === task.id ? (
@@ -448,41 +448,41 @@ export default function RosterPage() {
 
         {/* SECONDARY SIDEBAR (25%) */}
         <div className="lg:w-[25%] lg:min-w-[320px] space-y-6">
-          <div className="bg-white rounded-lg border border-[#E2E8F0] shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#E2E8F0] bg-[#F8FAFC]">
-              <h3 className="font-semibold text-[#0f172a] flex items-center gap-2">
-                <CalendarIcon size={18} className="text-[#64748B]" />
+          <div className="bg-white rounded-lg border border-border shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-border bg-background">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <CalendarIcon size={18} className="text-muted-foreground" />
                 Upcoming Roster
               </h3>
             </div>
-            <div className="divide-y divide-[#E2E8F0]">
-              <div className="p-4 hover:bg-[#F8FAFC] transition-colors cursor-pointer">
-                <p className="text-xs font-bold text-[#0f172a] mb-1">
+            <div className="divide-y divide-border">
+              <div className="p-4 hover:bg-background transition-colors cursor-pointer">
+                <p className="text-xs font-bold text-foreground mb-1">
                   TOMORROW
                 </p>
                 <div className="flex justify-between items-center">
-                  <p className="text-sm font-mono text-[#475569]">
+                  <p className="text-sm font-mono text-muted-foreground">
                     06:00 - 14:00
                   </p>
-                  <span className="text-[10px] uppercase font-bold text-[#64748B] bg-[#F1F5F9] px-2 py-0.5 rounded flex items-center gap-1">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded flex items-center gap-1">
                     <MapPin size={10} /> Front Desk
                   </span>
                 </div>
               </div>
-              <div className="p-4 hover:bg-[#F8FAFC] transition-colors cursor-pointer">
-                <p className="text-xs font-bold text-[#0f172a] mb-1">
+              <div className="p-4 hover:bg-background transition-colors cursor-pointer">
+                <p className="text-xs font-bold text-foreground mb-1">
                   WEDNESDAY
                 </p>
                 <div className="flex justify-between items-center">
-                  <p className="text-sm font-mono text-[#475569]">
+                  <p className="text-sm font-mono text-muted-foreground">
                     14:00 - 22:00
                   </p>
-                  <span className="text-[10px] uppercase font-bold text-[#64748B] bg-[#F1F5F9] px-2 py-0.5 rounded flex items-center gap-1">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded flex items-center gap-1">
                     <MapPin size={10} /> Floor Mgr
                   </span>
                 </div>
               </div>
-              <div className="p-4 flex items-center justify-between text-[#0f172a] hover:bg-[#F8FAFC] cursor-pointer transition-colors">
+              <div className="p-4 flex items-center justify-between text-foreground hover:bg-background cursor-pointer transition-colors">
                 <span className="text-sm font-semibold">
                   View Full Schedule
                 </span>
@@ -491,29 +491,29 @@ export default function RosterPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-lg border border-[#E2E8F0] shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#E2E8F0] bg-[#F8FAFC] flex justify-between items-center">
-              <h3 className="font-semibold text-[#0f172a] flex items-center gap-2">
-                <Bell size={18} className="text-[#64748B]" />
+          <div className="bg-white rounded-lg border border-border shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-border bg-background flex justify-between items-center">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <Bell size={18} className="text-muted-foreground" />
                 Announcements
               </h3>
-              <span className="w-2 h-2 bg-[#EF4444] rounded-full"></span>
+              <span className="w-2 h-2 bg-destructive rounded-full"></span>
             </div>
             <div className="p-5 space-y-4">
-              <div className="border-l-2 border-[#F59E0B] pl-3">
-                <p className="text-xs font-bold text-[#F59E0B] mb-0.5 uppercase tracking-wider">
+              <div className="border-l-2 border-status-action pl-3">
+                <p className="text-xs font-bold text-status-action mb-0.5 uppercase tracking-wider">
                   Facility Notice
                 </p>
-                <p className="text-sm text-[#0f172a] font-medium leading-tight">
+                <p className="text-sm text-foreground font-medium leading-tight">
                   Planned Maintenance: Spin Studio AC unit repair today at
                   14:00.
                 </p>
               </div>
-              <div className="border-l-2 border-[#10B981] pl-3">
-                <p className="text-xs font-bold text-[#10B981] mb-0.5 uppercase tracking-wider">
+              <div className="border-l-2 border-status-cleared pl-3">
+                <p className="text-xs font-bold text-status-cleared mb-0.5 uppercase tracking-wider">
                   Inventory Update
                 </p>
-                <p className="text-sm text-[#0f172a] font-medium leading-tight">
+                <p className="text-sm text-foreground font-medium leading-tight">
                   New Shipment: Premium Towels have arrived in the back
                   stockroom.
                 </p>

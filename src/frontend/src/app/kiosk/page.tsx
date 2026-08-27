@@ -245,19 +245,19 @@ export default function KioskPage() {
   };
 
   return (
-    <div className="relative min-h-screen w-full bg-[#090f0d] text-[#dae9e2] font-sans flex flex-col justify-between p-6 select-none overflow-hidden">
+    <div className="relative min-h-screen w-full bg-background text-foreground font-sans flex flex-col justify-between p-6 select-none overflow-hidden">
       {/* Top Header */}
-      <header className="flex items-center justify-between border-b border-[#1c2824] pb-4">
+      <header className="flex items-center justify-between border-b border-surface-container-highest pb-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#0bb86f]/20 border border-[#4edf92]/30 flex items-center justify-center">
-            <UserCheck className="w-6 h-6 text-[#4edf92]" />
+          <div className="w-10 h-10 rounded-xl bg-primary-container/20 border border-accent/30 flex items-center justify-center">
+            <UserCheck className="w-6 h-6 text-accent" />
           </div>
           <div>
-            <h1 className="text-xl font-extrabold tracking-tight text-[#dae9e2] uppercase">
+            <h1 className="text-xl font-extrabold tracking-tight text-foreground uppercase">
               {tenantName}
             </h1>
-            <p className="text-xs text-[#a0aea8] font-medium flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#4edf92] animate-pulse"></span>
+            <p className="text-xs text-muted-foreground font-medium flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-accent animate-pulse"></span>
               Self-Check-In Kiosk Active
             </p>
           </div>
@@ -266,15 +266,15 @@ export default function KioskPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
-            className="p-3 rounded-xl bg-[#121b18] border border-[#1c2824] text-[#a0aea8] hover:text-[#dae9e2] transition-colors"
+            className="p-3 rounded-xl bg-card border border-surface-container-highest text-muted-foreground hover:text-foreground transition-colors"
           >
-            {soundEnabled ? <Volume2 className="w-5 h-5 text-[#4edf92]" /> : <VolumeX className="w-5 h-5 text-red-400" />}
+            {soundEnabled ? <Volume2 className="w-5 h-5 text-accent" /> : <VolumeX className="w-5 h-5 text-red-400" />}
           </button>
           <button
             onClick={() => setAdminLockOpen(true)}
-            className="p-3 rounded-xl bg-[#121b18] border border-[#1c2824] text-[#a0aea8] hover:text-[#dae9e2] transition-colors flex items-center gap-2 text-xs font-semibold"
+            className="p-3 rounded-xl bg-card border border-surface-container-highest text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2 text-xs font-semibold"
           >
-            <Lock className="w-4 h-4 text-[#4edf92]" />
+            <Lock className="w-4 h-4 text-accent" />
             <span>Admin</span>
           </button>
         </div>
@@ -288,18 +288,18 @@ export default function KioskPage() {
               <h2 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight">
                 Welcome! Scan Your Pass
               </h2>
-              <p className="text-base text-[#a0aea8]">
+              <p className="text-base text-muted-foreground">
                 Hold your barcode, member card, or QR code under the scanner
               </p>
             </div>
 
             {/* Glowing Target Box */}
-            <div className="relative w-64 h-64 md:w-72 md:h-72 rounded-3xl bg-[#121b18] border-2 border-dashed border-[#4edf92]/40 flex flex-col items-center justify-center shadow-2xl shadow-[#4edf92]/10 overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-b from-[#4edf92]/5 via-transparent to-[#4edf92]/5 animate-pulse"></div>
-              <div className="w-full h-1 bg-[#4edf92] shadow-[0_0_15px_#4edf92] absolute top-0 animate-[bounce_2s_infinite]"></div>
+            <div className="relative w-64 h-64 md:w-72 md:h-72 rounded-3xl bg-card border-2 border-dashed border-accent/40 flex flex-col items-center justify-center shadow-2xl shadow-accent/10 overflow-hidden group">
+              <div className="absolute inset-0 bg-gradient-to-b from-accent/5 via-transparent to-accent/5 animate-pulse"></div>
+              <div className="w-full h-1 bg-accent shadow-[0_0_15px_var(--color-accent)] absolute top-0 animate-[bounce_2s_infinite]"></div>
 
-              <Scan className="w-24 h-24 text-[#4edf92] mb-3 group-hover:scale-110 transition-transform duration-300" />
-              <span className="text-xs font-bold text-[#4edf92] uppercase tracking-wider bg-[#0bb86f]/20 px-3 py-1 rounded-full border border-[#4edf92]/30">
+              <Scan className="w-24 h-24 text-accent mb-3 group-hover:scale-110 transition-transform duration-300" />
+              <span className="text-xs font-bold text-accent uppercase tracking-wider bg-primary-container/20 px-3 py-1 rounded-full border border-accent/30">
                 Ready to Scan
               </span>
             </div>
@@ -308,9 +308,9 @@ export default function KioskPage() {
             <div className="w-full pt-4">
               <button
                 onClick={() => setMode("keypad")}
-                className="w-full py-4 px-6 bg-[#17221e] hover:bg-[#1c2824] border border-[#3e4b46] rounded-2xl flex items-center justify-center gap-3 text-lg font-bold text-[#dae9e2] shadow-lg transition-all active:scale-95"
+                className="w-full py-4 px-6 bg-surface-container-high hover:bg-surface-container-highest border border-border rounded-2xl flex items-center justify-center gap-3 text-lg font-bold text-foreground shadow-lg transition-all active:scale-95"
               >
-                <Keypad className="w-6 h-6 text-[#4edf92]" />
+                <Keypad className="w-6 h-6 text-accent" />
                 <span>Forgot Card? Check-in with Phone or PIN</span>
               </button>
             </div>
@@ -322,23 +322,23 @@ export default function KioskPage() {
             <div className="flex items-center justify-between w-full">
               <button
                 onClick={resetToAmbient}
-                className="flex items-center gap-2 text-sm text-[#a0aea8] hover:text-[#dae9e2] font-semibold"
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground font-semibold"
               >
                 <ArrowLeft className="w-5 h-5" />
                 <span>Back to Scan</span>
               </button>
-              <h2 className="text-lg font-bold text-[#dae9e2]">Member Phone / PIN</h2>
+              <h2 className="text-lg font-bold text-foreground">Member Phone / PIN</h2>
             </div>
 
             {/* Input Display Box */}
-            <div className="w-full bg-[#121b18] border-2 border-[#3e4b46] rounded-2xl p-4 flex items-center justify-between shadow-inner">
+            <div className="w-full bg-card border-2 border-border rounded-2xl p-4 flex items-center justify-between shadow-inner">
               <input
                 ref={inputRef}
                 type="text"
                 readOnly
                 value={inputVal}
                 placeholder="Enter Phone or 4-Digit PIN"
-                className="bg-transparent border-none text-2xl font-mono font-bold tracking-widest text-[#4edf92] focus:outline-none w-full text-center placeholder:text-[#3e4b46]"
+                className="bg-transparent border-none text-2xl font-mono font-bold tracking-widest text-accent focus:outline-none w-full text-center placeholder:text-border"
               />
               {inputVal && (
                 <button
@@ -356,26 +356,26 @@ export default function KioskPage() {
                 <button
                   key={num}
                   onClick={() => handleKeypadPress(num)}
-                  className="h-16 rounded-2xl bg-[#17221e] hover:bg-[#222f2b] active:bg-[#0bb86f] text-2xl font-bold text-white border border-[#1c2824] shadow transition-all active:scale-95 flex items-center justify-center"
+                  className="h-16 rounded-2xl bg-surface-container-high hover:bg-surface-bright active:bg-primary-container text-2xl font-bold text-white border border-surface-container-highest shadow transition-all active:scale-95 flex items-center justify-center"
                 >
                   {num}
                 </button>
               ))}
               <button
                 onClick={() => handleKeypadPress("clear")}
-                className="h-16 rounded-2xl bg-[#17221e] hover:bg-red-950/40 text-sm font-bold text-red-400 border border-[#1c2824] flex items-center justify-center"
+                className="h-16 rounded-2xl bg-surface-container-high hover:bg-red-950/40 text-sm font-bold text-red-400 border border-surface-container-highest flex items-center justify-center"
               >
                 CLEAR
               </button>
               <button
                 onClick={() => handleKeypadPress("0")}
-                className="h-16 rounded-2xl bg-[#17221e] hover:bg-[#222f2b] active:bg-[#0bb86f] text-2xl font-bold text-white border border-[#1c2824] shadow transition-all active:scale-95 flex items-center justify-center"
+                className="h-16 rounded-2xl bg-surface-container-high hover:bg-surface-bright active:bg-primary-container text-2xl font-bold text-white border border-surface-container-highest shadow transition-all active:scale-95 flex items-center justify-center"
               >
                 0
               </button>
               <button
                 onClick={() => handleKeypadPress("back")}
-                className="h-16 rounded-2xl bg-[#17221e] hover:bg-[#222f2b] text-white border border-[#1c2824] flex items-center justify-center text-red-400"
+                className="h-16 rounded-2xl bg-surface-container-high hover:bg-surface-bright text-white border border-surface-container-highest flex items-center justify-center text-red-400"
               >
                 <Delete className="w-6 h-6" />
               </button>
@@ -385,7 +385,7 @@ export default function KioskPage() {
             <button
               disabled={loading || !inputVal.trim()}
               onClick={() => handleCheckIn(inputVal)}
-              className="w-full py-4 rounded-2xl bg-[#0bb86f] hover:bg-[#3cd185] disabled:opacity-50 text-[#002915] text-xl font-extrabold shadow-xl transition-all flex items-center justify-center gap-2"
+              className="w-full py-4 rounded-2xl bg-primary-container hover:bg-primary-fixed-dim disabled:opacity-50 text-on-primary-fixed text-xl font-extrabold shadow-xl transition-all flex items-center justify-center gap-2"
             >
               {loading ? (
                 <RefreshCw className="w-6 h-6 animate-spin" />
@@ -397,10 +397,10 @@ export default function KioskPage() {
         )}
 
         {mode === "result" && result && (
-          <div className="flex flex-col items-center text-center max-w-md w-full p-8 rounded-3xl bg-[#121b18] border-2 border-[#1c2824] shadow-2xl space-y-6 animate-scale-up">
+          <div className="flex flex-col items-center text-center max-w-md w-full p-8 rounded-3xl bg-card border-2 border-surface-container-highest shadow-2xl space-y-6 animate-scale-up">
             {result.success ? (
               result.status === "approved" ? (
-                <div className="w-20 h-20 rounded-full bg-[#4edf92]/20 border-2 border-[#4edf92] flex items-center justify-center text-[#4edf92] shadow-lg shadow-[#4edf92]/20">
+                <div className="w-20 h-20 rounded-full bg-accent/20 border-2 border-accent flex items-center justify-center text-accent shadow-lg shadow-accent/20">
                   <CheckCircle2 className="w-12 h-12" />
                 </div>
               ) : (
@@ -422,21 +422,21 @@ export default function KioskPage() {
                     : "CHECKED IN (ATTENTION)"
                   : "ACCESS DENIED"}
               </h2>
-              <p className="text-sm font-semibold uppercase tracking-wider text-[#a0aea8]">
+              <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 {result.success ? "Door Relay Signal Sent" : "Please see Receptionist"}
               </p>
             </div>
 
             {result.profile && (
-              <div className="w-full bg-[#17221e] border border-[#3e4b46] rounded-2xl p-4 flex items-center gap-4 text-left">
+              <div className="w-full bg-surface-container-high border border-border rounded-2xl p-4 flex items-center gap-4 text-left">
                 {result.profile.avatar_url ? (
                   <img
                     src={result.profile.avatar_url}
                     alt="Member"
-                    className="w-16 h-16 rounded-xl object-cover border border-[#4edf92]/40"
+                    className="w-16 h-16 rounded-xl object-cover border border-accent/40"
                   />
                 ) : (
-                  <div className="w-16 h-16 rounded-xl bg-[#0bb86f]/20 border border-[#4edf92]/30 flex items-center justify-center text-xl font-extrabold text-[#4edf92]">
+                  <div className="w-16 h-16 rounded-xl bg-primary-container/20 border border-accent/30 flex items-center justify-center text-xl font-extrabold text-accent">
                     {result.profile.first_name?.[0]}
                     {result.profile.last_name?.[0]}
                   </div>
@@ -445,7 +445,7 @@ export default function KioskPage() {
                   <h3 className="text-lg font-bold text-white">
                     {result.profile.first_name} {result.profile.last_name}
                   </h3>
-                  <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-[#0bb86f]/20 text-[#4edf92] border border-[#4edf92]/30">
+                  <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-primary-container/20 text-accent border border-accent/30">
                     {result.profile.membership_status || "Active Member"}
                   </span>
                 </div>
@@ -474,7 +474,7 @@ export default function KioskPage() {
             <div className="pt-2 w-full">
               <button
                 onClick={resetToAmbient}
-                className="w-full py-3.5 rounded-xl bg-[#17221e] hover:bg-[#1c2824] border border-[#3e4b46] text-[#dae9e2] font-bold text-sm transition-colors flex items-center justify-center gap-2"
+                className="w-full py-3.5 rounded-xl bg-surface-container-high hover:bg-surface-container-highest border border-border text-foreground font-bold text-sm transition-colors flex items-center justify-center gap-2"
               >
                 <span>Done ({countdown}s)</span>
               </button>
@@ -486,8 +486,8 @@ export default function KioskPage() {
       {/* Admin Security Passcode Lock Modal */}
       {adminLockOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#121b18] border-2 border-[#1c2824] rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#1c2824] pb-3">
+          <div className="bg-card border-2 border-surface-container-highest rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-surface-container-highest pb-3">
               <div className="flex items-center gap-2 text-red-400 font-extrabold">
                 <ShieldAlert className="w-5 h-5" />
                 <span>Kiosk Security Lock</span>
@@ -498,18 +498,18 @@ export default function KioskPage() {
                   setAdminPin("");
                   setAdminPinError("");
                 }}
-                className="text-xs text-[#a0aea8] hover:text-white"
+                className="text-xs text-muted-foreground hover:text-white"
               >
                 Cancel
               </button>
             </div>
 
-            <p className="text-xs text-[#a0aea8]">
+            <p className="text-xs text-muted-foreground">
               Enter Admin Security PIN to exit kiosk mode and access staff terminal.
             </p>
 
-            <div className="bg-[#090f0d] border border-[#3e4b46] rounded-xl p-3 text-center font-mono text-2xl font-bold tracking-widest text-[#4edf92]">
-              {adminPin ? "•".repeat(adminPin.length) : <span className="text-[#3e4b46]">ENTER PIN</span>}
+            <div className="bg-background border border-border rounded-xl p-3 text-center font-mono text-2xl font-bold tracking-widest text-accent">
+              {adminPin ? "•".repeat(adminPin.length) : <span className="text-border">ENTER PIN</span>}
             </div>
 
             {adminPinError && (
@@ -523,14 +523,14 @@ export default function KioskPage() {
                   onClick={() => {
                     if (adminPin.length < 6) setAdminPin((p) => p + n);
                   }}
-                  className="h-12 rounded-xl bg-[#17221e] hover:bg-[#222f2b] text-lg font-bold text-white border border-[#1c2824]"
+                  className="h-12 rounded-xl bg-surface-container-high hover:bg-surface-bright text-lg font-bold text-white border border-surface-container-highest"
                 >
                   {n}
                 </button>
               ))}
               <button
                 onClick={() => setAdminPin("")}
-                className="h-12 rounded-xl bg-[#17221e] text-xs font-bold text-red-400 border border-[#1c2824]"
+                className="h-12 rounded-xl bg-surface-container-high text-xs font-bold text-red-400 border border-surface-container-highest"
               >
                 CLEAR
               </button>
@@ -538,13 +538,13 @@ export default function KioskPage() {
                 onClick={() => {
                   if (adminPin.length < 6) setAdminPin((p) => p + "0");
                 }}
-                className="h-12 rounded-xl bg-[#17221e] text-lg font-bold text-white border border-[#1c2824]"
+                className="h-12 rounded-xl bg-surface-container-high text-lg font-bold text-white border border-surface-container-highest"
               >
                 0
               </button>
               <button
                 onClick={() => setAdminPin((p) => p.slice(0, -1))}
-                className="h-12 rounded-xl bg-[#17221e] text-xs font-bold text-white border border-[#1c2824]"
+                className="h-12 rounded-xl bg-surface-container-high text-xs font-bold text-white border border-surface-container-highest"
               >
                 ⌫
               </button>
@@ -552,7 +552,7 @@ export default function KioskPage() {
 
             <button
               onClick={verifyAdminPin}
-              className="w-full py-3 rounded-xl bg-[#0bb86f] hover:bg-[#3cd185] text-[#002915] font-extrabold text-sm shadow-lg transition-colors"
+              className="w-full py-3 rounded-xl bg-primary-container hover:bg-primary-fixed-dim text-on-primary-fixed font-extrabold text-sm shadow-lg transition-colors"
             >
               UNLOCK & EXIT KIOSK
             </button>
@@ -561,7 +561,7 @@ export default function KioskPage() {
       )}
 
       {/* Footer Branding */}
-      <footer className="text-center text-xs text-[#a0aea8] border-t border-[#1c2824] pt-3">
+      <footer className="text-center text-xs text-muted-foreground border-t border-surface-container-highest pt-3">
         <span>Powered by GymPartner Operations OS • Wall-Mounted Kiosk Mode</span>
       </footer>
     </div>
