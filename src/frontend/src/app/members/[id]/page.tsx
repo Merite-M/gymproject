@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/table";
 import HoldManagement from "@/components/hold-management";
 import HoldList from "@/components/hold-list";
+import { AccessControlPWA } from "@/components/access-control-pwa";
 import { ContractSignerModal } from "@/components/contract-signer-modal";
 import { TierUpgradeModal } from "@/components/tier-upgrade-modal";
 import { getMemberContracts, type SignedContractSummary } from "@/lib/api/contracts";
@@ -379,11 +380,21 @@ export default function MemberProfileClient({
             <Tabs defaultValue="overview" className="w-full space-y-4">
               <TabsList className="bg-surface-container p-1 rounded-lg border border-border">
                 <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
+                <TabsTrigger value="access" className="text-xs">Dynamic Pass & Hardware</TabsTrigger>
                 <TabsTrigger value="holds" className="text-xs">Holds & Freezes</TabsTrigger>
                 <TabsTrigger value="contracts" className="text-xs">Contracts & Waivers</TabsTrigger>
                 <TabsTrigger value="family" className="text-xs">Family Links</TabsTrigger>
                 <TabsTrigger value="activity" className="text-xs">Access Logs</TabsTrigger>
               </TabsList>
+
+              {/* ACCESS & HARDWARE PASS TAB */}
+              <TabsContent value="access" className="mt-0 outline-none space-y-4">
+                <AccessControlPWA
+                  tenantId={tenantId || "00000000-0000-0000-0000-000000000000"}
+                  profileId={profile?.id || "mock-id"}
+                  memberFullName={`${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()}
+                />
+              </TabsContent>
 
               {/* OVERVIEW TAB */}
               <TabsContent value="overview" className="mt-0 space-y-6 outline-none">

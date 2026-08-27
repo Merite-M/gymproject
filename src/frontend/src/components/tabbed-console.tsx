@@ -1,18 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { LayoutDashboard, CreditCard, FileText, Users, Snowflake } from "lucide-react";
+import { LayoutDashboard, CreditCard, FileText, Users, Snowflake, QrCode } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MembershipFreeze } from "@/components/membership-freeze";
+import { AccessControlPWA } from "@/components/access-control-pwa";
 
 interface TabbedConsoleProps {
   member: any;
 }
 
-type TabType = "overview" | "membership" | "billing" | "waiver" | "dependents";
+type TabType = "overview" | "access_pass" | "membership" | "billing" | "waiver" | "dependents";
 
 const tabs = [
   { id: "overview" as TabType, label: "Overview", icon: LayoutDashboard },
+  { id: "access_pass" as TabType, label: "Access & PWA Pass", icon: QrCode },
   { id: "membership" as TabType, label: "Membership", icon: Snowflake },
   { id: "billing" as TabType, label: "Billing", icon: CreditCard },
   { id: "waiver" as TabType, label: "Waiver", icon: FileText },
@@ -50,6 +52,16 @@ export function TabbedConsole({ member }: TabbedConsoleProps) {
 
       {/* Tab Content */}
       <div className="flex-1 overflow-y-auto">
+                {activeTab === "access_pass" && (
+          <div className="p-6">
+            <AccessControlPWA
+              tenantId={process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || "00000000-0000-0000-0000-000000000000"}
+              profileId={member?.id || "mock-id"}
+              memberFullName={member?.name || `${member?.first_name || 'Member'} ${member?.last_name || ''}`.trim()}
+            />
+          </div>
+        )}
+
         {activeTab === "overview" && (
           <div className="p-6">
             <div className="grid grid-cols-3 gap-4 mb-6">
