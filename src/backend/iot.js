@@ -77,6 +77,39 @@ if (supabaseUrl && supabaseKey) {
   supabase = createClient(supabaseUrl, supabaseKey);
 }
 
+
+// ─── Dynamic TOTP & Hardware Token Helpers ──────────────────────────────────
+const TOTP_PERIOD = 15; // 15-second refresh window for dynamic anti-screenshot QR codes
+
+function generateTOTP(profileId, tenantId, epochOffset = 0) {
+  const secret = process.env.JWT_SECRET || 'secret';
+  const epoch = Math.floor(Date.now() / 1000 / TOTP_PERIOD) + epochOffset;
+  const message = `${profileId}:${tenantId}:${epoch}`;
+  const hmac = crypto.createHmac('sha256', secret).update(message).digest('hex');
+  const code = hmac.substring(0, 8).toUpperCase();
+  return { code, epoch, expires_in_seconds: TOTP_PERIOD - (Math.floor(Date.now() / 1000) % TOTP_PERIOD) };
+}
+
+function verifyTOTPToken(scanData, profileId, tenantId) {
+  if (!scanData) return false;
+  // Format check: TOTP:<profile_id>:<hash>
+  const parts = scanData.split(':');
+  if (parts.length === 3 && parts[0] === 'TOTP') {
+    const [_, targetProfileId, scannedHash] = parts;
+    if (profileId && targetProfileId !== profileId) return false;
+
+    // Check epoch window tolerance ±1 (current, -1, +1)
+    for (const offset of [0, -1, 1]) {
+      const { code } = generateTOTP(targetProfileId, tenantId, offset);
+      if (scannedHash.toUpperCase() === code) {
+        return { valid: true, profileId: targetProfileId };
+      }
+    }
+  }
+  return false;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Access token generator
 function generateAccessToken(profileId, tenantId) {
   const timestamp = Date.now();
@@ -659,23 +692,57 @@ router.post('/scanner/checkin', async (req, res) => {
             return res.status(500).json({ error: 'Supabase not configured' });
         }
 
-        // Try to find profile by QR code, barcode, or access token
+        // Try to find profile by dynamic TOTP QR code, paired hardware tokens (NFC/BLE), QR code, barcode, or legacy access token
         let profile = null;
         let accessMethod = 'unknown';
 
-        // Try access token first
-        const tokenData = verifyAccessToken(scan_data);
-        if (tokenData) {
+        // 1. Try TOTP dynamic QR token verification
+        const totpRes = verifyTOTPToken(scan_data, null, tenant_id);
+        if (totpRes && totpRes.valid) {
             const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
                 .select('*')
-                .eq('id', tokenData.profileId)
+                .eq('id', totpRes.profileId)
                 .eq('tenant_id', tenant_id)
                 .single();
 
             if (!profileError && profileData) {
                 profile = profileData;
-                accessMethod = 'access_token';
+                accessMethod = 'totp_qr';
+            }
+        }
+
+        // 2. Try paired access_tokens (NFC wristband, BLE key fob, RFID fob, etc.)
+        if (!profile) {
+            const { data: pairedToken } = await supabase
+                .from('access_tokens')
+                .select('*, profile:profile_id(*)')
+                .eq('tenant_id', tenant_id)
+                .eq('token_value', scan_data.trim())
+                .eq('is_active', true)
+                .maybeSingle();
+
+            if (pairedToken && pairedToken.profile) {
+                profile = pairedToken.profile;
+                accessMethod = pairedToken.token_type || 'rfid_fob';
+            }
+        }
+
+        // 3. Try legacy access token signature
+        if (!profile) {
+            const tokenData = verifyAccessToken(scan_data);
+            if (tokenData) {
+                const { data: profileData, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', tokenData.profileId)
+                    .eq('tenant_id', tenant_id)
+                    .single();
+
+                if (!profileError && profileData) {
+                    profile = profileData;
+                    accessMethod = 'access_token';
+                }
             }
         }
 
@@ -1203,6 +1270,156 @@ router.get('/occupancy', async (req, res) => {
         });
     } catch (error) {
         console.error('[occupancy] error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+
+// Generate TOTP QR Token payload
+router.get('/totp/generate', async (req, res) => {
+    try {
+        const { tenant_id, profile_id } = req.query;
+        if (!tenant_id || !profile_id) {
+            return res.status(400).json({ error: 'Missing tenant_id or profile_id' });
+        }
+
+        const { code, epoch, expires_in_seconds } = generateTOTP(profile_id, tenant_id);
+        const qrPayload = `TOTP:${profile_id}:${code}`;
+
+        res.status(200).json({
+            success: true,
+            qr_payload: qrPayload,
+            totp_code: code,
+            epoch,
+            expires_in_seconds,
+            period_seconds: TOTP_PERIOD
+        });
+    } catch (error) {
+        console.error("TOTP generation error:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Self-service Pair NFC Wristband or BLE Fob
+router.post('/credentials/pair', async (req, res) => {
+    try {
+        const { tenant_id, profile_id, token_type, token_value, device_name } = req.body;
+
+        if (!tenant_id || !profile_id || !token_type || !token_value) {
+            return res.status(400).json({ error: 'Missing required parameters (tenant_id, profile_id, token_type, token_value)' });
+        }
+
+        const validTypes = ['nfc_wristband', 'ble_fob', 'rfid_fob', 'ble_mac', 'qr_static'];
+        if (!validTypes.includes(token_type)) {
+            return res.status(400).json({ error: `Invalid token_type. Must be one of: ${validTypes.join(', ')}` });
+        }
+
+        if (!supabase) {
+            return res.status(500).json({ error: 'Supabase not configured' });
+        }
+
+        // Check if token_value already registered under another account
+        const { data: existing } = await supabase
+            .from('access_tokens')
+            .select('*')
+            .eq('tenant_id', tenant_id)
+            .eq('token_value', token_value.trim())
+            .eq('is_active', true)
+            .maybeSingle();
+
+        if (existing && existing.profile_id !== profile_id) {
+            return res.status(409).json({ error: 'This wristband/key fob is already paired to another member.' });
+        }
+
+        // Deactivate older active token of same type for this member if exists
+        await supabase
+            .from('access_tokens')
+            .update({ is_active: false })
+            .eq('tenant_id', tenant_id)
+            .eq('profile_id', profile_id)
+            .eq('token_type', token_type);
+
+        // Insert new paired access token
+        const { data: pairedToken, error: insertError } = await supabase
+            .from('access_tokens')
+            .insert({
+                tenant_id,
+                profile_id,
+                token_type,
+                token_value: token_value.trim(),
+                is_active: true
+            })
+            .select()
+            .single();
+
+        if (insertError) {
+            throw insertError;
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `Successfully paired ${token_type.replace('_', ' ')}`,
+            credential: pairedToken
+        });
+    } catch (error) {
+        console.error("Credential pairing error:", error);
+        res.status(500).json({ error: error.message || 'Internal server error' });
+    }
+});
+
+// List paired credentials for profile
+router.get('/credentials/list/:profile_id', async (req, res) => {
+    try {
+        const { profile_id } = req.params;
+        const { tenant_id } = req.query;
+
+        if (!profile_id || !tenant_id) {
+            return res.status(400).json({ error: 'Missing required parameters' });
+        }
+
+        if (!supabase) {
+            return res.status(500).json({ error: 'Supabase not configured' });
+        }
+
+        const { data: credentials, error } = await supabase
+            .from('access_tokens')
+            .select('*')
+            .eq('tenant_id', tenant_id)
+            .eq('profile_id', profile_id)
+            .eq('is_active', true)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        res.status(200).json({
+            success: true,
+            credentials: credentials || []
+        });
+    } catch (error) {
+        console.error("List credentials error:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Revoke credential
+router.post('/credentials/revoke', async (req, res) => {
+    try {
+        const { tenant_id, credential_id } = req.body;
+        if (!tenant_id || !credential_id) {
+            return res.status(400).json({ error: 'Missing tenant_id or credential_id' });
+        }
+
+        const { error } = await supabase
+            .from('access_tokens')
+            .update({ is_active: false })
+            .eq('tenant_id', tenant_id)
+            .eq('id', credential_id);
+
+        if (error) throw error;
+
+        res.status(200).json({ success: true, message: 'Credential revoked successfully' });
+    } catch (error) {
+        console.error("Revoke credential error:", error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
