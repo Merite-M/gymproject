@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const fetch = require('node-fetch');
+const { dispatchMultiChannelMessage } = require('./gateways');
 
 let isRunning = false;
 let isDailyRunning = false;
@@ -10,6 +11,72 @@ const PAYPACK_FEE_RATE = 0.0236;
 const MTN_MOMO_FEE_RATE = 0.0177;
 
 function initCron(supabase) {
+
+    // ─── Automated Communications Failure Retry Engine (every 5 minutes) ───────
+    let isRetryRunning = false;
+    cron.schedule('*/5 * * * *', async () => {
+        if (isRetryRunning) return;
+        isRetryRunning = true;
+        try {
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+            const { data: failedLogs, error } = await supabase
+                .from('communications_log')
+                .select('*, profile:profiles(id, phone)')
+                .eq('status', 'failed')
+                .lt('retry_count', 3)
+                .lte('created_at', fiveMinutesAgo)
+                .limit(20);
+
+            if (error) {
+                console.error('[Comm Retry Cron] Fetch error:', error.message);
+                return;
+            }
+
+            for (const item of (failedLogs || [])) {
+                try {
+                    const recipient = item.metadata?.recipient || item.profile?.phone;
+                    if (!recipient || !item.content) continue;
+
+                    console.log('[Comm Retry Cron] Retrying failed msg ' + item.id + ' for recipient ' + recipient + '...');
+
+                    const result = await dispatchMultiChannelMessage({
+                        tenant_id: item.tenant_id,
+                        profile_id: item.profile_id,
+                        channel: item.channel === 'auto_fallback' ? 'sms' : item.channel,
+                        recipient,
+                        subject: item.metadata?.subject || 'Retry Notification',
+                        message: item.content,
+                        metadata: { ...item.metadata, is_auto_retry: true, retry_attempt: (item.retry_count || 0) + 1 },
+                        supabase
+                    });
+
+                    await supabase
+                        .from('communications_log')
+                        .update({
+                            status: result?.status || 'delivered',
+                            retry_count: (item.retry_count || 0) + 1,
+                            updated_at: new Date().toISOString(),
+                            error_message: null
+                        })
+                        .eq('id', item.id);
+                } catch (err) {
+                    console.error('[Comm Retry Cron] Failed attempt for ' + item.id + ':', err.message);
+                    await supabase
+                        .from('communications_log')
+                        .update({
+                            retry_count: (item.retry_count || 0) + 1,
+                            updated_at: new Date().toISOString(),
+                            error_message: err.message
+                        })
+                        .eq('id', item.id);
+                }
+            }
+        } catch (e) {
+            console.error('[Comm Retry Cron] Exception:', e);
+        } finally {
+            isRetryRunning = false;
+        }
+    });
     if (!supabase) {
         console.warn("Supabase not available, skipping cron init.");
         return;

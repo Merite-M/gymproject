@@ -271,6 +271,28 @@ async function dispatchMultiChannelMessage({
           simulated: result?.simulated || false
         }
       });
+
+      try {
+        await supabase.from('communications_log').insert({
+          tenant_id,
+          profile_id,
+          channel: finalChannel,
+          direction: metadata?.direction || 'outbound',
+          status: result?.status || 'sent',
+          content: message,
+          external_message_id: result?.message_id || null,
+          metadata: {
+            ...metadata,
+            recipient: normalizedRecipient,
+            provider: result?.provider,
+            cost: result?.cost || null,
+            subject: subject || null,
+            simulated: result?.simulated || false
+          }
+        });
+      } catch (logErr) {
+        console.error('[gateways/dispatchMultiChannelMessage] Error writing to communications_log:', logErr.message);
+      }
     }
 
     return {
@@ -292,6 +314,21 @@ async function dispatchMultiChannelMessage({
         error_message: error.message,
         metadata: { ...metadata, error: error.message }
       });
+
+      try {
+        await supabase.from('communications_log').insert({
+          tenant_id,
+          profile_id,
+          channel,
+          direction: metadata?.direction || 'outbound',
+          status: 'failed',
+          content: message,
+          error_message: error.message,
+          metadata: { ...metadata, recipient: normalizedRecipient, error: error.message }
+        });
+      } catch (logErr) {
+        console.error('[gateways/dispatchMultiChannelMessage] Error writing failed status to communications_log:', logErr.message);
+      }
     }
     throw error;
   }
