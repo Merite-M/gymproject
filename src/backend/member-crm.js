@@ -3169,3 +3169,607 @@ router.put('/:id/dependents/:dependent_id', async (req, res) => {
 });
 
 module.exports = router;
+// ==========================================
+// GUEST PASSES & VISITOR ACCESS MANAGEMENT
+// ==========================================
+
+/**
+ * GET /api/members/:id/guest-passes
+ * List guest passes issued by a member.
+ */
+router.get('/:id/guest-passes', async (req, res) => {
+  try {
+    const authResult = await verifyAuthToken(req);
+    if (authResult.error) {
+      return res.status(401).json({ error: authResult.error });
+    }
+
+    const { id } = req.params;
+    const tenant_id = req.query.tenant_id || req.headers['x-tenant-id'];
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+
+    const { data: passes, error } = await supabase
+      .from('guest_passes')
+      .select('*')
+      .eq('host_member_id', id)
+      .eq('tenant_id', tenant_id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Fetch member's guest pass allowance
+    const { data: membership } = await supabase
+      .from('memberships')
+      .select('guest_pass_allowance, guest_passes_used')
+      .eq('profile_id', id)
+      .eq('tenant_id', tenant_id)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    res.json({
+      success: true,
+      allowance: membership?.guest_pass_allowance || 0,
+      used: membership?.guest_passes_used || 0,
+      remaining: Math.max(0, (membership?.guest_pass_allowance || 0) - (membership?.guest_passes_used || 0)),
+      passes: passes || []
+    });
+  } catch (error) {
+    console.error('Fetch guest passes error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/members/:id/guest-passes
+ * Issue a new guest pass for a member.
+ */
+router.post('/:id/guest-passes', async (req, res) => {
+  try {
+    const authResult = await verifyAuthToken(req);
+    if (authResult.error) {
+      return res.status(401).json({ error: authResult.error });
+    }
+
+    const { id } = req.params;
+    const { tenant_id, guest_name, guest_phone, guest_email } = req.body;
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+
+    // Check membership and allotment
+    const { data: membership, error: memError } = await supabase
+      .from('memberships')
+      .select('id, guest_pass_allowance, guest_passes_used')
+      .eq('profile_id', id)
+      .eq('tenant_id', tenant_id)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (memError || !membership) {
+      return res.status(400).json({ error: 'Active membership not found for host member' });
+    }
+
+    const allowance = membership.guest_pass_allowance || 0;
+    const used = membership.guest_passes_used || 0;
+
+    if (used >= allowance) {
+      return res.status(400).json({ error: 'Guest pass limit reached for this membership period' });
+    }
+
+    // Generate unique pass code
+    const pass_code = 'GP-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+    const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days validity
+
+    const { data: newPass, error: createError } = await supabase
+      .from('guest_passes')
+      .insert({
+        tenant_id,
+        host_member_id: id,
+        guest_name: guest_name || null,
+        guest_phone: guest_phone || null,
+        guest_email: guest_email || null,
+        pass_code,
+        status: 'active',
+        expires_at
+      })
+      .select()
+      .single();
+
+    if (createError) throw createError;
+
+    // Increment guest_passes_used in membership
+    await supabase
+      .from('memberships')
+      .update({ guest_passes_used: used + 1 })
+      .eq('id', membership.id);
+
+    res.json({
+      success: true,
+      pass: newPass
+    });
+  } catch (error) {
+    console.error('Issue guest pass error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/members/guest-passes/validate
+ * Validate a guest pass code.
+ */
+router.post('/guest-passes/validate', async (req, res) => {
+  try {
+    const { pass_code, tenant_id } = req.body;
+    if (!pass_code || !tenant_id) {
+      return res.status(400).json({ error: 'pass_code and tenant_id are required' });
+    }
+
+    const { data: pass, error } = await supabase
+      .from('guest_passes')
+      .select('*, profiles:host_member_id(first_name, last_name, email, phone)')
+      .eq('pass_code', pass_code.toUpperCase().trim())
+      .eq('tenant_id', tenant_id)
+      .maybeSingle();
+
+    if (error || !pass) {
+      return res.status(404).json({ error: 'Guest pass not found' });
+    }
+
+    if (pass.status !== 'active') {
+      return res.status(400).json({ error: `Guest pass is already ${pass.status}` });
+    }
+
+    if (pass.expires_at && new Date(pass.expires_at) < new Date()) {
+      return res.status(400).json({ error: 'Guest pass has expired' });
+    }
+
+    res.json({
+      success: true,
+      pass
+    });
+  } catch (error) {
+    console.error('Validate guest pass error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/members/guest-passes/visitor-checkin
+ * Receptionist Visitor Check-In: redeems guest pass, captures visitor details, photo, signature,
+ * and auto-creates a Sales Lead in `leads` table.
+ */
+router.post('/guest-passes/visitor-checkin', async (req, res) => {
+  try {
+    const authResult = await verifyAuthToken(req);
+    if (authResult.error) {
+      return res.status(401).json({ error: authResult.error });
+    }
+
+    const {
+      tenant_id,
+      guest_name,
+      guest_phone,
+      guest_email,
+      host_member_id,
+      pass_code,
+      photo_url,
+      waiver_signature_url,
+      waiver_signed
+    } = req.body;
+
+    if (!tenant_id || !guest_name || !guest_phone) {
+      return res.status(400).json({ error: 'tenant_id, guest_name, and guest_phone are required' });
+    }
+
+    let passRecord = null;
+    if (pass_code) {
+      const { data: foundPass } = await supabase
+        .from('guest_passes')
+        .select('*')
+        .eq('pass_code', pass_code.toUpperCase().trim())
+        .eq('tenant_id', tenant_id)
+        .maybeSingle();
+
+      if (foundPass && foundPass.status === 'active') {
+        passRecord = foundPass;
+      }
+    }
+
+    // Split first and last name
+    const nameParts = guest_name.trim().split(' ');
+    const first_name = nameParts[0];
+    const last_name = nameParts.slice(1).join(' ') || 'Guest';
+
+    // Auto-create Sales Lead in `leads` table
+    const { data: newLead, error: leadError } = await supabase
+      .from('leads')
+      .insert({
+        tenant_id,
+        first_name,
+        last_name,
+        phone: guest_phone,
+        email: guest_email || null,
+        source: 'Guest Visit',
+        pipeline_stage: 'New Lead',
+        referred_by_id: host_member_id || passRecord?.host_member_id || null,
+        notes: `Checked in as visitor on ${new Date().toISOString().split('T')[0]}. Waiver signed: ${!!waiver_signed}`
+      })
+      .select()
+      .single();
+
+    if (leadError) {
+      console.warn('Could not auto-create lead for visitor check-in:', leadError);
+    }
+
+    const redeemed_at = new Date().toISOString();
+    let updatedPass = null;
+
+    if (passRecord) {
+      const { data: uPass } = await supabase
+        .from('guest_passes')
+        .update({
+          status: 'redeemed',
+          redeemed_at,
+          guest_name,
+          guest_phone,
+          guest_email: guest_email || passRecord.guest_email,
+          photo_url: photo_url || null,
+          waiver_signed: !!waiver_signed,
+          waiver_signature_url: waiver_signature_url || null,
+          converted_lead_id: newLead?.id || null
+        })
+        .eq('id', passRecord.id)
+        .select()
+        .single();
+      updatedPass = uPass;
+    } else {
+      // Create a direct visitor walk-in guest pass record
+      const directCode = 'VP-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+      const { data: cPass } = await supabase
+        .from('guest_passes')
+        .insert({
+          tenant_id,
+          host_member_id: host_member_id || null,
+          guest_name,
+          guest_phone,
+          guest_email: guest_email || null,
+          pass_code: directCode,
+          status: 'redeemed',
+          redeemed_at,
+          photo_url: photo_url || null,
+          waiver_signed: !!waiver_signed,
+          waiver_signature_url: waiver_signature_url || null,
+          converted_lead_id: newLead?.id || null
+        })
+        .select()
+        .single();
+      updatedPass = cPass;
+    }
+
+    // Log check-in event in checkins or activity stream
+    await supabase.from('checkins').insert({
+      tenant_id,
+      profile_id: host_member_id || null,
+      access_method: 'guest_pass',
+      status: 'granted',
+      notes: `Visitor: ${guest_name} (${guest_phone})`
+    }).catch(err => console.warn('Visitor checkin log failed:', err));
+
+    res.json({
+      success: true,
+      message: 'Visitor checked in successfully',
+      pass: updatedPass,
+      lead: newLead
+    });
+  } catch (error) {
+    console.error('Visitor check-in error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+
+
+// ==========================================
+// GUEST PASSES & VISITOR ACCESS MANAGEMENT
+// ==========================================
+
+/**
+ * GET /api/members/:id/guest-passes
+ * List guest passes issued by a member.
+ */
+router.get('/:id/guest-passes', async (req, res) => {
+  try {
+    const authResult = await verifyAuthToken(req);
+    if (authResult.error) {
+      return res.status(401).json({ error: authResult.error });
+    }
+
+    const { id } = req.params;
+    const tenant_id = req.query.tenant_id || req.headers['x-tenant-id'];
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+
+    const { data: passes, error } = await supabase
+      .from('guest_passes')
+      .select('*')
+      .eq('host_member_id', id)
+      .eq('tenant_id', tenant_id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Fetch member's guest pass allowance
+    const { data: membership } = await supabase
+      .from('memberships')
+      .select('guest_pass_allowance, guest_passes_used')
+      .eq('profile_id', id)
+      .eq('tenant_id', tenant_id)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    res.json({
+      success: true,
+      allowance: membership?.guest_pass_allowance || 0,
+      used: membership?.guest_passes_used || 0,
+      remaining: Math.max(0, (membership?.guest_pass_allowance || 0) - (membership?.guest_passes_used || 0)),
+      passes: passes || []
+    });
+  } catch (error) {
+    console.error('Fetch guest passes error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/members/:id/guest-passes
+ * Issue a new guest pass for a member.
+ */
+router.post('/:id/guest-passes', async (req, res) => {
+  try {
+    const authResult = await verifyAuthToken(req);
+    if (authResult.error) {
+      return res.status(401).json({ error: authResult.error });
+    }
+
+    const { id } = req.params;
+    const { tenant_id, guest_name, guest_phone, guest_email } = req.body;
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+
+    // Check membership and allotment
+    const { data: membership, error: memError } = await supabase
+      .from('memberships')
+      .select('id, guest_pass_allowance, guest_passes_used')
+      .eq('profile_id', id)
+      .eq('tenant_id', tenant_id)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (memError || !membership) {
+      return res.status(400).json({ error: 'Active membership not found for host member' });
+    }
+
+    const allowance = membership.guest_pass_allowance || 0;
+    const used = membership.guest_passes_used || 0;
+
+    if (used >= allowance) {
+      return res.status(400).json({ error: 'Guest pass limit reached for this membership period' });
+    }
+
+    // Generate unique pass code
+    const pass_code = 'GP-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+    const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days validity
+
+    const { data: newPass, error: createError } = await supabase
+      .from('guest_passes')
+      .insert({
+        tenant_id,
+        host_member_id: id,
+        guest_name: guest_name || null,
+        guest_phone: guest_phone || null,
+        guest_email: guest_email || null,
+        pass_code,
+        status: 'active',
+        expires_at
+      })
+      .select()
+      .single();
+
+    if (createError) throw createError;
+
+    // Increment guest_passes_used in membership
+    await supabase
+      .from('memberships')
+      .update({ guest_passes_used: used + 1 })
+      .eq('id', membership.id);
+
+    res.json({
+      success: true,
+      pass: newPass
+    });
+  } catch (error) {
+    console.error('Issue guest pass error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/members/guest-passes/validate
+ * Validate a guest pass code.
+ */
+router.post('/guest-passes/validate', async (req, res) => {
+  try {
+    const { pass_code, tenant_id } = req.body;
+    if (!pass_code || !tenant_id) {
+      return res.status(400).json({ error: 'pass_code and tenant_id are required' });
+    }
+
+    const { data: pass, error } = await supabase
+      .from('guest_passes')
+      .select('*, profiles:host_member_id(first_name, last_name, email, phone)')
+      .eq('pass_code', pass_code.toUpperCase().trim())
+      .eq('tenant_id', tenant_id)
+      .maybeSingle();
+
+    if (error || !pass) {
+      return res.status(404).json({ error: 'Guest pass not found' });
+    }
+
+    if (pass.status !== 'active') {
+      return res.status(400).json({ error: `Guest pass is already ${pass.status}` });
+    }
+
+    if (pass.expires_at && new Date(pass.expires_at) < new Date()) {
+      return res.status(400).json({ error: 'Guest pass has expired' });
+    }
+
+    res.json({
+      success: true,
+      pass
+    });
+  } catch (error) {
+    console.error('Validate guest pass error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/members/guest-passes/visitor-checkin
+ * Receptionist Visitor Check-In: redeems guest pass, captures visitor details, photo, signature,
+ * and auto-creates a Sales Lead in `leads` table.
+ */
+router.post('/guest-passes/visitor-checkin', async (req, res) => {
+  try {
+    const authResult = await verifyAuthToken(req);
+    if (authResult.error) {
+      return res.status(401).json({ error: authResult.error });
+    }
+
+    const {
+      tenant_id,
+      guest_name,
+      guest_phone,
+      guest_email,
+      host_member_id,
+      pass_code,
+      photo_url,
+      waiver_signature_url,
+      waiver_signed
+    } = req.body;
+
+    if (!tenant_id || !guest_name || !guest_phone) {
+      return res.status(400).json({ error: 'tenant_id, guest_name, and guest_phone are required' });
+    }
+
+    let passRecord = null;
+    if (pass_code) {
+      const { data: foundPass } = await supabase
+        .from('guest_passes')
+        .select('*')
+        .eq('pass_code', pass_code.toUpperCase().trim())
+        .eq('tenant_id', tenant_id)
+        .maybeSingle();
+
+      if (foundPass && foundPass.status === 'active') {
+        passRecord = foundPass;
+      }
+    }
+
+    // Split first and last name
+    const nameParts = guest_name.trim().split(' ');
+    const first_name = nameParts[0];
+    const last_name = nameParts.slice(1).join(' ') || 'Guest';
+
+    // Auto-create Sales Lead in `leads` table
+    const { data: newLead, error: leadError } = await supabase
+      .from('leads')
+      .insert({
+        tenant_id,
+        first_name,
+        last_name,
+        phone: guest_phone,
+        email: guest_email || null,
+        source: 'Guest Visit',
+        pipeline_stage: 'New Lead',
+        referred_by_id: host_member_id || passRecord?.host_member_id || null,
+        notes: `Checked in as visitor on ${new Date().toISOString().split('T')[0]}. Waiver signed: ${!!waiver_signed}`
+      })
+      .select()
+      .single();
+
+    if (leadError) {
+      console.warn('Could not auto-create lead for visitor check-in:', leadError);
+    }
+
+    const redeemed_at = new Date().toISOString();
+    let updatedPass = null;
+
+    if (passRecord) {
+      const { data: uPass } = await supabase
+        .from('guest_passes')
+        .update({
+          status: 'redeemed',
+          redeemed_at,
+          guest_name,
+          guest_phone,
+          guest_email: guest_email || passRecord.guest_email,
+          photo_url: photo_url || null,
+          waiver_signed: !!waiver_signed,
+          waiver_signature_url: waiver_signature_url || null,
+          converted_lead_id: newLead?.id || null
+        })
+        .eq('id', passRecord.id)
+        .select()
+        .single();
+      updatedPass = uPass;
+    } else {
+      // Create a direct visitor walk-in guest pass record
+      const directCode = 'VP-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+      const { data: cPass } = await supabase
+        .from('guest_passes')
+        .insert({
+          tenant_id,
+          host_member_id: host_member_id || null,
+          guest_name,
+          guest_phone,
+          guest_email: guest_email || null,
+          pass_code: directCode,
+          status: 'redeemed',
+          redeemed_at,
+          photo_url: photo_url || null,
+          waiver_signed: !!waiver_signed,
+          waiver_signature_url: waiver_signature_url || null,
+          converted_lead_id: newLead?.id || null
+        })
+        .select()
+        .single();
+      updatedPass = cPass;
+    }
+
+    // Log check-in event in checkins or activity stream
+    await supabase.from('checkins').insert({
+      tenant_id,
+      profile_id: host_member_id || null,
+      access_method: 'guest_pass',
+      status: 'granted',
+      notes: `Visitor: ${guest_name} (${guest_phone})`
+    }).catch(err => console.warn('Visitor checkin log failed:', err));
+
+    res.json({
+      success: true,
+      message: 'Visitor checked in successfully',
+      pass: updatedPass,
+      lead: newLead
+    });
+  } catch (error) {
+    console.error('Visitor check-in error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+module.exports = router;

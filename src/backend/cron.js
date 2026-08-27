@@ -507,6 +507,7 @@ function initCron(supabase) {
             // 4. Lead CRM Automation: Automated Drip Sequences
             try {
                 await processLeadDripSequences(supabase);
+            await processGuestPassConversionDrips(supabase);
             } catch (err) {
                 console.error("[cron-leads] Lead drip sequence error:", err);
             }
@@ -1137,3 +1138,55 @@ async function processReferralRewardFulfillment(supabase) {
 module.exports = initCron;
 
 
+
+
+
+/**
+ * Processes automated trial conversion SMS drips for guest passes redeemed 24 hours ago.
+ */
+async function processGuestPassConversionDrips(supabase) {
+    const now = Date.now();
+    const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    const fortyEightHoursAgo = new Date(now - 48 * 60 * 60 * 1000).toISOString();
+
+    // Find redeemed guest passes redeemed between 24 and 48 hours ago
+    const { data: redeemedPasses, error } = await supabase
+        .from('guest_passes')
+        .select('*, leads:converted_lead_id(*)')
+        .eq('status', 'redeemed')
+        .gte('redeemed_at', fortyEightHoursAgo)
+        .lte('redeemed_at', twentyFourHoursAgo)
+        .limit(50);
+
+    if (error || !redeemedPasses) return;
+
+    for (const pass of redeemedPasses) {
+        try {
+            if (!pass.guest_phone) continue;
+
+            // Check if conversion message was already queued or sent
+            const { data: existingLogs } = await supabase
+                .from('communications_log')
+                .select('id')
+                .eq('tenant_id', pass.tenant_id)
+                .ilike('content', `%Guest Conversion%${pass.guest_phone}%`)
+                .limit(1);
+
+            if (!existingLogs || existingLogs.length === 0) {
+                const guestName = pass.guest_name ? pass.guest_name.split(' ')[0] : 'there';
+                await supabase.from('notification_queue').insert({
+                    tenant_id: pass.tenant_id,
+                    profile_id: null,
+                    channel: 'sms',
+                    recipient: pass.guest_phone,
+                    subject: 'Guest Trial Offer',
+                    content: `Hi ${guestName}! Hope you enjoyed your guest visit yesterday! Claim 20% off your 1st month membership today: https://gym-frontend-app.onrender.com/join (Ref: Guest Conversion ${pass.guest_phone})`,
+                    status: 'pending',
+                    metadata: { type: 'guest_pass_conversion_drip', guest_pass_id: pass.id, lead_id: pass.converted_lead_id }
+                });
+            }
+        } catch (err) {
+            console.error(`Failed to process guest pass conversion drip for pass ${pass.id}:`, err);
+        }
+    }
+}

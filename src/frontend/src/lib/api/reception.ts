@@ -60,3 +60,31 @@ export async function checkOutMember(payload: CheckOutPayload): Promise<CheckOut
     body: JSON.stringify(payload)
   });
 }
+
+export interface VisitorCheckInPayload {
+  tenant_id: string;
+  guest_name: string;
+  guest_phone: string;
+  guest_email?: string;
+  host_member_id?: string;
+  pass_code?: string;
+  photo_url?: string;
+  waiver_signature_url?: string;
+  waiver_signed?: boolean;
+}
+
+export interface VisitorCheckInResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+  pass?: any;
+  lead?: any;
+}
+
+export async function visitorCheckIn(payload: VisitorCheckInPayload): Promise<VisitorCheckInResponse> {
+  return apiFetch<VisitorCheckInResponse>(`${BACKEND_URL}/api/members/guest-passes/visitor-checkin`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
