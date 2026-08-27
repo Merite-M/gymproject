@@ -8,7 +8,7 @@ export interface BrandingSettings {
   primary_color: string;
   secondary_color: string;
   custom_css: string;
-  branding_settings?: Record<string, any>;
+  branding_settings?: Record<string, unknown>;
 }
 
 export interface GatewaySettings {
@@ -29,7 +29,7 @@ export interface HardwareZone {
 }
 
 export interface HardwareSettings {
-  shelly_relays_config: Record<string, any> | string;
+  shelly_relays_config: Record<string, unknown> | string;
   hardware_zones: HardwareZone[];
 }
 
@@ -45,7 +45,7 @@ export interface MultiBranchSettings {
   operating_hours: string;
   branch_roaming_config: {
     roamingPermissions?: string[];
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 

@@ -36,7 +36,7 @@ export interface CommunicationLog {
     cost?: string;
     subject?: string;
     simulated?: boolean;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   profile?: {
     id: string;
@@ -59,7 +59,7 @@ export interface NotificationLog {
   status: string;
   sent_at: string | null;
   created_at: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 export interface GatewayConfig {
@@ -68,6 +68,32 @@ export interface GatewayConfig {
   is_enabled: boolean;
   sender_id: string;
   environment: string;
+}
+
+export interface SendMessageResponse {
+  success: boolean;
+  message?: string;
+  log_id?: string;
+  [key: string]: unknown;
+}
+
+export interface BroadcastResponse {
+  success: boolean;
+  campaign_id?: string;
+  total_recipients?: number;
+  summary?: {
+    successful?: number;
+    failed?: number;
+    total?: number;
+  };
+  [key: string]: unknown;
+}
+
+export interface ResendResponse {
+  success: boolean;
+  status?: string;
+  message?: string;
+  [key: string]: unknown;
 }
 
 /**
@@ -80,7 +106,7 @@ export async function sendSingleMessage(params: {
   recipient: string;
   message: string;
   subject?: string;
-}): Promise<any> {
+}): Promise<SendMessageResponse> {
   return apiFetch(`${API_BASE_URL}/api/communications/send-single`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -104,7 +130,7 @@ export async function sendBroadcastCampaign(params: {
   channel: 'sms' | 'whatsapp' | 'auto_fallback';
   targetAudience: string;
   messageTemplate: string;
-}): Promise<any> {
+}): Promise<BroadcastResponse> {
   return apiFetch(`${API_BASE_URL}/api/communications/broadcast`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -152,7 +178,7 @@ export async function getGatewayConfigs(tenantId: string): Promise<GatewayConfig
 /**
  * Resend a failed communication message.
  */
-export async function resendFailedMessage(tenantId: string, logId: string): Promise<any> {
+export async function resendFailedMessage(tenantId: string, logId: string): Promise<ResendResponse> {
   return apiFetch(`${API_BASE_URL}/api/communications/resend/${logId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

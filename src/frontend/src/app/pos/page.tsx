@@ -31,10 +31,16 @@ import {
   ProductItem,
   PaymentTender,
   MemberTabInfo,
-  ReceiptData
+  ReceiptData,
+  ShiftStatusInfo,
+  ValidatePromoResponse,
+  ValidateVoucherResponse,
 } from "@/lib/api/pos";
+import { useAuth, useTenantId } from "@/contexts/AuthContext";
 
 export default function POSPage() {
+  const { user } = useAuth();
+  const contextTenantId = useTenantId();
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -48,12 +54,12 @@ export default function POSPage() {
 
   // Promos & Vouchers
   const [promoCodeInput, setPromoCodeInput] = useState("");
-  const [appliedPromo, setAppliedPromo] = useState<any>(null);
+  const [appliedPromo, setAppliedPromo] = useState<ValidatePromoResponse['promotion'] | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
   const [loadingPromo, setLoadingPromo] = useState(false);
 
   const [voucherCodeInput, setVoucherCodeInput] = useState("");
-  const [appliedVoucher, setAppliedVoucher] = useState<any>(null);
+  const [appliedVoucher, setAppliedVoucher] = useState<ValidateVoucherResponse['voucher'] | null>(null);
   const [voucherError, setVoucherError] = useState<string | null>(null);
   const [loadingVoucher, setLoadingVoucher] = useState(false);
 
@@ -62,7 +68,7 @@ export default function POSPage() {
   const [splitError, setSplitError] = useState<string | null>(null);
 
   // Shift & Cash Drawer
-  const [currentShift, setCurrentShift] = useState<any>(null);
+  const [currentShift, setCurrentShift] = useState<ShiftStatusInfo | null>(null);
   const [startingCashInput, setStartingCashInput] = useState("10000");
   const [showShiftModal, setShowShiftModal] = useState(false);
 
@@ -72,13 +78,15 @@ export default function POSPage() {
   const [completingSale, setCompletingSale] = useState(false);
   const [saleSuccess, setSaleSuccess] = useState(false);
 
-  const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '2c604504-41c3-406b-82a0-a43700057af8';
+  const tenantId = contextTenantId || process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '2c604504-41c3-406b-82a0-a43700057af8';
 
-  // Load Products & Shift on Mount
+  // Load Products & Shift on Mount / Tenant Change
   useEffect(() => {
-    loadProductsData();
-    loadShiftData();
-  }, []);
+    if (tenantId) {
+      loadProductsData();
+      loadShiftData();
+    }
+  }, [tenantId]);
 
   const loadProductsData = async () => {
     setLoadingProducts(true);
@@ -200,10 +208,15 @@ export default function POSPage() {
     setPromoError(null);
     try {
       const data = await validatePromoCode(tenantId, promoCodeInput.trim(), grossSubtotal, false);
-      setAppliedPromo(data.promotion);
-      setPromoCodeInput("");
-    } catch (err: any) {
-      setPromoError(err.message || "Invalid promo code");
+      if (data.valid && data.promotion) {
+        setAppliedPromo(data.promotion);
+        setPromoCodeInput("");
+      } else {
+        setPromoError(data.error || "Invalid promo code");
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Invalid promo code";
+      setPromoError(message);
     } finally {
       setLoadingPromo(false);
     }
@@ -215,10 +228,15 @@ export default function POSPage() {
     setVoucherError(null);
     try {
       const data = await validateGiftVoucher(tenantId, voucherCodeInput.trim(), subtotalAfterPromo);
-      setAppliedVoucher(data.voucher);
-      setVoucherCodeInput("");
-    } catch (err: any) {
-      setVoucherError(err.message || "Invalid gift voucher");
+      if (data.valid && data.voucher) {
+        setAppliedVoucher(data.voucher);
+        setVoucherCodeInput("");
+      } else {
+        setVoucherError(data.error || "Invalid gift voucher");
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Invalid gift voucher";
+      setVoucherError(message);
     } finally {
       setLoadingVoucher(false);
     }
@@ -228,7 +246,7 @@ export default function POSPage() {
     setTenders(prev => [...prev, { method: 'cash', amount: remainingDue }]);
   };
 
-  const updateTender = (index: number, field: keyof PaymentTender, value: any) => {
+  const updateTender = (index: number, field: keyof PaymentTender, value: PaymentTender[keyof PaymentTender]) => {
     setTenders(prev => {
       const next = [...prev];
       next[index] = { ...next[index], [field]: value };
@@ -315,11 +333,13 @@ export default function POSPage() {
 
   const handleStartShift = async () => {
     try {
-      const shift = await startShift(tenantId, '00000000-0000-0000-0000-000000000000', parseFloat(startingCashInput) || 0);
+      const staffId = user?.id || '00000000-0000-0000-0000-000000000000';
+      const shift = await startShift(tenantId, staffId, parseFloat(startingCashInput) || 0);
       setCurrentShift(shift);
       setShowShiftModal(false);
-    } catch (err: any) {
-      alert("Failed to start shift: " + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      alert("Failed to start shift: " + message);
     }
   };
 

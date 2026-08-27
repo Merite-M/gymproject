@@ -7,9 +7,9 @@
 export class APIError extends Error {
   public status: number;
   public code?: string;
-  public details?: any;
+  public details?: unknown;
 
-  constructor(message: string, status: number = 500, code?: string, details?: any) {
+  constructor(message: string, status: number = 500, code?: string, details?: unknown) {
     super(message);
     this.name = 'APIError';
     this.status = status;
@@ -38,7 +38,7 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   TIMEOUT: 'The server took too long to respond. Please try again.',
 };
 
-export async function apiFetch<T = any>(
+export async function apiFetch<T = unknown>(
   url: string,
   options: ApiFetchOptions = {}
 ): Promise<T> {
@@ -47,8 +47,6 @@ export async function apiFetch<T = any>(
 
   const {
     timeoutMs = DEFAULT_TIMEOUT_MS,
-    // By default, only retry idempotent read operations (GET/HEAD).
-    // Mutating write operations (POST/PUT/PATCH/DELETE) default to 0 retries to prevent duplicate financial or state transactions.
     retries = isIdempotent ? DEFAULT_IDEMPOTENT_RETRIES : 0,
     retryDelayMs = 800,
     ...fetchOptions
@@ -78,11 +76,11 @@ export async function apiFetch<T = any>(
       clearTimeout(timer);
 
       if (!response.ok) {
-        let errorPayload: any = {};
+        let errorPayload: Record<string, unknown> = {};
         try {
           const contentType = response.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {
-            errorPayload = await response.json();
+            errorPayload = (await response.json()) as Record<string, unknown>;
           } else {
             errorPayload = { error: await response.text() };
           }
@@ -90,8 +88,11 @@ export async function apiFetch<T = any>(
           errorPayload = { error: response.statusText };
         }
 
-        const rawMsg = errorPayload.error || errorPayload.message || `Request failed with status ${response.status}`;
-        const code = errorPayload.code;
+        const rawMsg =
+          (typeof errorPayload.error === 'string' && errorPayload.error) ||
+          (typeof errorPayload.message === 'string' && errorPayload.message) ||
+          `Request failed with status ${response.status}`;
+        const code = typeof errorPayload.code === 'string' ? errorPayload.code : undefined;
         const friendlyMessage = (code && ERROR_CODE_MESSAGES[code]) || rawMsg;
 
         // Only retry transient gateway errors (502, 503, 504) if the method is idempotent and retries remain
@@ -110,37 +111,34 @@ export async function apiFetch<T = any>(
 
       // Check if response has content
       const text = await response.text();
-      return text ? JSON.parse(text) : ({} as T);
-    } catch (err: any) {
+      return text ? (JSON.parse(text) as T) : ({} as T);
+    } catch (err: unknown) {
       clearTimeout(timer);
 
-      if (err.name === 'AbortError') {
+      if (err instanceof Error && err.name === 'AbortError') {
         lastError = new APIError(
           ERROR_CODE_MESSAGES.TIMEOUT,
           408,
           'TIMEOUT'
         );
-        // Never retry timeouts on non-idempotent operations, as the server may still be processing the write
         if (!isIdempotent) {
           throw lastError;
         }
       } else if (err instanceof APIError) {
         lastError = err;
-        // Never retry client errors (4xx)
         if (err.status >= 400 && err.status < 500) {
           throw err;
         }
-        // Non-idempotent requests should not retry on server errors
         if (!isIdempotent) {
           throw err;
         }
       } else {
+        const errorMsg = err instanceof Error ? err.message : 'Network connection error occurred';
         lastError = new APIError(
-          err.message || 'Network connection error occurred',
+          errorMsg,
           0,
           'NETWORK_ERROR'
         );
-        // Non-idempotent operations should not retry blindly on network drops after dispatch
         if (!isIdempotent) {
           throw lastError;
         }

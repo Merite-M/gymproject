@@ -173,8 +173,7 @@ export default function FinancialReportsPage() {
         } else {
             fetchReport();
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeTab]);
+    }, [activeTab, fetchKpiDashboard, fetchReport]);
 
     /** Get max value from trend for sparkline scaling */
     const getMaxTrendValue = (key: keyof TrendPoint): number => {

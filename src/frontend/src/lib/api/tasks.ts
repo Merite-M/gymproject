@@ -19,7 +19,7 @@ export interface StaffTask {
   completed_by: string | null;
   resolution_notes: string | null;
   outcome: string | null;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
   created_at: string;
   profiles?: {
     id: string;

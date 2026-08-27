@@ -216,7 +216,10 @@ router.post('/cancel-booking', authMiddleware, async (req, res) => {
             return res.status(400).json({ error: 'Missing tenant_id, schedule_id, or profile_id' });
         }
 
-        if (req.user.id !== profile_id) {
+        // Check if user is authorized to cancel booking for this profile
+        // Users can cancel their own bookings, or staff/admin can cancel for others
+        const { data: staffCheck } = await supabase.from('profiles').select('role').eq('id', req.user.id).eq('tenant_id', tenant_id).single();
+        if (req.user.id !== profile_id && (!staffCheck || (staffCheck.role !== 'staff' && staffCheck.role !== 'admin' && staffCheck.role !== 'trainer'))) {
             return res.status(403).json({ error: 'Unauthorized to cancel this booking' });
         }
 
@@ -387,7 +390,10 @@ router.post('/join-waitlist', authMiddleware, async (req, res) => {
             return res.status(400).json({ error: 'Missing tenant_id, schedule_id, or profile_id' });
         }
 
-        if (req.user.id !== profile_id) {
+        // Check if user is authorized to join waitlist for this profile
+        // Users can join waitlist for themselves, or staff/admin can join for others
+        const { data: staffCheck } = await supabase.from('profiles').select('role').eq('id', req.user.id).eq('tenant_id', tenant_id).single();
+        if (req.user.id !== profile_id && (!staffCheck || (staffCheck.role !== 'staff' && staffCheck.role !== 'admin' && staffCheck.role !== 'trainer'))) {
             return res.status(403).json({ error: 'Unauthorized to join waitlist for this profile' });
         }
 

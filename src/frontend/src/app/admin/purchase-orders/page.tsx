@@ -13,6 +13,7 @@ import {
   receivePurchaseOrder, fetchSuppliers, fetchProducts,
   PurchaseOrder, Supplier, ProductItem
 } from "@/lib/api/pos";
+import { useTenantId } from "@/contexts/AuthContext";
 
 export default function PurchaseOrdersPage() {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -39,11 +40,14 @@ export default function PurchaseOrdersPage() {
   const [submittingReceive, setSubmittingReceive] = useState(false);
   const [receiveSuccessMsg, setReceiveSuccessMsg] = useState<string | null>(null);
 
-  const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '2c604504-41c3-406b-82a0-a43700057af8';
+  const contextTenantId = useTenantId();
+  const tenantId = contextTenantId || process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '2c604504-41c3-406b-82a0-a43700057af8';
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (tenantId) {
+      loadData();
+    }
+  }, [tenantId]);
 
   const loadData = async () => {
     setLoading(true);
@@ -175,8 +179,9 @@ export default function PurchaseOrdersPage() {
         setReceivingPO(null);
         setReceiveSuccessMsg(null);
       }, 2500);
-    } catch (err: any) {
-      alert("Failed to receive PO items: " + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      alert("Failed to receive PO items: " + message);
     } finally {
       setSubmittingReceive(false);
     }

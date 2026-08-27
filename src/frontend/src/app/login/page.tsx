@@ -108,7 +108,7 @@ export default function LoginPage() {
           .insert({
             id: data.user.id,
             email: email,
-            tenant_id: process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '00000000-0000-0000-0000-000000000000',
+            tenant_id: process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || '2c604504-41c3-406b-82a0-a43700057af8',
             first_name: 'New',
             last_name: 'User',
           });
@@ -126,8 +126,9 @@ export default function LoginPage() {
       setPassword('');
 
       router.push('/reception');
-    } catch (error: any) {
-      setError(error.message || 'Sign up failed');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Sign up failed';
+      setError(message);
     } finally {
       setLoading(false);
     }

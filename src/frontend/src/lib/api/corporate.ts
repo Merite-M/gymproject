@@ -263,7 +263,7 @@ export async function bulkEnrollCorporateMembers(params: {
   summary: {
     enrolled: number;
     updated: number;
-    errors: Array<{ employee: any; error: string }>;
+    errors: Array<{ employee: Record<string, unknown>; error: string }>;
   };
 }> {
   return apiFetch(

@@ -1,4 +1,5 @@
 import { apiFetch } from '@/lib/api-client';
+import type { Invoice } from '@/types/database';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -118,13 +119,13 @@ export async function applyTierChange(params: {
   success: boolean;
   message: string;
   tier_change: TierChangeRecord;
-  invoice: any | null;
+  invoice: Invoice | null;
 }> {
   return apiFetch<{
     success: boolean;
     message: string;
     tier_change: TierChangeRecord;
-    invoice: any | null;
+    invoice: Invoice | null;
   }>(`${API_BASE_URL}/api/tiers/apply-tier-change`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

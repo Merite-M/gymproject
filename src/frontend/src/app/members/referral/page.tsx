@@ -20,6 +20,7 @@ import {
   MessageSquare
 } from "lucide-react";
 import { cn, formatCurrencyDisplay } from "@/lib/utils";
+import { useAuth, useTenantId } from "@/contexts/AuthContext";
 
 interface ReferralItem {
   id: string;
@@ -59,6 +60,8 @@ interface ReferralHubData {
 }
 
 export default function MemberReferralHubPage() {
+  const { user } = useAuth();
+  const contextTenantId = useTenantId();
   const [data, setData] = useState<ReferralHubData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,9 +69,9 @@ export default function MemberReferralHubPage() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
 
-  // Default demo member ID or fetched from auth/session
-  const memberId = process.env.NEXT_PUBLIC_DEMO_MEMBER_ID || "p-1";
-  const tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || "00000000-0000-0000-0000-000000000000";
+  // Authenticated user ID or demo fallback
+  const memberId = user?.id || process.env.NEXT_PUBLIC_DEMO_MEMBER_ID || "p-1";
+  const tenantId = contextTenantId || process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || "2c604504-41c3-406b-82a0-a43700057af8";
   const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
   const fetchReferralData = async () => {
