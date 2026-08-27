@@ -12,15 +12,12 @@ import { WaiverWarning } from "@/components/waiver-warning";
 import { useTenantId } from "@/contexts/AuthContext";
 import { Users, LogOut, LogIn, FileSignature } from "lucide-react";
 import { ContractSignerModal } from "@/components/contract-signer-modal";
-
-interface OccupancyData {
-  current: number;
-  max: number;
-  percentage: number;
-  policy: string;
-  threshold_status: 'normal' | 'warning' | 'critical' | 'full';
-  auto_checkout_minutes: number;
-}
+import {
+  fetchOccupancy,
+  checkInMember,
+  checkOutMember,
+  OccupancyData
+} from "@/lib/api/reception";
 
 export default function ReceptionPage() {
   const [selectedMember, setSelectedMember] = useState<any>(null);
@@ -31,16 +28,12 @@ export default function ReceptionPage() {
   const [isContractModalOpen, setIsContractModalOpen] = useState(false);
   const tenantId = useTenantId();
 
-  const fetchOccupancy = async () => {
+  const loadOccupancy = async () => {
     if (!tenantId) return;
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
-      const res = await fetch(`${backendUrl}/api/iot/occupancy?tenant_id=${tenantId}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.occupancy) {
-          setOccupancy(data.occupancy);
-        }
+      const data = await fetchOccupancy(tenantId);
+      if (data.success && data.occupancy) {
+        setOccupancy(data.occupancy);
       }
     } catch (err) {
       console.error('Failed to fetch occupancy in reception:', err);
@@ -48,8 +41,8 @@ export default function ReceptionPage() {
   };
 
   useEffect(() => {
-    fetchOccupancy();
-    const interval = setInterval(fetchOccupancy, 15000);
+    loadOccupancy();
+    const interval = setInterval(loadOccupancy, 15000);
     return () => clearInterval(interval);
   }, [tenantId]);
 
@@ -57,24 +50,19 @@ export default function ReceptionPage() {
     if (!selectedMember || !tenantId) return;
     setIsProcessing(true);
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
-      const res = await fetch(`${backendUrl}/api/checkin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tenant_id: tenantId,
-          profile_id: selectedMember.id,
-          access_method: 'manual_override'
-        })
+      const res = await checkInMember({
+        tenant_id: tenantId,
+        profile_id: selectedMember.id,
+        access_method: 'manual_override'
       });
-      const data = await res.json();
-      if (res.ok) {
-        fetchOccupancy();
+      if (res.success) {
+        loadOccupancy();
       } else {
-        alert(data.reason || data.error || 'Check-in failed');
+        alert(res.reason || res.error || 'Check-in failed');
       }
     } catch (e: any) {
       console.error('Check-in error:', e);
+      alert(e.message || 'Check-in failed');
     } finally {
       setIsProcessing(false);
     }
@@ -84,24 +72,19 @@ export default function ReceptionPage() {
     if (!selectedMember || !tenantId) return;
     setIsProcessing(true);
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
-      const res = await fetch(`${backendUrl}/api/iot/checkout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tenant_id: tenantId,
-          profile_id: selectedMember.id,
-          checkout_method: 'manual'
-        })
+      const res = await checkOutMember({
+        tenant_id: tenantId,
+        profile_id: selectedMember.id,
+        checkout_method: 'manual'
       });
-      const data = await res.json();
-      if (res.ok) {
-        fetchOccupancy();
+      if (res.success) {
+        loadOccupancy();
       } else {
-        alert(data.error || 'Check-out failed');
+        alert(res.error || 'Check-out failed');
       }
     } catch (e: any) {
       console.error('Check-out error:', e);
+      alert(e.message || 'Check-out failed');
     } finally {
       setIsProcessing(false);
     }
