@@ -10,12 +10,13 @@ import { AccessOutcome } from "@/components/access-outcome";
 import { BalanceWarning } from "@/components/balance-warning";
 import { WaiverWarning } from "@/components/waiver-warning";
 import { useTenantId } from "@/contexts/AuthContext";
-import { Users, LogOut, LogIn, FileSignature } from "lucide-react";
+import { Users, LogOut, LogIn, FileSignature, UserPlus, Ticket, CheckCircle2, ShieldCheck, Camera } from "lucide-react";
 import { ContractSignerModal } from "@/components/contract-signer-modal";
 import {
   fetchOccupancy,
   checkInMember,
   checkOutMember,
+  visitorCheckIn,
   OccupancyData
 } from "@/lib/api/reception";
 
@@ -26,6 +27,18 @@ export default function ReceptionPage() {
   const [occupancy, setOccupancy] = useState<OccupancyData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isContractModalOpen, setIsContractModalOpen] = useState(false);
+
+  // Visitor Check-In Modal State
+  const [isVisitorModalOpen, setIsVisitorModalOpen] = useState(false);
+  const [visitorName, setVisitorName] = useState("");
+  const [visitorPhone, setVisitorPhone] = useState("");
+  const [visitorEmail, setVisitorEmail] = useState("");
+  const [passCode, setPassCode] = useState("");
+  const [hostMemberId, setHostMemberId] = useState("");
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [waiverSigned, setWaiverSigned] = useState(false);
+  const [isSubmittingVisitor, setIsSubmittingVisitor] = useState(false);
+
   const tenantId = useTenantId();
 
   const loadOccupancy = async () => {
@@ -57,6 +70,13 @@ export default function ReceptionPage() {
       });
       if (res.success) {
         loadOccupancy();
+        setActivityLog(prev => [{
+          id: Date.now().toString(),
+          timestamp: new Date().toLocaleTimeString(),
+          name: `${selectedMember.first_name || ''} ${selectedMember.last_name || ''}`.trim() || 'Member',
+          type: 'check_in',
+          status: 'cleared'
+        }, ...prev]);
       } else {
         alert(res.reason || res.error || 'Check-in failed');
       }
@@ -79,6 +99,13 @@ export default function ReceptionPage() {
       });
       if (res.success) {
         loadOccupancy();
+        setActivityLog(prev => [{
+          id: Date.now().toString(),
+          timestamp: new Date().toLocaleTimeString(),
+          name: `${selectedMember.first_name || ''} ${selectedMember.last_name || ''}`.trim() || 'Member',
+          type: 'check_out',
+          status: 'cleared'
+        }, ...prev]);
       } else {
         alert(res.error || 'Check-out failed');
       }
@@ -87,6 +114,54 @@ export default function ReceptionPage() {
       alert(e.message || 'Check-out failed');
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleVisitorCheckIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tenantId || !visitorName || !visitorPhone) return;
+    setIsSubmittingVisitor(true);
+    try {
+      const res = await visitorCheckIn({
+        tenant_id: tenantId,
+        guest_name: visitorName,
+        guest_phone: visitorPhone,
+        guest_email: visitorEmail || undefined,
+        pass_code: passCode || undefined,
+        host_member_id: hostMemberId || selectedMember?.id || undefined,
+        photo_url: photoUrl || undefined,
+        waiver_signed: waiverSigned,
+        waiver_signature_url: waiverSigned ? "signature_verified_digital" : undefined
+      });
+
+      if (res.success) {
+        alert(`Visitor ${visitorName} checked in! Sales Lead auto-captured and Turnstile unlocked.`);
+        loadOccupancy();
+        setActivityLog(prev => [{
+          id: Date.now().toString(),
+          timestamp: new Date().toLocaleTimeString(),
+          name: `Visitor: ${visitorName}`,
+          type: 'guest_visit',
+          status: 'cleared'
+        }, ...prev]);
+
+        // Reset form
+        setVisitorName("");
+        setVisitorPhone("");
+        setVisitorEmail("");
+        setPassCode("");
+        setHostMemberId("");
+        setPhotoUrl("");
+        setWaiverSigned(false);
+        setIsVisitorModalOpen(false);
+      } else {
+        alert(res.error || 'Visitor check-in failed');
+      }
+    } catch (err: any) {
+      console.error('Visitor check-in error:', err);
+      alert(err.message || 'Visitor check-in failed');
+    } finally {
+      setIsSubmittingVisitor(false);
     }
   };
 
@@ -99,7 +174,16 @@ export default function ReceptionPage() {
             <h1 className="text-2xl font-headline-md font-bold text-foreground">Reception Monitor</h1>
             <p className="text-sm text-muted-foreground">Real-time check-in and access control</p>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4">
+            {/* Visitor Check-In Trigger Button */}
+            <button
+              onClick={() => setIsVisitorModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-lg shadow transition"
+            >
+              <UserPlus className="size-4" />
+              <span>Visitor Check-In</span>
+            </button>
+
             {/* Live Occupancy Badge */}
             <div className="flex items-center gap-3 px-4 py-2 bg-surface-container rounded-lg border border-border">
               <Users className="size-4 text-muted-foreground" />
@@ -242,6 +326,131 @@ export default function ReceptionPage() {
             setSelectedMember((prev: any) => prev ? { ...prev, waiver_valid: true, waiver_signed: true } : null);
           }}
         />
+      )}
+
+      {/* Visitor Check-In Modal */}
+      {isVisitorModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-lg p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="text-lg font-bold flex items-center gap-2">
+                <Ticket className="w-5 h-5 text-emerald-500" />
+                Visitor Check-In & Guest Pass Entry
+              </h3>
+              <button
+                onClick={() => setIsVisitorModalOpen(false)}
+                className="text-muted-foreground hover:text-foreground text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleVisitorCheckIn} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Visitor Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Jane Smith"
+                    value={visitorName}
+                    onChange={(e) => setVisitorName(e.target.value)}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Phone Number *</label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="e.g. +250 788 123 456"
+                    value={visitorPhone}
+                    onChange={(e) => setVisitorPhone(e.target.value)}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Email Address (Optional)</label>
+                  <input
+                    type="email"
+                    placeholder="e.g. jane@example.com"
+                    value={visitorEmail}
+                    onChange={(e) => setVisitorEmail(e.target.value)}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Guest Pass Code (If invited)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. GP-X89K2P"
+                    value={passCode}
+                    onChange={(e) => setPassCode(e.target.value)}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* Photo Verification Upload / URL */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Camera className="w-3.5 h-3.5" />
+                  Photo Verification (URL or Capture)
+                </label>
+                <input
+                  type="text"
+                  placeholder="https://... photo url"
+                  value={photoUrl}
+                  onChange={(e) => setPhotoUrl(e.target.value)}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* Digital Waiver Checkbox */}
+              <div className="p-3 bg-secondary/30 border border-border rounded-xl space-y-2">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={waiverSigned}
+                    onChange={(e) => setWaiverSigned(e.target.checked)}
+                    className="mt-0.5 rounded border-border text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <div className="text-xs space-y-0.5">
+                    <span className="font-bold text-foreground flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 inline" />
+                      Guest Safety & Facility Waiver Signed
+                    </span>
+                    <p className="text-muted-foreground">
+                      Visitor has completed and signed the single-day guest safety liability release agreement.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsVisitorModalOpen(false)}
+                  className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-medium hover:bg-secondary/80"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingVisitor}
+                  className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-500 transition shadow disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSubmittingVisitor ? "Processing..." : "Complete Visitor Check-In"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
