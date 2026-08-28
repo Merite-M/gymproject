@@ -29,7 +29,7 @@ export default function WidgetCustomizerPage() {
 
   // Widget customizer states
   const [widgetType, setWidgetType] = useState<'schedule' | 'join'>('schedule');
-  const [primaryColor, setPrimaryColor] = useState<string>('#2563eb');
+  const [primaryColor, setPrimaryColor] = useState<string>('#29C47A');
   const [embedType, setEmbedType] = useState<'script' | 'iframe'>('script');
   const [buttonText, setButtonText] = useState<string>('Schedule Free VIP Tour');
   const [targetId, setTargetId] = useState<string>('gympartner-widget');
@@ -115,7 +115,7 @@ export default function WidgetCustomizerPage() {
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-8 max-w-7xl mx-auto">
+    <div className="p-6 md:p-8 space-y-8 max-w-7xl mx-auto font-body-base">
       {/* Header & Navigation */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-6">
         <div>
@@ -127,10 +127,10 @@ export default function WidgetCustomizerPage() {
               <ArrowLeft className="size-4 text-muted-foreground" />
             </Link>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+              <h1 className="text-2xl md:text-3xl font-headline-md font-bold tracking-tight text-foreground">
                 Embeddable Web Widgets
               </h1>
-              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 gap-1.5 font-mono text-xs">
+              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 gap-1.5 font-mono-id text-xs">
                 <Sparkles className="size-3" /> GYM-58 Parity
               </Badge>
             </div>
@@ -141,7 +141,7 @@ export default function WidgetCustomizerPage() {
         </div>
 
         <div className="flex items-center gap-3 self-start md:self-auto pl-12 md:pl-0">
-          <Badge variant="secondary" className="px-3 py-1.5 font-mono text-xs">
+          <Badge variant="secondary" className="px-3 py-1.5 font-mono-id text-xs">
             Slug: <span className="font-bold text-foreground ml-1">{tenantSlug}</span>
           </Badge>
           <Button
@@ -159,9 +159,9 @@ export default function WidgetCustomizerPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left Column: Config Panel */}
         <div className="lg:col-span-5 space-y-6">
-          <Card>
+          <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
+              <CardTitle className="flex items-center gap-2 text-lg font-headline-md">
                 <Palette className="size-5 text-primary" />
                 Widget Customizer
               </CardTitle>
@@ -225,11 +225,11 @@ export default function WidgetCustomizerPage() {
                     type="text"
                     value={primaryColor}
                     onChange={(e) => setPrimaryColor(e.target.value)}
-                    className="font-mono text-sm uppercase"
-                    placeholder="#2563EB"
+                    className="font-mono-id text-sm uppercase bg-background border-border"
+                    placeholder="#29C47A"
                   />
                   <div className="flex gap-1.5">
-                    {['#2563eb', '#16a34a', '#dc2626', '#9333ea', '#ea580c', '#0f172a'].map((c) => (
+                    {['#29C47A', '#2E8BFF', '#FFB547', '#fa746f', '#9333ea', '#121b18'].map((c) => (
                       <button
                         key={c}
                         type="button"
@@ -253,6 +253,7 @@ export default function WidgetCustomizerPage() {
                   value={buttonText}
                   onChange={(e) => setButtonText(e.target.value)}
                   placeholder="e.g. Book VIP Tour"
+                  className="bg-background border-border"
                 />
               </div>
 
@@ -265,7 +266,7 @@ export default function WidgetCustomizerPage() {
                   id="targetId"
                   value={targetId}
                   onChange={(e) => setTargetId(e.target.value || 'gympartner-widget')}
-                  className="font-mono text-xs"
+                  className="font-mono-id text-xs bg-background border-border"
                 />
                 <p className="text-xs text-muted-foreground">
                   The script injects the widget interface inside the container matching this ID on your website.
@@ -277,33 +278,33 @@ export default function WidgetCustomizerPage() {
 
         {/* Right Column: Live Interactive Preview */}
         <div className="lg:col-span-7 space-y-6">
-          <Card className="overflow-hidden border-border shadow-lg">
+          <Card className="overflow-hidden border-border shadow-md bg-card">
             <CardHeader className="bg-surface-container/60 border-b border-border py-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Eye className="size-4 text-primary" />
-                  <CardTitle className="text-base font-semibold">Live Interactive Preview</CardTitle>
+                  <CardTitle className="text-base font-semibold font-headline-md">Live Interactive Preview</CardTitle>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="flex size-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-xs text-muted-foreground font-mono">Render Mockup</span>
+                  <span className="flex size-2 rounded-full bg-status-cleared animate-pulse" />
+                  <span className="text-xs text-muted-foreground font-mono-id">Render Mockup</span>
                 </div>
               </div>
             </CardHeader>
 
-            <CardContent className="p-6 md:p-8 bg-slate-900/50 min-h-[460px] flex items-center justify-center">
+            <CardContent className="p-6 md:p-8 bg-surface-container/40 min-h-[460px] flex items-center justify-center">
               {/* Standalone Embedded Card Mockup */}
-              <div className="w-full max-w-md bg-white rounded-2xl p-6 border border-slate-200 shadow-xl text-slate-900 space-y-5">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="w-full max-w-md bg-card rounded-2xl p-6 border border-border shadow-xl text-foreground space-y-5">
+                <div className="flex items-center justify-between border-b border-border pb-4">
                   <div>
-                    <h3 className="text-lg font-bold text-slate-900">{tenantName}</h3>
-                    <p className="text-xs text-slate-500">
+                    <h3 className="text-lg font-bold font-headline-md text-foreground">{tenantName}</h3>
+                    <p className="text-xs text-muted-foreground">
                       {widgetType === 'schedule' ? 'Weekly Class Timetable' : 'Self-Service Membership Registration'}
                     </p>
                   </div>
                   <span
-                    className="text-[11px] font-semibold px-2.5 py-1 rounded-full"
-                    style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}
+                    className="text-[11px] font-semibold px-2.5 py-1 rounded-full text-primary-foreground"
+                    style={{ backgroundColor: primaryColor }}
                   >
                     {widgetType === 'schedule' ? 'Live Schedule' : 'Instant Access'}
                   </span>
@@ -311,37 +312,37 @@ export default function WidgetCustomizerPage() {
 
                 {widgetType === 'schedule' ? (
                   <div className="space-y-3">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Upcoming Classes</div>
+                    <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Upcoming Classes</div>
 
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50">
+                      <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-surface-container">
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="size-2.5 rounded-full" style={{ backgroundColor: primaryColor }} />
-                            <strong className="text-sm text-slate-800">HIIT & Cardio Blitz</strong>
+                            <strong className="text-sm text-foreground">HIIT & Cardio Blitz</strong>
                           </div>
-                          <p className="text-xs text-slate-500 mt-0.5">📅 Tomorrow at 07:00 AM</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">📅 Tomorrow at 07:00 AM</p>
                         </div>
                         <button
                           type="button"
-                          className="text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all"
+                          className="text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all min-h-[32px]"
                           style={{ borderColor: primaryColor, color: primaryColor }}
                         >
                           Book Spot
                         </button>
                       </div>
 
-                      <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50">
+                      <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-surface-container">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="size-2.5 rounded-full bg-amber-500" />
-                            <strong className="text-sm text-slate-800">Power Weightlifting</strong>
+                            <span className="size-2.5 rounded-full bg-status-action" />
+                            <strong className="text-sm text-foreground">Power Weightlifting</strong>
                           </div>
-                          <p className="text-xs text-slate-500 mt-0.5">📅 Tomorrow at 05:30 PM</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">📅 Tomorrow at 05:30 PM</p>
                         </div>
                         <button
                           type="button"
-                          className="text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all"
+                          className="text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all min-h-[32px]"
                           style={{ borderColor: primaryColor, color: primaryColor }}
                         >
                           Book Spot
@@ -349,34 +350,34 @@ export default function WidgetCustomizerPage() {
                       </div>
                     </div>
 
-                    <div className="pt-3 border-t border-slate-100 space-y-3">
-                      <div className="text-xs font-semibold text-slate-700">Schedule VIP Gym Tour</div>
+                    <div className="pt-3 border-t border-border space-y-3">
+                      <div className="text-xs font-semibold text-foreground">Schedule VIP Gym Tour</div>
                       <div className="grid grid-cols-2 gap-2">
                         <input
                           type="text"
                           placeholder="First Name"
                           value={previewName}
                           onChange={(e) => setPreviewName(e.target.value)}
-                          className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
+                          className="w-full text-xs px-3 py-2 border border-border rounded-lg outline-none bg-background focus:border-primary text-foreground"
                         />
                         <input
                           type="tel"
                           placeholder="Phone Number"
                           value={previewPhone}
                           onChange={(e) => setPreviewPhone(e.target.value)}
-                          className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
+                          className="w-full text-xs px-3 py-2 border border-border rounded-lg outline-none bg-background focus:border-primary text-foreground"
                         />
                       </div>
                       <button
                         type="button"
                         onClick={() => handlePreviewSubmit(widgetType)}
-                        className="w-full text-xs font-semibold py-2.5 rounded-lg text-white shadow-sm transition-opacity hover:opacity-90"
+                        className="w-full text-xs font-semibold py-2.5 rounded-lg text-primary-foreground shadow-xs transition-opacity hover:opacity-90 min-h-[40px]"
                         style={{ backgroundColor: primaryColor }}
                       >
                         {buttonText}
                       </button>
                       {previewSubmitted && (
-                        <p className="text-xs text-emerald-600 text-center font-medium">
+                        <p className="text-xs text-status-cleared text-center font-medium">
                           🎉 Demo Tour Request Submitted!
                         </p>
                       )}
@@ -386,35 +387,35 @@ export default function WidgetCustomizerPage() {
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">First Name *</label>
+                        <label className="block text-[11px] font-semibold text-muted-foreground mb-1">First Name *</label>
                         <input
                           type="text"
                           placeholder="Alice"
-                          className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none"
+                          className="w-full text-xs px-3 py-2 border border-border rounded-lg outline-none bg-background text-foreground"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Last Name *</label>
+                        <label className="block text-[11px] font-semibold text-muted-foreground mb-1">Last Name *</label>
                         <input
                           type="text"
                           placeholder="Mugabo"
-                          className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none"
+                          className="w-full text-xs px-3 py-2 border border-border rounded-lg outline-none bg-background text-foreground"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Phone Number (WhatsApp) *</label>
+                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">Phone Number (WhatsApp) *</label>
                       <input
                         type="tel"
                         placeholder="+250 788 123 456"
-                        className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none"
+                        className="w-full text-xs px-3 py-2 border border-border rounded-lg outline-none bg-background text-foreground"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Select Membership Plan</label>
-                      <select className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none bg-white">
+                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">Select Membership Plan</label>
+                      <select className="w-full text-xs px-3 py-2 border border-border rounded-lg outline-none bg-background text-foreground">
                         <option>7-Day Free VIP Trial Pass (Free)</option>
                         <option>Standard Monthly (RWF 30,000/mo)</option>
                         <option>Premium All-Access (RWF 50,000/mo)</option>
@@ -422,24 +423,24 @@ export default function WidgetCustomizerPage() {
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Friend Referral Code (Optional)</label>
+                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">Friend Referral Code (Optional)</label>
                       <input
                         type="text"
                         placeholder="e.g. GP-ALICE88"
-                        className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none uppercase"
+                        className="w-full text-xs px-3 py-2 border border-border rounded-lg outline-none uppercase bg-background text-foreground font-mono-id"
                       />
                     </div>
 
                     <button
                       type="button"
                       onClick={() => handlePreviewSubmit(widgetType)}
-                      className="w-full text-xs font-semibold py-2.5 rounded-lg text-white shadow-sm transition-opacity hover:opacity-90 mt-2"
+                      className="w-full text-xs font-semibold py-2.5 rounded-lg text-primary-foreground shadow-xs transition-opacity hover:opacity-90 mt-2 min-h-[40px]"
                       style={{ backgroundColor: primaryColor }}
                     >
                       {buttonText}
                     </button>
                     {previewSubmitted && (
-                      <p className="text-xs text-emerald-600 text-center font-medium">
+                      <p className="text-xs text-status-cleared text-center font-medium">
                         🎉 Demo Registration Complete!
                       </p>
                     )}
@@ -452,15 +453,15 @@ export default function WidgetCustomizerPage() {
       </div>
 
       {/* Bottom Section: Code Snippet Export */}
-      <Card className="border-border">
+      <Card className="border-border bg-card">
         <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-4">
           <div>
-            <CardTitle className="flex items-center gap-2 text-lg">
+            <CardTitle className="flex items-center gap-2 text-lg font-headline-md">
               <Code2 className="size-5 text-primary" />
               Embed Code Snippet Generator
             </CardTitle>
             <CardDescription>
-              Copy and paste this code snippet directly into your site's HTML editor (WordPress, Squarespace, Webflow, HTML5).
+              Copy and paste this code snippet directly into your site&apos;s HTML editor (WordPress, Squarespace, Webflow, HTML5).
             </CardDescription>
           </div>
 
@@ -478,17 +479,17 @@ export default function WidgetCustomizerPage() {
 
             <Button
               onClick={handleCopyCode}
-              className="gap-2 font-semibold shadow-xs transition-all text-white"
+              className="gap-2 font-semibold shadow-xs transition-all text-primary-foreground"
               style={{ backgroundColor: primaryColor }}
             >
-              {copied ? <CheckCircle2 className="size-4 text-white" /> : <Copy className="size-4" />}
+              {copied ? <CheckCircle2 className="size-4 text-primary-foreground" /> : <Copy className="size-4" />}
               {copied ? 'Copied to Clipboard!' : 'Copy Embed Code'}
             </Button>
           </div>
         </CardHeader>
 
         <CardContent className="pt-6">
-          <div className="relative rounded-xl border border-slate-800 bg-slate-950 p-4 font-mono text-sm text-emerald-400 shadow-inner overflow-x-auto">
+          <div className="relative rounded-xl border border-border bg-surface-container p-4 font-mono-id text-sm text-status-cleared shadow-inner overflow-x-auto">
             <pre className="whitespace-pre-wrap break-all leading-relaxed">{activeSnippet}</pre>
           </div>
           <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">

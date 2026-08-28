@@ -13,7 +13,7 @@ import {
   type TaskSummary
 } from '@/lib/api/tasks';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,15 +31,10 @@ import {
   Clock,
   CheckCircle2,
   Plus,
-  RefreshCw,
   Phone,
-  MessageSquare,
   Search,
-  Filter,
-  User,
   Zap,
   Calendar,
-  Sparkles,
   Loader2,
   X
 } from 'lucide-react';
@@ -181,13 +176,13 @@ export default function StaffTasksPage() {
     <div className="flex-1 flex flex-col h-full bg-background text-foreground overflow-hidden font-body-base">
       
       {/* Top Header */}
-      <div className="bg-surface border-b border-border px-8 py-5 shrink-0 flex items-center justify-between">
+      <div className="bg-card border-b border-border px-8 py-5 shrink-0 flex items-center justify-between shadow-xs">
         <div className="flex items-center gap-3">
           <div className="size-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20">
             <CheckSquare className="size-5" />
           </div>
           <div>
-            <h1 className="text-xl font-heading font-bold text-foreground">
+            <h1 className="text-xl font-headline-md font-bold text-foreground">
               Event-Driven Staff Task Engine
             </h1>
             <p className="text-xs text-muted-foreground">
@@ -226,7 +221,7 @@ export default function StaffTasksPage() {
             <CardContent className="p-5 flex items-center justify-between">
               <div className="space-y-1">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Urgent Actions</span>
-                <h3 className="text-2xl font-bold font-mono text-status-blocked">{summary.urgent}</h3>
+                <h3 className="text-2xl font-bold font-mono-id text-status-blocked">{summary.urgent}</h3>
                 <p className="text-[11px] text-muted-foreground">Failed billing & critical alerts</p>
               </div>
               <div className="size-10 rounded-xl bg-status-blocked/10 text-status-blocked flex items-center justify-center">
@@ -239,7 +234,7 @@ export default function StaffTasksPage() {
             <CardContent className="p-5 flex items-center justify-between">
               <div className="space-y-1">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Pending Tasks</span>
-                <h3 className="text-2xl font-bold font-mono text-status-action">{summary.pending}</h3>
+                <h3 className="text-2xl font-bold font-mono-id text-status-action">{summary.pending}</h3>
                 <p className="text-[11px] text-muted-foreground">Active in queue</p>
               </div>
               <div className="size-10 rounded-xl bg-status-action/10 text-status-action flex items-center justify-center">
@@ -252,7 +247,7 @@ export default function StaffTasksPage() {
             <CardContent className="p-5 flex items-center justify-between">
               <div className="space-y-1">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Overdue (SLA)</span>
-                <h3 className="text-2xl font-bold font-mono text-foreground">{summary.overdue}</h3>
+                <h3 className="text-2xl font-bold font-mono-id text-foreground">{summary.overdue}</h3>
                 <p className="text-[11px] text-muted-foreground">Past scheduled due time</p>
               </div>
               <div className="size-10 rounded-xl bg-surface-container text-muted-foreground flex items-center justify-center">
@@ -265,7 +260,7 @@ export default function StaffTasksPage() {
             <CardContent className="p-5 flex items-center justify-between">
               <div className="space-y-1">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Resolved Tasks</span>
-                <h3 className="text-2xl font-bold font-mono text-status-cleared">{summary.completed}</h3>
+                <h3 className="text-2xl font-bold font-mono-id text-status-cleared">{summary.completed}</h3>
                 <p className="text-[11px] text-muted-foreground">Successfully closed</p>
               </div>
               <div className="size-10 rounded-xl bg-status-cleared/10 text-status-cleared flex items-center justify-center">
@@ -290,7 +285,7 @@ export default function StaffTasksPage() {
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-colors ${
                     filterStatus === st
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-surface text-muted-foreground hover:text-foreground'
+                      : 'bg-surface-container text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   {st.replace('_', ' ')}
@@ -307,14 +302,14 @@ export default function StaffTasksPage() {
                   placeholder="Search task or member..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-surface border border-border rounded-lg text-foreground placeholder-muted-foreground outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-background border border-border rounded-lg text-foreground placeholder-muted-foreground outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
 
               <select
                 value={filterRole}
                 onChange={(e) => setFilterRole(e.target.value)}
-                className="bg-surface border border-border text-foreground text-xs rounded-lg px-2.5 py-1.5 outline-none"
+                className="bg-background border border-border text-foreground text-xs rounded-lg px-2.5 py-1.5 outline-none"
               >
                 <option value="all">All Roles</option>
                 <option value="reception">Reception</option>
@@ -326,7 +321,7 @@ export default function StaffTasksPage() {
               <select
                 value={filterPriority}
                 onChange={(e) => setFilterPriority(e.target.value)}
-                className="bg-surface border border-border text-foreground text-xs rounded-lg px-2.5 py-1.5 outline-none"
+                className="bg-background border border-border text-foreground text-xs rounded-lg px-2.5 py-1.5 outline-none"
               >
                 <option value="all">All Priorities</option>
                 <option value="urgent">Urgent</option>
@@ -375,7 +370,7 @@ export default function StaffTasksPage() {
                             <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{t.description}</p>
                           )}
                           <div className="mt-1 flex items-center gap-1.5">
-                            <span className="text-[10px] font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                            <span className="text-[10px] font-mono-id text-primary bg-primary/10 px-1.5 py-0.5 rounded">
                               {t.trigger_event}
                             </span>
                           </div>
@@ -390,7 +385,7 @@ export default function StaffTasksPage() {
                               >
                                 {t.profiles.first_name} {t.profiles.last_name}
                               </Link>
-                              <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                              <div className="text-[11px] text-muted-foreground font-mono-id mt-0.5">
                                 {t.profiles.phone || t.profiles.email || '—'}
                               </div>
                             </div>
@@ -421,7 +416,7 @@ export default function StaffTasksPage() {
                         </TableCell>
 
                         <TableCell>
-                          <div className={`text-xs font-mono ${isOverdue ? 'text-status-blocked font-bold' : 'text-muted-foreground'}`}>
+                          <div className={`text-xs font-mono-id ${isOverdue ? 'text-status-blocked font-bold' : 'text-muted-foreground'}`}>
                             {new Date(t.due_date).toLocaleDateString()}
                           </div>
                           {isOverdue && (
@@ -452,7 +447,7 @@ export default function StaffTasksPage() {
                               <a
                                 href={`tel:${t.profiles.phone}`}
                                 title="Call Member"
-                                className="p-1.5 rounded-md bg-surface hover:bg-surface-container text-muted-foreground hover:text-foreground"
+                                className="p-1.5 rounded-md bg-surface-container hover:bg-surface-container-high text-muted-foreground hover:text-foreground"
                               >
                                 <Phone className="size-3.5" />
                               </a>
@@ -485,8 +480,8 @@ export default function StaffTasksPage() {
       {showCreateModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-card border border-border w-full max-w-lg rounded-xl shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface">
-              <h3 className="font-heading font-bold text-base text-foreground">Create Staff Follow-Up Task</h3>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface-container">
+              <h3 className="font-headline-md font-bold text-base text-foreground">Create Staff Follow-Up Task</h3>
               <button onClick={() => setShowCreateModal(false)} className="text-muted-foreground hover:text-foreground">
                 <X className="size-5" />
               </button>
@@ -499,7 +494,7 @@ export default function StaffTasksPage() {
                   placeholder="e.g. Call John Doe regarding membership renewal"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  className="bg-surface border-border mt-1 text-xs"
+                  className="bg-background border-border mt-1 text-xs"
                 />
               </div>
 
@@ -510,7 +505,7 @@ export default function StaffTasksPage() {
                   placeholder="Provide context or script for reception staff..."
                   value={newDescription}
                   onChange={(e) => setNewDescription(e.target.value)}
-                  className="w-full bg-surface border border-border rounded-lg p-2.5 text-xs text-foreground outline-none mt-1"
+                  className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground outline-none mt-1"
                 />
               </div>
 
@@ -520,7 +515,7 @@ export default function StaffTasksPage() {
                   <select
                     value={newPriority}
                     onChange={(e) => setNewPriority(e.target.value)}
-                    className="w-full bg-surface border border-border text-foreground text-xs rounded-lg px-3 py-2 outline-none mt-1"
+                    className="w-full bg-background border border-border text-foreground text-xs rounded-lg px-3 py-2 outline-none mt-1"
                   >
                     <option value="urgent">Urgent (Immediate)</option>
                     <option value="high">High (+24h)</option>
@@ -533,7 +528,7 @@ export default function StaffTasksPage() {
                   <select
                     value={newRole}
                     onChange={(e) => setNewRole(e.target.value)}
-                    className="w-full bg-surface border border-border text-foreground text-xs rounded-lg px-3 py-2 outline-none mt-1"
+                    className="w-full bg-background border border-border text-foreground text-xs rounded-lg px-3 py-2 outline-none mt-1"
                   >
                     <option value="reception">Reception</option>
                     <option value="sales">Sales</option>
@@ -560,14 +555,14 @@ export default function StaffTasksPage() {
       {showResolveModal && selectedTask && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-card border border-border w-full max-w-lg rounded-xl shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface">
-              <h3 className="font-heading font-bold text-base text-foreground">Resolve Staff Task</h3>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface-container">
+              <h3 className="font-headline-md font-bold text-base text-foreground">Resolve Staff Task</h3>
               <button onClick={() => setShowResolveModal(false)} className="text-muted-foreground hover:text-foreground">
                 <X className="size-5" />
               </button>
             </div>
             <form onSubmit={handleResolveTask} className="p-6 space-y-4 text-xs">
-              <div className="p-3.5 rounded-lg bg-surface border border-border">
+              <div className="p-3.5 rounded-lg bg-surface-container border border-border">
                 <h4 className="font-bold text-sm text-foreground">{selectedTask.title}</h4>
                 <p className="text-xs text-muted-foreground mt-0.5">{selectedTask.description}</p>
               </div>
@@ -577,7 +572,7 @@ export default function StaffTasksPage() {
                 <select
                   value={resolutionOutcome}
                   onChange={(e) => setResolutionOutcome(e.target.value)}
-                  className="w-full bg-surface border border-border text-foreground text-xs rounded-lg px-3 py-2 outline-none mt-1"
+                  className="w-full bg-background border border-border text-foreground text-xs rounded-lg px-3 py-2 outline-none mt-1"
                 >
                   <option value="payment_recovered">Payment Recovered / Succeeded</option>
                   <option value="tour_converted">Tour Converted to Membership</option>
@@ -595,7 +590,7 @@ export default function StaffTasksPage() {
                   placeholder="Record outcome of call / WhatsApp conversation..."
                   value={resolutionNotes}
                   onChange={(e) => setResolutionNotes(e.target.value)}
-                  className="w-full bg-surface border border-border rounded-lg p-2.5 text-xs text-foreground outline-none mt-1"
+                  className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground outline-none mt-1"
                 />
               </div>
 
