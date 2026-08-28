@@ -36,6 +36,7 @@ export default function PurchaseOrdersPage() {
 
   // Receiving Modal state
   const [receivingPO, setReceivingPO] = useState<PurchaseOrder | null>(null);
+  const [receiveError, setReceiveError] = useState<string | null>(null);
   const [receiveInputs, setReceiveInputs] = useState<{ [itemId: string]: number }>({});
   const [submittingReceive, setSubmittingReceive] = useState(false);
   const [receiveSuccessMsg, setReceiveSuccessMsg] = useState<string | null>(null);
@@ -142,7 +143,7 @@ export default function PurchaseOrdersPage() {
       });
       setReceiveInputs(initialInputs);
     } catch (err) {
-      alert("Failed to load PO items for receiving");
+      setReceiveError("Failed to load PO items for receiving");
     }
   };
 
@@ -163,7 +164,7 @@ export default function PurchaseOrdersPage() {
         });
 
       if (receivedItemsPayload.length === 0) {
-        alert("Please enter a quantity greater than 0 to receive");
+        setReceiveError("Please enter a quantity greater than 0 to receive");
         setSubmittingReceive(false);
         return;
       }
@@ -181,7 +182,7 @@ export default function PurchaseOrdersPage() {
       }, 2500);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      alert("Failed to receive PO items: " + message);
+      setReceiveError("Failed to receive PO items: " + message);
     } finally {
       setSubmittingReceive(false);
     }

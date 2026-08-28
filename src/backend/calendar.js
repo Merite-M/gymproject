@@ -961,4 +961,141 @@ router.post('/rentals', authMiddleware, async (req, res) => {
     }
 });
 
+
+// GET /api/calendar/policies
+router.get('/policies', authMiddleware, async (req, res) => {
+    try {
+        const tenant_id = req.query.tenant_id || req.user?.user_metadata?.tenant_id;
+        if (!tenant_id) {
+            return res.status(400).json({ error: 'Missing tenant_id' });
+        }
+
+        const { data: tenant, error } = await supabase
+            .from('tenants')
+            .select('cancellation_window_hours, late_cancel_fee_rwf, no_show_penalty_rwf, max_no_show_strikes, waitlist_enabled')
+            .eq('id', tenant_id)
+            .single();
+
+        if (error && error.code !== 'PGRST116') {
+            return res.status(500).json({ error: error.message });
+        }
+
+        res.status(200).json({
+            success: true,
+            policies: {
+                cancellation_window_hours: tenant?.cancellation_window_hours ?? 2,
+                late_cancel_fee_rwf: tenant?.late_cancel_fee_rwf ?? 5000,
+                no_show_penalty_rwf: tenant?.no_show_penalty_rwf ?? 10000,
+                max_no_show_strikes: tenant?.max_no_show_strikes ?? 3,
+                waitlist_enabled: tenant?.waitlist_enabled ?? true
+            }
+        });
+    } catch (error) {
+        console.error('Get calendar policies error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// PATCH /api/calendar/policies
+router.patch('/policies', authMiddleware, async (req, res) => {
+    try {
+        const { tenant_id, cancellation_window_hours, late_cancel_fee_rwf, no_show_penalty_rwf, max_no_show_strikes, waitlist_enabled } = req.body;
+        if (!tenant_id) {
+            return res.status(400).json({ error: 'Missing tenant_id' });
+        }
+
+        const updateData = {};
+        if (cancellation_window_hours !== undefined) updateData.cancellation_window_hours = cancellation_window_hours;
+        if (late_cancel_fee_rwf !== undefined) updateData.late_cancel_fee_rwf = late_cancel_fee_rwf;
+        if (no_show_penalty_rwf !== undefined) updateData.no_show_penalty_rwf = no_show_penalty_rwf;
+        if (max_no_show_strikes !== undefined) updateData.max_no_show_strikes = max_no_show_strikes;
+        if (waitlist_enabled !== undefined) updateData.waitlist_enabled = waitlist_enabled;
+
+        const { data: tenant, error } = await supabase
+            .from('tenants')
+            .update(updateData)
+            .eq('id', tenant_id)
+            .select('cancellation_window_hours, late_cancel_fee_rwf, no_show_penalty_rwf, max_no_show_strikes, waitlist_enabled')
+            .single();
+
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+
+        res.status(200).json({ success: true, policies: tenant });
+    } catch (error) {
+        console.error('Update calendar policies error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// GET /api/calendar/waitlists
+router.get('/waitlists', authMiddleware, async (req, res) => {
+    try {
+        const tenant_id = req.query.tenant_id;
+        if (!tenant_id) {
+            return res.status(400).json({ error: 'Missing tenant_id' });
+        }
+
+        const { data: waitlist, error } = await supabase
+            .from('waitlists')
+            .select(`
+                id,
+                status,
+                created_at,
+                profile_id,
+                schedule_id,
+                profiles:profile_id (id, first_name, last_name, email, phone),
+                class_schedules:schedule_id (id, title, start_time, room_id, trainer_id)
+            `)
+            .eq('tenant_id', tenant_id)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+
+        res.status(200).json({ success: true, waitlists: waitlist || [] });
+    } catch (error) {
+        console.error('Get waitlists error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// PATCH /api/calendar/schedule/:id
+router.patch('/schedule/:id', authMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { tenant_id, room_id, room, trainer_id, instructor, time, title } = req.body;
+        if (!tenant_id) {
+            return res.status(400).json({ error: 'Missing tenant_id' });
+        }
+
+        const updateData = {};
+        if (room_id !== undefined) updateData.room_id = room_id;
+        if (room !== undefined) updateData.room_name = room;
+        if (trainer_id !== undefined) updateData.trainer_id = trainer_id;
+        if (instructor !== undefined) updateData.trainer_name = instructor;
+        if (time !== undefined) updateData.start_time = time;
+        if (title !== undefined) updateData.title = title;
+
+        const { data: schedule, error } = await supabase
+            .from('class_schedules')
+            .update(updateData)
+            .eq('id', id)
+            .eq('tenant_id', tenant_id)
+            .select()
+            .single();
+
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+
+        res.status(200).json({ success: true, schedule });
+    } catch (error) {
+        console.error('Update schedule error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 module.exports = router;

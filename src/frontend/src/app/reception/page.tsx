@@ -10,7 +10,7 @@ import { AccessOutcome } from "@/components/access-outcome";
 import { BalanceWarning } from "@/components/balance-warning";
 import { WaiverWarning } from "@/components/waiver-warning";
 import { useTenantId } from "@/contexts/AuthContext";
-import { Users, LogOut, LogIn, FileSignature, UserPlus, Ticket, ShieldCheck, Camera } from "lucide-react";
+import { Users, LogOut, LogIn, FileSignature, UserPlus, Ticket, ShieldCheck, Camera, CreditCard } from "lucide-react";
 import { ContractSignerModal } from "@/components/contract-signer-modal";
 import {
   fetchOccupancy,
@@ -27,6 +27,52 @@ export default function ReceptionPage() {
   const [occupancy, setOccupancy] = useState<OccupancyData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isContractModalOpen, setIsContractModalOpen] = useState(false);
+
+  // MoMo Pay Modal State
+  const [isMomoModalOpen, setIsMomoModalOpen] = useState(false);
+  const [momoAmount, setMomoAmount] = useState("10000");
+  const [momoPhone, setMomoPhone] = useState("");
+  const [momoSubmitting, setMomoSubmitting] = useState(false);
+  const [momoStatus, setMomoStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const handleOpenMomoModal = () => {
+    if (!selectedMember) return;
+    setMomoPhone(selectedMember.phone || "");
+    setMomoAmount("10000");
+    setMomoStatus(null);
+    setIsMomoModalOpen(true);
+  };
+
+  const handleSendMomoPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tenantId || !selectedMember) return;
+    setMomoSubmitting(true);
+    setMomoStatus(null);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+      const res = await fetch(`${backendUrl}/api/payments/momo/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          profile_id: selectedMember.id,
+          amount: parseFloat(momoAmount),
+          phone_number: momoPhone,
+          member_name: `${selectedMember.first_name || ''} ${selectedMember.last_name || ''}`.trim()
+        })
+      });
+      const data = await res.json();
+      if (res.ok && (data.success || data.payment)) {
+        setMomoStatus({ type: 'success', message: `MoMo USSD Prompt sent to ${momoPhone}! Reference: ${data.payment?.reference_code || 'Pending'}` });
+      } else {
+        setMomoStatus({ type: 'error', message: data.error || "Failed to initiate MoMo payment" });
+      }
+    } catch (err: any) {
+      setMomoStatus({ type: 'error', message: err.message || "Failed to send MoMo prompt" });
+    } finally {
+      setMomoSubmitting(false);
+    }
+  };
 
   // Visitor Check-In Modal State
   const [isVisitorModalOpen, setIsVisitorModalOpen] = useState(false);
@@ -298,8 +344,12 @@ export default function ReceptionPage() {
                   <LogOut className="size-4" />
                   <span>Check Out</span>
                 </button>
-                <button className="px-3 py-2 bg-status-action text-status-action-foreground rounded-lg text-xs sm:text-sm font-medium hover:bg-status-action/80 min-h-[44px]">
-                  MoMo Pay
+                <button
+                  onClick={handleOpenMomoModal}
+                  className="px-3 py-2 bg-status-action text-status-action-foreground rounded-lg text-xs sm:text-sm font-medium hover:bg-status-action/80 min-h-[44px] flex items-center justify-center gap-1.5"
+                >
+                  <CreditCard className="size-4" />
+                  <span>MoMo Pay</span>
                 </button>
                 <button
                   onClick={() => setIsContractModalOpen(true)}
@@ -313,6 +363,91 @@ export default function ReceptionPage() {
           )}
         </div>
       </div>
+
+
+      {/* MoMo Payment Modal */}
+      {isMomoModalOpen && selectedMember && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-amber-500" />
+                <h3 className="font-bold text-foreground text-sm sm:text-base">Direct MTN MoMo Prompt</h3>
+              </div>
+              <button
+                onClick={() => setIsMomoModalOpen(false)}
+                className="text-muted-foreground hover:text-foreground text-sm p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3 bg-muted/40 rounded-lg border border-border flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-foreground">{selectedMember.first_name} {selectedMember.last_name}</p>
+                <p className="text-[11px] text-muted-foreground">{selectedMember.phone || 'No phone recorded'}</p>
+              </div>
+              <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-500 uppercase">
+                {selectedMember.membership_status || 'Member'}
+              </span>
+            </div>
+
+            <form onSubmit={handleSendMomoPayment} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">MTN Phone Number *</label>
+                <input
+                  type="text"
+                  required
+                  value={momoPhone}
+                  onChange={(e) => setMomoPhone(e.target.value)}
+                  placeholder="e.g. 0788123456"
+                  className="w-full px-3 py-2 text-xs bg-muted border border-border rounded-lg outline-none focus:ring-2 focus:ring-primary text-foreground"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">Amount to Charge (RWF) *</label>
+                <input
+                  type="number"
+                  required
+                  min="100"
+                  value={momoAmount}
+                  onChange={(e) => setMomoAmount(e.target.value)}
+                  placeholder="e.g. 10000"
+                  className="w-full px-3 py-2 text-xs bg-muted border border-border rounded-lg outline-none focus:ring-2 focus:ring-primary text-foreground font-mono"
+                />
+              </div>
+
+              {momoStatus && (
+                <div className={`p-3 rounded-lg text-xs font-medium border ${
+                  momoStatus.type === 'success'
+                    ? 'bg-status-cleared/10 border-status-cleared/30 text-status-cleared'
+                    : 'bg-status-blocked/10 border-status-blocked/30 text-status-blocked'
+                }`}>
+                  {momoStatus.message}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsMomoModalOpen(false)}
+                  className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-muted hover:bg-muted/80 text-foreground min-h-[38px]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={momoSubmitting || !momoPhone || !momoAmount}
+                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-black disabled:opacity-50 min-h-[38px] flex items-center gap-1.5"
+                >
+                  {momoSubmitting ? "Sending USSD..." : "Send MoMo USSD Push"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Contract & E-Signature Modal */}
       {tenantId && selectedMember && (

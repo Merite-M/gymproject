@@ -39,6 +39,26 @@ export default function WidgetCustomizerPage() {
   const [previewName, setPreviewName] = useState('');
   const [previewPhone, setPreviewPhone] = useState('');
   const [previewSubmitted, setPreviewSubmitted] = useState(false);
+  const handlePreviewSubmit = async (mode: 'schedule' | 'join') => {
+    setPreviewSubmitted(false);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+      await fetch(`${backendUrl}/api/public/${tenantSlug}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          first_name: previewName || "Demo",
+          last_name: "Member",
+          phone: previewPhone || "+250788000000",
+          email: "demo@gympartner.rw",
+          membership_type: mode === 'schedule' ? 'VIP Tour Pass' : 'Trial Signup'
+        })
+      });
+    } catch (e) {
+      console.error("Preview submit error:", e);
+    }
+    setPreviewSubmitted(true);
+  };
 
   useEffect(() => {
     async function loadTenantInfo() {
@@ -349,7 +369,7 @@ export default function WidgetCustomizerPage() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => setPreviewSubmitted(true)}
+                        onClick={() => handlePreviewSubmit(widgetType)}
                         className="w-full text-xs font-semibold py-2.5 rounded-lg text-white shadow-sm transition-opacity hover:opacity-90"
                         style={{ backgroundColor: primaryColor }}
                       >
@@ -412,7 +432,7 @@ export default function WidgetCustomizerPage() {
 
                     <button
                       type="button"
-                      onClick={() => setPreviewSubmitted(true)}
+                      onClick={() => handlePreviewSubmit(widgetType)}
                       className="w-full text-xs font-semibold py-2.5 rounded-lg text-white shadow-sm transition-opacity hover:opacity-90 mt-2"
                       style={{ backgroundColor: primaryColor }}
                     >

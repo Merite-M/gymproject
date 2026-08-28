@@ -125,7 +125,7 @@ export default function StaffTasksPage() {
       setNewDescription('');
       loadData();
     } catch (err: any) {
-      alert('Error creating task: ' + err.message);
+      console.error('Error creating task:', err.message);
     } finally {
       setCreating(false);
     }
@@ -148,7 +148,7 @@ export default function StaffTasksPage() {
       setResolutionNotes('');
       loadData();
     } catch (err: any) {
-      alert('Error resolving task: ' + err.message);
+      console.error('Error resolving task:', err.message);
     } finally {
       setResolving(false);
     }
