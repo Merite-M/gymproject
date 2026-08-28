@@ -135,3 +135,23 @@ export async function issueMemberGuestPass(memberId: string, payload: {
     body: JSON.stringify(payload)
   });
 }
+
+export async function addFamilyLink(masterId: string, payload: {
+  tenant_id: string;
+  dependent_account_id: string;
+  relationship_type: string;
+  billing_responsibility?: 'master' | 'individual' | 'split';
+  created_by: string;
+}): Promise<FamilyLink> {
+  return apiFetch<FamilyLink>(`${BACKEND_URL}/api/members/${masterId}/family`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function removeFamilyLink(masterId: string, linkId: string, tenantId: string): Promise<{ success: boolean }> {
+  return apiFetch<{ success: boolean }>(`${BACKEND_URL}/api/members/${masterId}/family/${linkId}?tenant_id=${tenantId}`, {
+    method: "DELETE"
+  });
+}

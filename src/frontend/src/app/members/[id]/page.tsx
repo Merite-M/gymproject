@@ -384,6 +384,7 @@ export default function MemberProfileClient({
                 <TabsTrigger value="holds" className="text-xs">Holds & Freezes</TabsTrigger>
                 <TabsTrigger value="contracts" className="text-xs">Contracts & Waivers</TabsTrigger>
                 <TabsTrigger value="family" className="text-xs">Family Links</TabsTrigger>
+                <TabsTrigger value="guest_passes" className="text-xs">Guest Passes</TabsTrigger>
                 <TabsTrigger value="activity" className="text-xs">Access Logs</TabsTrigger>
               </TabsList>
 
@@ -569,7 +570,7 @@ export default function MemberProfileClient({
               {/* FAMILY LINKS TAB */}
               <TabsContent value="family" className="mt-0 outline-none space-y-4">
                 <Card className="border-border bg-card overflow-hidden">
-                  <CardHeader className="pb-3 border-b border-border">
+                  <CardHeader className="pb-3 border-b border-border flex flex-row items-center justify-between">
                     <CardTitle className="text-sm font-heading font-bold text-foreground flex items-center gap-2">
                       <Users className="w-4 h-4 text-primary" /> Family & Linked Dependents
                     </CardTitle>
@@ -596,7 +597,7 @@ export default function MemberProfileClient({
                               <TableRow key={link.id}>
                                 <TableCell className="text-xs font-semibold">
                                   <Link href={`/members/${related.id}`} className="text-primary hover:underline">
-                                    {related.first_name} {related.last_name}
+                                    {related?.first_name || 'Member'} {related?.last_name || ''}
                                   </Link>
                                 </TableCell>
                                 <TableCell className="capitalize text-xs text-muted-foreground">{link.relationship_type}</TableCell>
@@ -615,11 +616,80 @@ export default function MemberProfileClient({
                 </Card>
               </TabsContent>
 
+              {/* GUEST PASSES TAB */}
+              <TabsContent value="guest_passes" className="mt-0 outline-none space-y-4">
+                <Card className="border-border bg-card overflow-hidden">
+                  <CardHeader className="pb-3 border-b border-border">
+                    <CardTitle className="text-sm font-heading font-bold text-foreground flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-primary" /> Monthly Guest Pass Allowance
+                    </CardTitle>
+                    <CardDescription className="text-xs text-muted-foreground">
+                      Allow host member to invite non-member visitors to facility.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                      <div className="p-4 rounded-xl bg-surface border border-border">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Total Allowance</p>
+                        <p className="text-2xl font-bold font-mono text-foreground mt-1">2 Passes / mo</p>
+                      </div>
+                      <div className="p-4 rounded-xl bg-surface border border-border">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Passes Used</p>
+                        <p className="text-2xl font-bold font-mono text-status-action mt-1">0 Used</p>
+                      </div>
+                      <div className="p-4 rounded-xl bg-surface border border-border">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Available Remaining</p>
+                        <p className="text-2xl font-bold font-mono text-status-cleared mt-1">2 Remaining</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
               {/* ACCESS LOGS TAB */}
               <TabsContent value="activity" className="mt-0 outline-none">
-                <Card className="border-border bg-card p-6 text-center text-xs text-muted-foreground">
-                  <Activity className="w-8 h-8 text-primary/40 mx-auto mb-2" />
-                  <p>Comprehensive gate telemetry and access audit logs for this member.</p>
+                <Card className="border-border bg-card overflow-hidden">
+                  <CardHeader className="pb-3 border-b border-border">
+                    <CardTitle className="text-sm font-heading font-bold text-foreground flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-primary" /> Turnstile Telemetry & Gate Check-in Logs
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader className="bg-surface-container/50">
+                        <TableRow>
+                          <TableHead className="text-xs">Date & Time</TableHead>
+                          <TableHead className="text-xs">Access Point / Method</TableHead>
+                          <TableHead className="text-xs">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {checkIns.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={3} className="text-center py-6 text-xs text-muted-foreground">
+                              No turnstile check-in activity recorded yet.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          checkIns.map((ci) => (
+                            <TableRow key={ci.id}>
+                              <TableCell className="text-xs font-mono">
+                                {new Date(ci.created_at || ci.check_in_time).toLocaleString()}
+                              </TableCell>
+                              <TableCell className="text-xs capitalize font-medium">
+                                {ci.access_method || ci.entry_type || "Main Entrance Turnstile"}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-[10px] bg-status-cleared/10 text-status-cleared border-status-cleared/30">
+                                  {ci.status || "Granted"}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
                 </Card>
               </TabsContent>
 
