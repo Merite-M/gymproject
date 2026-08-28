@@ -696,23 +696,23 @@ export default function MarketingCanvasPage() {
   };
 
   const getNodeIcon = (type: NodeType, subtype?: string) => {
-    if (type === 'trigger') return <Zap className="w-5 h-5 text-amber-500" />;
-    if (type === 'delay') return <Clock className="w-5 h-5 text-blue-500" />;
-    if (type === 'condition') return <GitFork className="w-5 h-5 text-purple-500" />;
-    if (subtype === 'whatsapp') return <Smartphone className="w-5 h-5 text-emerald-500" />;
-    if (subtype === 'sms') return <MessageSquare className="w-5 h-5 text-sky-500" />;
-    if (subtype === 'staff_task') return <PhoneCall className="w-5 h-5 text-rose-500" />;
-    return <Mail className="w-5 h-5 text-slate-500" />;
+    if (type === 'trigger') return <Zap className="w-5 h-5 text-status-action" />;
+    if (type === 'delay') return <Clock className="w-5 h-5 text-secondary" />;
+    if (type === 'condition') return <GitFork className="w-5 h-5 text-purple-400" />;
+    if (subtype === 'whatsapp') return <Smartphone className="w-5 h-5 text-status-cleared" />;
+    if (subtype === 'sms') return <MessageSquare className="w-5 h-5 text-secondary" />;
+    if (subtype === 'staff_task') return <PhoneCall className="w-5 h-5 text-status-blocked" />;
+    return <Mail className="w-5 h-5 text-muted-foreground" />;
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
+    <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden font-body-base">
       {/* TOP HEADER & ANALYTICS BAR */}
-      <header className="flex-none bg-slate-900/90 border-b border-slate-800 px-4 sm:px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 z-20 backdrop-blur-md">
+      <header className="flex-none bg-card border-b border-border px-4 sm:px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 z-20 shadow-xs">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 px-3 py-1.5 rounded-lg">
-            <Sparkles className="w-5 h-5 text-emerald-400 animate-pulse shrink-0" />
-            <span className="text-xs sm:text-sm font-bold text-emerald-300">Marketing Automation Canvas</span>
+          <div className="flex items-center gap-2 bg-primary/10 border border-primary/30 px-3 py-1.5 rounded-lg">
+            <Sparkles className="w-5 h-5 text-primary animate-pulse shrink-0" />
+            <span className="text-xs sm:text-sm font-headline-md font-bold text-primary">Marketing Automation Canvas</span>
           </div>
 
           {/* Workflow Picker */}
@@ -723,7 +723,7 @@ export default function MarketingCanvasPage() {
                 setActiveWorkflowIndex(Number(e.target.value));
                 setSelectedNodeId(null);
               }}
-              className="bg-slate-800 border border-slate-700 text-slate-200 text-xs sm:text-sm font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 min-h-[36px]"
+              className="bg-surface-container border border-border text-foreground text-xs sm:text-sm font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-primary min-h-[36px]"
             >
               {workflows.map((wf, idx) => (
                 <option key={wf.id || idx} value={idx}>
@@ -736,8 +736,8 @@ export default function MarketingCanvasPage() {
               onClick={handleToggleActive}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all min-h-[36px] ${
                 currentWorkflow.is_active
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30'
-                  : 'bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30'
+                  ? 'bg-status-cleared/20 text-status-cleared border border-status-cleared/40 hover:bg-status-cleared/30'
+                  : 'bg-status-action/20 text-status-action border border-status-action/40 hover:bg-status-action/30'
               }`}
             >
               {currentWorkflow.is_active ? (
@@ -754,32 +754,32 @@ export default function MarketingCanvasPage() {
         </div>
 
         {/* Real-time Analytics Overlay */}
-        <div className="hidden lg:flex items-center gap-6 bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-1.5">
+        <div className="hidden lg:flex items-center gap-6 bg-surface-container/80 border border-border rounded-xl px-4 py-1.5">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-status-cleared shrink-0" />
             <div>
-              <p className="text-[10px] uppercase font-bold text-slate-400">Delivery Rate</p>
-              <p className="text-xs font-bold text-slate-100">{analytics.deliveryRate}%</p>
+              <p className="text-[10px] uppercase font-bold text-muted-foreground">Delivery Rate</p>
+              <p className="text-xs font-bold text-foreground font-mono-id">{analytics.deliveryRate}%</p>
             </div>
           </div>
 
-          <div className="h-6 w-px bg-slate-800" />
+          <div className="h-6 w-px bg-border" />
 
           <div className="flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-sky-400 shrink-0" />
+            <TrendingUp className="w-4 h-4 text-secondary shrink-0" />
             <div>
-              <p className="text-[10px] uppercase font-bold text-slate-400">Click-Through Rate</p>
-              <p className="text-xs font-bold text-slate-100">{analytics.clickThroughRate}%</p>
+              <p className="text-[10px] uppercase font-bold text-muted-foreground">Click-Through Rate</p>
+              <p className="text-xs font-bold text-foreground font-mono-id">{analytics.clickThroughRate}%</p>
             </div>
           </div>
 
-          <div className="h-6 w-px bg-slate-800" />
+          <div className="h-6 w-px bg-border" />
 
           <div className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-amber-400 shrink-0" />
+            <BarChart3 className="w-4 h-4 text-status-action shrink-0" />
             <div>
-              <p className="text-[10px] uppercase font-bold text-slate-400">Conversion ROI</p>
-              <p className="text-xs font-bold text-emerald-400">{formatCurrencyDisplay(analytics.attributedRevenueRWF)}</p>
+              <p className="text-[10px] uppercase font-bold text-muted-foreground">Conversion ROI</p>
+              <p className="text-xs font-bold text-primary font-mono-id">{formatCurrencyDisplay(analytics.attributedRevenueRWF)}</p>
             </div>
           </div>
         </div>
@@ -788,7 +788,7 @@ export default function MarketingCanvasPage() {
         <div className="flex items-center gap-2 self-end md:self-auto">
           <button
             onClick={() => setShowPlaybookModal(true)}
-            className="flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold px-3 py-2 rounded-lg shadow-lg transition-all min-h-[36px]"
+            className="flex items-center gap-1.5 bg-secondary text-secondary-foreground hover:bg-secondary/90 text-xs font-bold px-3 py-2 rounded-lg shadow-xs transition-all min-h-[36px]"
           >
             <Layers className="w-4 h-4" />
             <span>Playbooks</span>
@@ -797,7 +797,7 @@ export default function MarketingCanvasPage() {
           <button
             onClick={handleSaveWorkflow}
             disabled={saving}
-            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-lg transition-all disabled:opacity-50 min-h-[36px]"
+            className="flex items-center gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-bold px-3.5 py-2 rounded-lg shadow-xs transition-all disabled:opacity-50 min-h-[36px]"
           >
             {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             <span>Save & Publish</span>
@@ -810,15 +810,15 @@ export default function MarketingCanvasPage() {
         <div
           className={`flex-none px-4 sm:px-6 py-2 text-xs font-semibold flex items-center justify-between transition-all ${
             statusMessage.type === 'success'
-              ? 'bg-emerald-950 text-emerald-200 border-b border-emerald-800'
+              ? 'bg-status-cleared/15 text-status-cleared border-b border-status-cleared/30'
               : statusMessage.type === 'error'
-              ? 'bg-rose-950 text-rose-200 border-b border-rose-800'
-              : 'bg-sky-950 text-sky-200 border-b border-sky-800'
+              ? 'bg-status-blocked/15 text-status-blocked border-b border-status-blocked/30'
+              : 'bg-secondary/15 text-secondary border-b border-secondary/30'
           }`}
         >
           <span>{statusMessage.text}</span>
           <button onClick={() => setStatusMessage(null)}>
-            <X className="w-4 h-4 text-slate-400 hover:text-white" />
+            <X className="w-4 h-4 text-muted-foreground hover:text-foreground" />
           </button>
         </div>
       )}
@@ -826,46 +826,46 @@ export default function MarketingCanvasPage() {
       {/* MAIN CONTENT WORKSPACE */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
         {/* LEFT TOOLBOX PANEL */}
-        <aside className="w-full md:w-64 bg-slate-900 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col p-4 z-10 max-h-[220px] md:max-h-none overflow-y-auto shrink-0">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
-            <Plus className="w-4 h-4 text-emerald-400" /> Add Workflow Node
+        <aside className="w-full md:w-64 bg-card border-b md:border-b-0 md:border-r border-border flex flex-col p-4 z-10 max-h-[220px] md:max-h-none overflow-y-auto shrink-0">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
+            <Plus className="w-4 h-4 text-primary" /> Add Workflow Node
           </h3>
 
           <div className="space-y-4">
             {/* TRIGGERS */}
             <div>
-              <p className="text-[11px] font-bold text-amber-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+              <p className="text-[11px] font-bold text-status-action uppercase tracking-wide mb-2 flex items-center gap-1.5">
                 <Zap className="w-3.5 h-3.5" /> Triggers
               </p>
               <div className="grid grid-cols-2 md:grid-cols-1 gap-1.5">
                 <button
                   onClick={() => handleAddNode('trigger', 'predictive_churn')}
-                  className="text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-amber-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
+                  className="text-left bg-surface-container hover:bg-surface-container-high border border-border hover:border-status-action/50 p-2 rounded-lg text-xs font-medium text-foreground transition-all flex items-center justify-between"
                 >
                   <span className="truncate">Predictive Churn Risk</span>
-                  <Plus className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1" />
+                  <Plus className="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-1" />
                 </button>
                 <button
                   onClick={() => handleAddNode('trigger', 'payment_failed')}
-                  className="text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-amber-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
+                  className="text-left bg-surface-container hover:bg-surface-container-high border border-border hover:border-status-action/50 p-2 rounded-lg text-xs font-medium text-foreground transition-all flex items-center justify-between"
                 >
                   <span className="truncate">Payment Failed</span>
-                  <Plus className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1" />
+                  <Plus className="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-1" />
                 </button>
               </div>
             </div>
 
             {/* DELAYS */}
             <div>
-              <p className="text-[11px] font-bold text-blue-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+              <p className="text-[11px] font-bold text-secondary uppercase tracking-wide mb-2 flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5" /> Delays & Waiting
               </p>
               <button
                 onClick={() => handleAddNode('delay', 'delay')}
-                className="w-full text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-blue-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
+                className="w-full text-left bg-surface-container hover:bg-surface-container-high border border-border hover:border-secondary/50 p-2 rounded-lg text-xs font-medium text-foreground transition-all flex items-center justify-between"
               >
                 <span>Wait Duration Delay</span>
-                <Plus className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                <Plus className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               </button>
             </div>
 
@@ -876,39 +876,39 @@ export default function MarketingCanvasPage() {
               </p>
               <button
                 onClick={() => handleAddNode('condition', 'debtor_check')}
-                className="w-full text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-purple-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
+                className="w-full text-left bg-surface-container hover:bg-surface-container-high border border-border hover:border-purple-500/50 p-2 rounded-lg text-xs font-medium text-foreground transition-all flex items-center justify-between"
               >
                 <span className="truncate">Check Outstanding Debt</span>
-                <Plus className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                <Plus className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               </button>
             </div>
 
             {/* ACTIONS */}
             <div>
-              <p className="text-[11px] font-bold text-emerald-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+              <p className="text-[11px] font-bold text-status-cleared uppercase tracking-wide mb-2 flex items-center gap-1.5">
                 <MessageSquare className="w-3.5 h-3.5" /> Communication Actions
               </p>
               <div className="grid grid-cols-2 md:grid-cols-1 gap-1.5">
                 <button
                   onClick={() => handleAddNode('action', 'whatsapp')}
-                  className="text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
+                  className="text-left bg-surface-container hover:bg-surface-container-high border border-border hover:border-status-cleared/50 p-2 rounded-lg text-xs font-medium text-foreground transition-all flex items-center justify-between"
                 >
                   <div className="flex items-center gap-1.5 truncate">
-                    <Smartphone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <Smartphone className="w-3.5 h-3.5 text-status-cleared shrink-0" />
                     <span className="truncate">WhatsApp Alert</span>
                   </div>
-                  <Plus className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1" />
+                  <Plus className="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-1" />
                 </button>
 
                 <button
                   onClick={() => handleAddNode('action', 'sms')}
-                  className="text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
+                  className="text-left bg-surface-container hover:bg-surface-container-high border border-border hover:border-secondary/50 p-2 rounded-lg text-xs font-medium text-foreground transition-all flex items-center justify-between"
                 >
                   <div className="flex items-center gap-1.5 truncate">
-                    <MessageSquare className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                    <MessageSquare className="w-3.5 h-3.5 text-secondary shrink-0" />
                     <span className="truncate">Rwanda SMS</span>
                   </div>
-                  <Plus className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1" />
+                  <Plus className="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-1" />
                 </button>
               </div>
             </div>
@@ -916,7 +916,7 @@ export default function MarketingCanvasPage() {
         </aside>
 
         {/* VISUAL CANVAS WORKSPACE */}
-        <main className="flex-1 bg-slate-950 p-4 sm:p-8 overflow-auto relative">
+        <main className="flex-1 bg-background p-4 sm:p-8 overflow-auto relative">
           <div className="min-h-[600px] w-full max-w-4xl mx-auto flex flex-col items-center gap-6 pb-24">
             {currentWorkflow.nodes.map((node, index) => {
               const isSelected = selectedNodeId === node.id;
@@ -926,34 +926,34 @@ export default function MarketingCanvasPage() {
                   {/* NODE CARD */}
                   <div
                     onClick={() => setSelectedNodeId(node.id)}
-                    className={`w-full max-w-md bg-slate-900 border rounded-xl p-4 shadow-xl transition-all cursor-pointer relative group ${
+                    className={`w-full max-w-md bg-card border rounded-xl p-4 shadow-md transition-all cursor-pointer relative group ${
                       isSelected
-                        ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-slate-850'
-                        : 'border-slate-800 hover:border-slate-700'
+                        ? 'border-primary ring-2 ring-primary/20 bg-surface-container'
+                        : 'border-border hover:border-primary/50'
                     }`}
                   >
                     <div
                       className={`absolute top-0 left-4 right-4 h-0.5 rounded-full ${
                         node.type === 'trigger'
-                          ? 'bg-amber-500'
+                          ? 'bg-status-action'
                           : node.type === 'delay'
-                          ? 'bg-blue-500'
+                          ? 'bg-secondary'
                           : node.type === 'condition'
                           ? 'bg-purple-500'
-                          : 'bg-emerald-500'
+                          : 'bg-status-cleared'
                       }`}
                     />
 
                     <div className="flex items-start justify-between mb-2 pt-1">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-slate-950 border border-slate-800 rounded-lg shrink-0">
+                        <div className="p-2 bg-surface-container border border-border rounded-lg shrink-0">
                           {getNodeIcon(node.type, node.subtype)}
                         </div>
                         <div>
-                          <span className="text-[10px] font-extrabold tracking-wider uppercase text-slate-400">
+                          <span className="text-[10px] font-extrabold tracking-wider uppercase text-muted-foreground">
                             {node.type}
                           </span>
-                          <h4 className="text-xs sm:text-sm font-bold text-slate-100">{node.title}</h4>
+                          <h4 className="text-xs sm:text-sm font-headline-md font-bold text-foreground">{node.title}</h4>
                         </div>
                       </div>
 
@@ -962,27 +962,27 @@ export default function MarketingCanvasPage() {
                           e.stopPropagation();
                           handleDeleteNode(node.id);
                         }}
-                        className="text-slate-500 hover:text-rose-400 p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="text-muted-foreground hover:text-status-blocked p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
 
-                    <p className="text-xs text-slate-400 mb-3">{node.description}</p>
+                    <p className="text-xs text-muted-foreground mb-3">{node.description}</p>
 
                     {node.config && Object.keys(node.config).length > 0 && (
-                      <div className="bg-slate-950/80 border border-slate-800/80 rounded-lg p-2.5 text-xs text-slate-300 font-mono">
+                      <div className="bg-surface-container border border-border rounded-lg p-2.5 text-xs text-foreground font-mono-id">
                         {node.config.template && (
-                          <p className="line-clamp-2 italic text-slate-400">&quot;{node.config.template}&quot;</p>
+                          <p className="line-clamp-2 italic text-muted-foreground">&quot;{node.config.template}&quot;</p>
                         )}
                         {node.config.delay_days && (
-                          <p className="text-blue-400 font-sans font-semibold">⏳ Wait {node.config.delay_days} days</p>
+                          <p className="text-secondary font-sans font-semibold">⏳ Wait {node.config.delay_days} days</p>
                         )}
                         {node.config.delay_hours && (
-                          <p className="text-blue-400 font-sans font-semibold">⏳ Wait {node.config.delay_hours} hours</p>
+                          <p className="text-secondary font-sans font-semibold">⏳ Wait {node.config.delay_hours} hours</p>
                         )}
                         {node.config.task_title && (
-                          <p className="text-rose-400 font-sans font-semibold">📋 Task: {node.config.task_title}</p>
+                          <p className="text-status-blocked font-sans font-semibold">📋 Task: {node.config.task_title}</p>
                         )}
                       </div>
                     )}
@@ -991,8 +991,8 @@ export default function MarketingCanvasPage() {
                   {/* CONNECTING ARROW LINE */}
                   {index < currentWorkflow.nodes.length - 1 && (
                     <div className="flex flex-col items-center gap-1 my-1">
-                      <div className="w-0.5 h-6 bg-gradient-to-b from-emerald-500 to-slate-700" />
-                      <ChevronRight className="w-4 h-4 text-slate-500 rotate-90" />
+                      <div className="w-0.5 h-6 bg-gradient-to-b from-primary to-border" />
+                      <ChevronRight className="w-4 h-4 text-muted-foreground rotate-90" />
                     </div>
                   )}
                 </React.Fragment>
@@ -1003,70 +1003,70 @@ export default function MarketingCanvasPage() {
 
         {/* RIGHT SIDE CONFIGURATION DRAWER */}
         {selectedNode && (
-          <aside className="w-full md:w-80 bg-slate-900 border-t md:border-t-0 md:border-l border-slate-800 flex flex-col p-5 z-10 overflow-y-auto shrink-0">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
+          <aside className="w-full md:w-80 bg-card border-t md:border-t-0 md:border-l border-border flex flex-col p-5 z-10 overflow-y-auto shrink-0">
+            <div className="flex items-center justify-between pb-4 border-b border-border mb-4">
               <div className="flex items-center gap-2">
-                <Settings className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-sm font-bold text-slate-200">Node Configuration</h3>
+                <Settings className="w-4 h-4 text-primary" />
+                <h3 className="text-sm font-bold text-foreground">Node Configuration</h3>
               </div>
-              <button onClick={() => setSelectedNodeId(null)} className="p-1 text-slate-400 hover:text-white">
+              <button onClick={() => setSelectedNodeId(null)} className="p-1 text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="space-y-4 text-xs">
               <div>
-                <label className="block text-slate-400 font-medium mb-1">Node Title</label>
+                <label className="block text-muted-foreground font-medium mb-1">Node Title</label>
                 <input
                   type="text"
                   value={selectedNode.title}
                   onChange={(e) => handleUpdateNodeConfig('title', e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-emerald-500 min-h-[38px]"
+                  className="w-full bg-surface border border-border rounded-lg p-2 text-foreground focus:outline-none focus:border-primary min-h-[38px]"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 font-medium mb-1">Description</label>
+                <label className="block text-muted-foreground font-medium mb-1">Description</label>
                 <input
                   type="text"
                   value={selectedNode.description}
                   onChange={(e) => handleUpdateNodeConfig('description', e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-emerald-500 min-h-[38px]"
+                  className="w-full bg-surface border border-border rounded-lg p-2 text-foreground focus:outline-none focus:border-primary min-h-[38px]"
                 />
               </div>
 
               {(selectedNode.subtype === 'sms' || selectedNode.subtype === 'whatsapp') && (
                 <div>
-                  <label className="block text-slate-400 font-medium mb-1">Message Template</label>
+                  <label className="block text-muted-foreground font-medium mb-1">Message Template</label>
                   <textarea
                     rows={4}
                     value={selectedNode.config?.template || ''}
                     onChange={(e) => handleUpdateNodeConfig('template', e.target.value)}
                     placeholder="Enter message template with placeholders like {first_name}..."
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-emerald-500 leading-relaxed font-sans"
+                    className="w-full bg-surface border border-border rounded-lg p-2 text-foreground focus:outline-none focus:border-primary leading-relaxed font-sans"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Available variables: <code className="text-emerald-400">&#123;first_name&#125;</code>, <code className="text-emerald-400">&#123;last_name&#125;</code>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Available variables: <code className="text-primary">&#123;first_name&#125;</code>, <code className="text-primary">&#123;last_name&#125;</code>
                   </p>
                 </div>
               )}
 
               {selectedNode.type === 'delay' && (
                 <div>
-                  <label className="block text-slate-400 font-medium mb-1">Wait Delay (Days)</label>
+                  <label className="block text-muted-foreground font-medium mb-1">Wait Delay (Days)</label>
                   <input
                     type="number"
                     value={selectedNode.config?.delay_days || 1}
                     onChange={(e) => handleUpdateNodeConfig('delay_days', Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-emerald-500 min-h-[38px]"
+                    className="w-full bg-surface border border-border rounded-lg p-2 text-foreground focus:outline-none focus:border-primary min-h-[38px]"
                   />
                 </div>
               )}
 
-              <div className="pt-4 border-t border-slate-800">
+              <div className="pt-4 border-t border-border">
                 <button
                   onClick={() => handleDeleteNode(selectedNode.id)}
-                  className="w-full flex items-center justify-center gap-2 bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 py-2.5 rounded-lg text-xs font-semibold transition-all min-h-[40px]"
+                  className="w-full flex items-center justify-center gap-2 bg-status-blocked/10 border border-status-blocked/30 text-status-blocked hover:bg-status-blocked/20 py-2.5 rounded-lg text-xs font-semibold transition-all min-h-[40px]"
                 >
                   <Trash2 className="w-4 h-4" /> Remove Node
                 </button>
@@ -1078,20 +1078,20 @@ export default function MarketingCanvasPage() {
 
       {/* 1-CLICK PLAYBOOK MODAL */}
       {showPlaybookModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl my-8">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-6">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-card border border-border rounded-2xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl my-8">
+            <div className="flex items-center justify-between pb-4 border-b border-border mb-6">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-purple-500/20 border border-purple-500/30 rounded-xl shrink-0">
-                  <Layers className="w-6 h-6 text-purple-400" />
+                <div className="p-2.5 bg-secondary/20 border border-secondary/30 rounded-xl shrink-0">
+                  <Layers className="w-6 h-6 text-secondary" />
                 </div>
                 <div>
-                  <h3 className="text-base sm:text-lg font-bold text-slate-100">1-Click Marketing Playbook Library</h3>
-                  <p className="text-xs text-slate-400">Pre-built, battle-tested automated retention & acquisition flows</p>
+                  <h3 className="text-base sm:text-lg font-headline-md font-bold text-foreground">1-Click Marketing Playbook Library</h3>
+                  <p className="text-xs text-muted-foreground">Pre-built, battle-tested automated retention & acquisition flows</p>
                 </div>
               </div>
-              <button onClick={() => setShowPlaybookModal(false)} className="p-1">
-                <X className="w-5 h-5 text-slate-400 hover:text-white" />
+              <button onClick={() => setShowPlaybookModal(false)} className="p-1 text-muted-foreground hover:text-foreground">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1100,24 +1100,24 @@ export default function MarketingCanvasPage() {
                 <div
                   key={pb.id}
                   onClick={() => handleSelectPlaybook(pb)}
-                  className="bg-slate-950 hover:bg-slate-850 border border-slate-800 hover:border-purple-500/50 p-4 rounded-xl cursor-pointer transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 group"
+                  className="bg-surface hover:bg-surface-container border border-border hover:border-primary/50 p-4 rounded-xl cursor-pointer transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 group"
                 >
                   <div className="space-y-1.5 max-w-lg">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full">
+                      <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 bg-secondary/20 text-secondary border border-secondary/30 rounded-full">
                         {pb.badge}
                       </span>
-                      <h4 className="text-xs sm:text-sm font-bold text-slate-200 group-hover:text-purple-300 transition-colors">
+                      <h4 className="text-xs sm:text-sm font-bold text-foreground group-hover:text-primary transition-colors">
                         {pb.name}
                       </h4>
                     </div>
-                    <p className="text-xs text-slate-400">{pb.description}</p>
-                    <p className="text-[11px] text-slate-500 font-mono">
+                    <p className="text-xs text-muted-foreground">{pb.description}</p>
+                    <p className="text-[11px] text-muted-foreground font-mono-id">
                       Includes {pb.nodes.length} connected nodes
                     </p>
                   </div>
 
-                  <button className="flex items-center gap-1 text-xs font-bold text-purple-400 group-hover:text-purple-300 bg-purple-500/10 group-hover:bg-purple-500/20 border border-purple-500/30 px-3 py-1.5 rounded-lg transition-all min-h-[36px] shrink-0 self-end sm:self-auto">
+                  <button className="flex items-center gap-1 text-xs font-bold text-primary bg-primary/10 group-hover:bg-primary/20 border border-primary/30 px-3 py-1.5 rounded-lg transition-all min-h-[36px] shrink-0 self-end sm:self-auto">
                     Load Playbook <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
