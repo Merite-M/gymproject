@@ -10,7 +10,7 @@ import { AccessOutcome } from "@/components/access-outcome";
 import { BalanceWarning } from "@/components/balance-warning";
 import { WaiverWarning } from "@/components/waiver-warning";
 import { useTenantId } from "@/contexts/AuthContext";
-import { Users, LogOut, LogIn, FileSignature, UserPlus, Ticket, CheckCircle2, ShieldCheck, Camera } from "lucide-react";
+import { Users, LogOut, LogIn, FileSignature, UserPlus, Ticket, ShieldCheck, Camera } from "lucide-react";
 import { ContractSignerModal } from "@/components/contract-signer-modal";
 import {
   fetchOccupancy,
@@ -166,27 +166,27 @@ export default function ReceptionPage() {
   };
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-card px-6 py-4">
-        <div className="flex items-center justify-between">
+      <header className="border-b border-border bg-card px-4 sm:px-6 py-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-headline-md font-bold text-foreground">Reception Monitor</h1>
-            <p className="text-sm text-muted-foreground">Real-time check-in and access control</p>
+            <h1 className="text-xl sm:text-2xl font-headline-md font-bold text-foreground">Reception Monitor</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground">Real-time check-in and access control</p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
             {/* Visitor Check-In Trigger Button */}
             <button
               onClick={() => setIsVisitorModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-lg shadow transition"
+              className="flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm rounded-lg shadow transition min-h-[44px]"
             >
               <UserPlus className="size-4" />
               <span>Visitor Check-In</span>
             </button>
 
             {/* Live Occupancy Badge */}
-            <div className="flex items-center gap-3 px-4 py-2 bg-surface-container rounded-lg border border-border">
-              <Users className="size-4 text-muted-foreground" />
+            <div className="flex items-center gap-3 px-3.5 py-2 bg-surface-container rounded-lg border border-border min-h-[44px]">
+              <Users className="size-4 text-muted-foreground shrink-0" />
               <div className="flex flex-col">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Inside Facility</span>
                 <div className="flex items-baseline gap-1">
@@ -225,17 +225,17 @@ export default function ReceptionPage() {
         </div>
       </header>
 
-      {/* Main Content - 65/35 Split */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel - 65% */}
-        <div className="w-[65%] flex flex-col border-r border-border">
+      {/* Main Content - Responsive Split */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
+        {/* Left Panel */}
+        <div className="w-full lg:w-[65%] flex flex-col border-b lg:border-b-0 lg:border-r border-border">
           {/* Search and Scanner Area */}
-          <div className="p-6 border-b border-border">
+          <div className="p-4 sm:p-6 border-b border-border">
             <MemberSearch onMemberSelect={setSelectedMember} />
           </div>
 
           {/* Scan Queue */}
-          <div className="flex-1 p-6 overflow-y-auto">
+          <div className="flex-1 p-4 sm:p-6 overflow-y-auto min-h-[200px]">
             <ScanQueue queue={scanQueue} onSelect={setSelectedMember} />
           </div>
 
@@ -245,10 +245,10 @@ export default function ReceptionPage() {
           </div>
         </div>
 
-        {/* Right Panel - 35% */}
-        <div className="w-[35%] flex flex-col bg-card">
+        {/* Right Panel */}
+        <div className="w-full lg:w-[35%] flex flex-col bg-card border-t lg:border-t-0 border-border">
           {/* Persistent Visitor Card */}
-          <div className="flex-1 p-6 overflow-y-auto">
+          <div className="flex-1 p-4 sm:p-6 overflow-y-auto min-h-[250px]">
             {selectedMember ? (
               <>
                 <VisitorCard member={selectedMember} />
@@ -269,7 +269,7 @@ export default function ReceptionPage() {
                 </div>
               </>
             ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
+              <div className="flex items-center justify-center h-full py-12 lg:py-0 text-muted-foreground">
                 <div className="text-center">
                   <p className="text-sm">Select a member to view details</p>
                   <p className="text-xs mt-2">Use scanner or search above</p>
@@ -281,11 +281,11 @@ export default function ReceptionPage() {
           {/* Quick Actions */}
           {selectedMember && (
             <div className="p-4 border-t border-border bg-muted/50">
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <button
                   onClick={handleCheckIn}
                   disabled={isProcessing}
-                  className="px-3 py-2 bg-status-cleared text-status-cleared-foreground rounded-lg text-sm font-medium hover:bg-status-cleared/80 min-h-[44px] flex items-center justify-center gap-1.5"
+                  className="px-3 py-2 bg-status-cleared text-status-cleared-foreground rounded-lg text-xs sm:text-sm font-medium hover:bg-status-cleared/80 min-h-[44px] flex items-center justify-center gap-1.5"
                 >
                   <LogIn className="size-4" />
                   <span>Check In</span>
@@ -293,17 +293,17 @@ export default function ReceptionPage() {
                 <button
                   onClick={handleCheckOut}
                   disabled={isProcessing}
-                  className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/80 min-h-[44px] flex items-center justify-center gap-1.5"
+                  className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-xs sm:text-sm font-medium hover:bg-primary/80 min-h-[44px] flex items-center justify-center gap-1.5"
                 >
                   <LogOut className="size-4" />
                   <span>Check Out</span>
                 </button>
-                <button className="px-3 py-2 bg-status-action text-status-action-foreground rounded-lg text-sm font-medium hover:bg-status-action/80 min-h-[44px]">
+                <button className="px-3 py-2 bg-status-action text-status-action-foreground rounded-lg text-xs sm:text-sm font-medium hover:bg-status-action/80 min-h-[44px]">
                   MoMo Pay
                 </button>
                 <button
                   onClick={() => setIsContractModalOpen(true)}
-                  className="px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-medium hover:bg-secondary/80 min-h-[44px] flex items-center justify-center gap-1.5"
+                  className="px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-xs sm:text-sm font-medium hover:bg-secondary/80 min-h-[44px] flex items-center justify-center gap-1.5"
                 >
                   <FileSignature className="size-4" />
                   <span>Sign Agreement</span>
@@ -322,7 +322,7 @@ export default function ReceptionPage() {
           tenantId={tenantId}
           profileId={selectedMember.id}
           memberFullName={`${selectedMember.first_name || ''} ${selectedMember.last_name || ''}`.trim()}
-          onSignedSuccess={(contract) => {
+          onSignedSuccess={() => {
             setSelectedMember((prev: any) => prev ? { ...prev, waiver_valid: true, waiver_signed: true } : null);
           }}
         />
@@ -330,23 +330,23 @@ export default function ReceptionPage() {
 
       {/* Visitor Check-In Modal */}
       {isVisitorModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-2xl w-full max-w-lg p-6 space-y-5 shadow-2xl">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl my-8">
             <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="text-lg font-bold flex items-center gap-2">
+              <h3 className="text-base sm:text-lg font-bold flex items-center gap-2">
                 <Ticket className="w-5 h-5 text-emerald-500" />
                 Visitor Check-In & Guest Pass Entry
               </h3>
               <button
                 onClick={() => setIsVisitorModalOpen(false)}
-                className="text-muted-foreground hover:text-foreground text-sm font-bold"
+                className="text-muted-foreground hover:text-foreground text-sm font-bold min-h-[36px] min-w-[36px]"
               >
                 ✕
               </button>
             </div>
 
             <form onSubmit={handleVisitorCheckIn} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-muted-foreground">Visitor Full Name *</label>
                   <input
@@ -355,7 +355,7 @@ export default function ReceptionPage() {
                     placeholder="e.g. Jane Smith"
                     value={visitorName}
                     onChange={(e) => setVisitorName(e.target.value)}
-                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[40px]"
                   />
                 </div>
 
@@ -367,12 +367,12 @@ export default function ReceptionPage() {
                     placeholder="e.g. +250 788 123 456"
                     value={visitorPhone}
                     onChange={(e) => setVisitorPhone(e.target.value)}
-                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[40px]"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-muted-foreground">Email Address (Optional)</label>
                   <input
@@ -380,7 +380,7 @@ export default function ReceptionPage() {
                     placeholder="e.g. jane@example.com"
                     value={visitorEmail}
                     onChange={(e) => setVisitorEmail(e.target.value)}
-                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[40px]"
                   />
                 </div>
 
@@ -391,7 +391,7 @@ export default function ReceptionPage() {
                     placeholder="e.g. GP-X89K2P"
                     value={passCode}
                     onChange={(e) => setPassCode(e.target.value)}
-                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[40px]"
                   />
                 </div>
               </div>
@@ -407,7 +407,7 @@ export default function ReceptionPage() {
                   placeholder="https://... photo url"
                   value={photoUrl}
                   onChange={(e) => setPhotoUrl(e.target.value)}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[40px]"
                 />
               </div>
 
@@ -418,7 +418,7 @@ export default function ReceptionPage() {
                     type="checkbox"
                     checked={waiverSigned}
                     onChange={(e) => setWaiverSigned(e.target.checked)}
-                    className="mt-0.5 rounded border-border text-emerald-600 focus:ring-emerald-500"
+                    className="mt-0.5 rounded border-border text-emerald-600 focus:ring-emerald-500 size-4"
                   />
                   <div className="text-xs space-y-0.5">
                     <span className="font-bold text-foreground flex items-center gap-1">
@@ -436,14 +436,14 @@ export default function ReceptionPage() {
                 <button
                   type="button"
                   onClick={() => setIsVisitorModalOpen(false)}
-                  className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-medium hover:bg-secondary/80"
+                  className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-medium hover:bg-secondary/80 min-h-[44px]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingVisitor}
-                  className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-500 transition shadow disabled:opacity-50 flex items-center gap-1.5"
+                  className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-500 transition shadow disabled:opacity-50 flex items-center gap-1.5 min-h-[44px]"
                 >
                   {isSubmittingVisitor ? "Processing..." : "Complete Visitor Check-In"}
                 </button>

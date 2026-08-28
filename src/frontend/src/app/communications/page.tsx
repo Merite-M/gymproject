@@ -28,25 +28,19 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  MessageSquare,
   Send,
   Radio,
   History,
   Settings2,
   CheckCircle2,
   AlertCircle,
-  Smartphone,
   Users,
   Sparkles,
-  Zap,
   RotateCw,
   Search,
-  Filter,
   RefreshCw,
-  Clock,
   ArrowUpRight,
   ArrowDownLeft,
-  Mail,
   Bell
 } from 'lucide-react';
 
@@ -64,7 +58,7 @@ export default function CommunicationsPage() {
   // Data States
   const [logs, setLogs] = useState<CommunicationLog[]>([]);
   const [campaigns, setCampaigns] = useState<BroadcastCampaign[]>([]);
-  const [configs, setConfigs] = useState<GatewayConfig[]>([]);
+  const [, setConfigs] = useState<GatewayConfig[]>([]);
 
   // Single Dispatch Form
   const [singlePhone, setSinglePhone] = useState('');
@@ -202,13 +196,13 @@ export default function CommunicationsPage() {
   const totalInApp = logs.filter(l => l.channel === 'in_app').length;
 
   return (
-    <div className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto min-h-screen pb-24">
+    <div className="p-4 sm:p-6 md:p-8 space-y-6 max-w-7xl mx-auto min-h-screen pb-24">
 
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-5">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold font-heading text-foreground tracking-tight">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl sm:text-2xl font-bold font-heading text-foreground tracking-tight">
               Staff Communication Hub
             </h1>
             <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-xs font-mono">
@@ -226,7 +220,7 @@ export default function CommunicationsPage() {
             size="sm"
             onClick={loadAllData}
             disabled={loading}
-            className="text-xs gap-1.5"
+            className="text-xs gap-1.5 min-h-[36px]"
           >
             <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>Refresh Telemetry</span>
@@ -234,7 +228,7 @@ export default function CommunicationsPage() {
           <Button
             size="sm"
             onClick={() => setActiveTab('send')}
-            className="text-xs gap-1.5 bg-primary text-primary-foreground font-semibold"
+            className="text-xs gap-1.5 bg-primary text-primary-foreground font-semibold min-h-[36px]"
           >
             <Send className="size-3.5" />
             <span>New Direct Message</span>
@@ -261,7 +255,7 @@ export default function CommunicationsPage() {
           </div>
           <button
             onClick={() => setFeedback(null)}
-            className="opacity-70 hover:opacity-100 text-xs font-bold"
+            className="opacity-70 hover:opacity-100 text-xs font-bold p-1"
           >
             Dismiss
           </button>
@@ -309,32 +303,34 @@ export default function CommunicationsPage() {
 
       {/* NAVIGATION TABS */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="bg-surface border border-border p-1 rounded-xl">
-          <TabsTrigger value="logs" className="text-xs gap-1.5 py-2 px-3">
-            <History className="size-3.5" />
-            <span>Communication Logs</span>
-          </TabsTrigger>
-          <TabsTrigger value="send" className="text-xs gap-1.5 py-2 px-3">
-            <Send className="size-3.5" />
-            <span>Direct Message</span>
-          </TabsTrigger>
-          <TabsTrigger value="broadcast" className="text-xs gap-1.5 py-2 px-3">
-            <Sparkles className="size-3.5" />
-            <span>Mass Broadcast</span>
-          </TabsTrigger>
-          <TabsTrigger value="campaigns" className="text-xs gap-1.5 py-2 px-3">
-            <Users className="size-3.5" />
-            <span>Campaign History</span>
-          </TabsTrigger>
-          <TabsTrigger value="gateways" className="text-xs gap-1.5 py-2 px-3">
-            <Settings2 className="size-3.5" />
-            <span>Gateway Health</span>
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto pb-1">
+          <TabsList className="bg-surface border border-border p-1 rounded-xl min-w-max flex">
+            <TabsTrigger value="logs" className="text-xs gap-1.5 py-2 px-3 min-h-[36px]">
+              <History className="size-3.5" />
+              <span>Communication Logs</span>
+            </TabsTrigger>
+            <TabsTrigger value="send" className="text-xs gap-1.5 py-2 px-3 min-h-[36px]">
+              <Send className="size-3.5" />
+              <span>Direct Message</span>
+            </TabsTrigger>
+            <TabsTrigger value="broadcast" className="text-xs gap-1.5 py-2 px-3 min-h-[36px]">
+              <Sparkles className="size-3.5" />
+              <span>Mass Broadcast</span>
+            </TabsTrigger>
+            <TabsTrigger value="campaigns" className="text-xs gap-1.5 py-2 px-3 min-h-[36px]">
+              <Users className="size-3.5" />
+              <span>Campaign History</span>
+            </TabsTrigger>
+            <TabsTrigger value="gateways" className="text-xs gap-1.5 py-2 px-3 min-h-[36px]">
+              <Settings2 className="size-3.5" />
+              <span>Gateway Health</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* TAB 1: COMMUNICATION LOGS */}
         <TabsContent value="logs" className="space-y-4 outline-none">
-          <Card className="border-border bg-card">
+          <Card className="border-border bg-card overflow-hidden">
             <CardHeader className="pb-4 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <CardTitle className="text-base font-heading font-bold">Outbound & Inbound Message Stream</CardTitle>
@@ -345,13 +341,13 @@ export default function CommunicationsPage() {
 
               {/* FILTER BAR */}
               <div className="flex flex-wrap items-center gap-2">
-                <div className="relative">
+                <div className="relative flex-1 sm:flex-none">
                   <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     placeholder="Search logs..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="h-8 text-xs pl-8 w-44 bg-surface border-border"
+                    className="h-8 text-xs pl-8 w-full sm:w-44 bg-surface border-border"
                   />
                 </div>
 
@@ -381,7 +377,7 @@ export default function CommunicationsPage() {
               </div>
             </CardHeader>
 
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader className="bg-surface-container/50">
                   <TableRow>
@@ -438,7 +434,7 @@ export default function CommunicationsPage() {
                             <div className="font-semibold text-foreground">{recipientName}</div>
                             <div className="text-[11px] font-mono text-muted-foreground">{recipientPhone}</div>
                           </TableCell>
-                          <TableCell className="max-w-md text-xs text-muted-foreground truncate">
+                          <TableCell className="max-w-xs sm:max-w-md text-xs text-muted-foreground truncate">
                             {log.content}
                             {log.error_message && (
                               <div className="text-[10px] text-status-blocked mt-0.5 truncate font-mono">
@@ -555,7 +551,7 @@ export default function CommunicationsPage() {
                   <Button
                     type="submit"
                     disabled={sendingSingle}
-                    className="text-xs gap-1.5 bg-primary text-primary-foreground font-semibold"
+                    className="text-xs gap-1.5 bg-primary text-primary-foreground font-semibold min-h-[40px]"
                   >
                     {sendingSingle ? <RotateCw className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
                     <span>Send Direct Message</span>
@@ -637,7 +633,7 @@ export default function CommunicationsPage() {
                   <Button
                     type="submit"
                     disabled={sendingBroadcast}
-                    className="text-xs gap-1.5 bg-primary text-primary-foreground font-semibold"
+                    className="text-xs gap-1.5 bg-primary text-primary-foreground font-semibold min-h-[40px]"
                   >
                     {sendingBroadcast ? <RotateCw className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
                     <span>Launch Broadcast Campaign</span>
@@ -650,12 +646,12 @@ export default function CommunicationsPage() {
 
         {/* TAB 4: CAMPAIGN HISTORY */}
         <TabsContent value="campaigns" className="space-y-4 outline-none">
-          <Card className="border-border bg-card">
+          <Card className="border-border bg-card overflow-hidden">
             <CardHeader className="pb-4 border-b border-border">
               <CardTitle className="text-base font-heading font-bold">Past Broadcast Campaigns</CardTitle>
               <CardDescription className="text-xs">Summary of mass dispatches, delivery counts, and target segments</CardDescription>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader className="bg-surface-container/50">
                   <TableRow>
