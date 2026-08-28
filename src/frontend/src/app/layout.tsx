@@ -55,7 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </a>
               <NavigationRail />
               <OfflineIndicator />
-              <main className="flex-1 ml-[240px] min-h-screen" id="main-content" role="main">
+              <main className="flex-1 ml-0 lg:ml-[240px] pt-14 lg:pt-0 min-h-screen" id="main-content" role="main">
                 {children}
               </main>
             </AppStateProvider>

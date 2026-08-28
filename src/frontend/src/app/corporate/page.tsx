@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import { jsPDF } from "jspdf";
 import { useTenantId } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
@@ -39,31 +38,22 @@ import {
   Receipt,
   Plus,
   Search,
-  Mail,
-  Phone,
-  CreditCard,
-  CheckCircle2,
   AlertCircle,
   Loader2,
   Download,
   Trash2,
-  Calendar,
   X,
   FileSpreadsheet,
   Upload,
-  PieChart,
   Activity,
   DollarSign,
   ShieldCheck,
   Zap,
   SlidersHorizontal,
-  ExternalLink,
-  ChevronRight,
   TrendingUp,
   UserCheck,
   UserX,
-  Sparkles,
-  ArrowUpRight
+  Sparkles
 } from "lucide-react";
 
 export default function CorporateB2BPortalPage() {
@@ -200,7 +190,6 @@ export default function CorporateB2BPortalPage() {
     }
   }, [selectedAccountId, fetchSelectedAccountDetails]);
 
-  // Handle Save Corporate Account
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tenantId) return;
@@ -238,7 +227,6 @@ export default function CorporateB2BPortalPage() {
     }
   };
 
-  // Handle Co-Pay Split Update
   const handleUpdateCoPayConfig = async () => {
     if (!tenantId || !accountDetails) return;
     try {
@@ -265,14 +253,12 @@ export default function CorporateB2BPortalPage() {
     }
   };
 
-  // Handle Add Single Employee
   const handleAddEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tenantId || !selectedAccountId) return;
     try {
       setLoading(true);
 
-      // Find or create profile via Supabase
       let profileId = "";
       const { data: existingProf } = await supabase
         .from('profiles')
@@ -329,7 +315,6 @@ export default function CorporateB2BPortalPage() {
     }
   };
 
-  // Handle CSV Roster Parse
   const handleParseCsv = (text: string) => {
     setCsvText(text);
     if (!text.trim()) {
@@ -340,7 +325,6 @@ export default function CorporateB2BPortalPage() {
     const lines = text.trim().split("\n");
     const rows: Array<any> = [];
 
-    // Header check
     const startIdx = lines[0].toLowerCase().includes("email") ? 1 : 0;
 
     for (let i = startIdx; i < lines.length; i++) {
@@ -360,7 +344,6 @@ export default function CorporateB2BPortalPage() {
     setParsedCsvRows(rows);
   };
 
-  // Handle CSV Bulk Submit
   const handleBulkSubmitCsv = async () => {
     if (!tenantId || !selectedAccountId || parsedCsvRows.length === 0) return;
     try {
@@ -383,7 +366,6 @@ export default function CorporateB2BPortalPage() {
     }
   };
 
-  // Handle Revoke / Toggle Employee Status
   const handleToggleEmployeeStatus = async (member: CorporateMember) => {
     if (!tenantId || !selectedAccountId) return;
     const newStatus = member.status === 'active' ? 'suspended' : 'active';
@@ -400,7 +382,6 @@ export default function CorporateB2BPortalPage() {
     }
   };
 
-  // Handle Remove Employee
   const handleRemoveEmployee = async (profileId: string) => {
     if (!tenantId || !selectedAccountId) return;
     if (!confirm("Are you sure you want to remove this employee from corporate sponsorship?")) return;
@@ -412,7 +393,6 @@ export default function CorporateB2BPortalPage() {
     }
   };
 
-  // Handle Generate Monthly Consolidated Invoice
   const handleGenerateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tenantId || !selectedAccountId) return;
@@ -436,7 +416,6 @@ export default function CorporateB2BPortalPage() {
     }
   };
 
-  // Handle Paypack B2B Payment Link Trigger
   const handleTriggerPaypackLink = async (invoice: CorporateInvoice) => {
     if (!tenantId) return;
     try {
@@ -458,7 +437,6 @@ export default function CorporateB2BPortalPage() {
     }
   };
 
-  // Handle Settle Invoice Payment
   const handleSettleInvoice = async (invoiceId: string, method: string) => {
     if (!tenantId) return;
     try {
@@ -479,7 +457,6 @@ export default function CorporateB2BPortalPage() {
     }
   };
 
-  // Export PDF Statement
   const handleDownloadInvoicePdf = (invoice: CorporateInvoice) => {
     const doc = new jsPDF();
     const company = accountDetails?.account?.company_name || "Corporate Client";
@@ -535,7 +512,6 @@ export default function CorporateB2BPortalPage() {
     doc.save(`${invoice.invoice_number}_statement.pdf`);
   };
 
-  // Filter Members
   const filteredMembers = (accountDetails?.members || []).filter(m => {
     const p = m.profiles;
     const name = `${p?.first_name || ''} ${p?.last_name || ''}`.toLowerCase();
@@ -550,13 +526,11 @@ export default function CorporateB2BPortalPage() {
     return matchesQuery && matchesDept;
   });
 
-  // Calculate Engagement Analytics
   const totalEmployees = accountDetails?.members?.length || 0;
   const activePasses = (accountDetails?.members || []).filter(m => m.status === 'active').length;
   const employerFundedPercent = accountDetails?.account?.subsidy_percentage || 70;
   const employeeFundedPercent = 100 - employerFundedPercent;
 
-  // Monthly Subsidized Spent Total across active members
   const estimatedMonthlyEmployerSpend = (accountDetails?.members || []).reduce((sum, m) => {
     const base = 50000;
     const cap = m.subsidy_cap ? Number(m.subsidy_cap) : Infinity;
@@ -564,21 +538,20 @@ export default function CorporateB2BPortalPage() {
     return sum + employerShare;
   }, 0);
 
-  // Extract Departments for Filter
   const departments = Array.from(new Set((accountDetails?.members || []).map(m => m.department).filter(Boolean)));
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 md:p-8 space-y-8 text-slate-900 dark:text-slate-100">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 md:p-8 space-y-6 text-slate-900 dark:text-slate-100">
       {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-md">
+            <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-md shrink-0">
               <Building2 className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Corporate Wellness B2B Portal</h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Corporate Wellness B2B Portal</h1>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
                 Manage enterprise corporate sponsor accounts, employee benefit quotas, subsidized co-pay splits, and B2B billing.
               </p>
             </div>
@@ -587,12 +560,12 @@ export default function CorporateB2BPortalPage() {
 
         <div className="flex items-center gap-3 flex-wrap">
           {/* Company Switcher */}
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-slate-500">Corporate Account:</Label>
+          <div className="flex items-center gap-2 flex-1 sm:flex-none">
+            <Label className="text-xs text-slate-500 whitespace-nowrap">Corporate Account:</Label>
             <select
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
-              className="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm px-3 py-2 font-medium focus:ring-2 focus:ring-indigo-500"
+              className="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs sm:text-sm px-3 py-2 font-medium focus:ring-2 focus:ring-indigo-500 min-h-[40px] w-full sm:w-auto"
             >
               {accounts.map((acc) => (
                 <option key={acc.id} value={acc.id}>
@@ -605,7 +578,7 @@ export default function CorporateB2BPortalPage() {
           <Button
             onClick={() => setShowNewAccountModal(true)}
             variant="outline"
-            className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-950/50"
+            className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-950/50 min-h-[40px]"
           >
             <Plus className="w-4 h-4 mr-2" />
             New Corporate Client
@@ -616,8 +589,8 @@ export default function CorporateB2BPortalPage() {
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-5 h-5" />
-            <span>{error}</span>
+            <AlertCircle className="w-5 h-5 shrink-0" />
+            <span className="text-xs sm:text-sm">{error}</span>
           </div>
           <Button variant="ghost" size="sm" onClick={() => setError(null)}>
             Dismiss
@@ -633,18 +606,18 @@ export default function CorporateB2BPortalPage() {
       ) : accountDetails ? (
         <>
           {/* Metric Cards - HR Analytics & Engagement Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-              <CardContent className="p-6">
+              <CardContent className="p-5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Enrolled Employees</p>
+                    <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Total Enrolled Employees</p>
                     <h3 className="text-2xl font-bold mt-1">{totalEmployees}</h3>
                     <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
                       <TrendingUp className="w-3 h-3" /> {activePasses} active passes ({totalEmployees > 0 ? Math.round((activePasses/totalEmployees)*100) : 0}%)
                     </p>
                   </div>
-                  <div className="p-3 bg-blue-50 dark:bg-blue-950/50 text-blue-600 rounded-xl">
+                  <div className="p-3 bg-blue-50 dark:bg-blue-950/50 text-blue-600 rounded-xl shrink-0">
                     <Users className="w-6 h-6" />
                   </div>
                 </div>
@@ -652,16 +625,16 @@ export default function CorporateB2BPortalPage() {
             </Card>
 
             <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-              <CardContent className="p-6">
+              <CardContent className="p-5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Subsidized Split Ratio</p>
+                    <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Subsidized Split Ratio</p>
                     <h3 className="text-2xl font-bold mt-1 text-indigo-600 dark:text-indigo-400">
                       {employerFundedPercent}% / {employeeFundedPercent}%
                     </h3>
                     <p className="text-xs text-slate-500 mt-1">Employer / Employee Co-Pay</p>
                   </div>
-                  <div className="p-3 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 rounded-xl">
+                  <div className="p-3 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 rounded-xl shrink-0">
                     <SlidersHorizontal className="w-6 h-6" />
                   </div>
                 </div>
@@ -669,16 +642,16 @@ export default function CorporateB2BPortalPage() {
             </Card>
 
             <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-              <CardContent className="p-6">
+              <CardContent className="p-5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Est. Monthly Subsidy Budget</p>
+                    <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Est. Monthly Subsidy Budget</p>
                     <h3 className="text-2xl font-bold mt-1">
                       RWF {Math.round(estimatedMonthlyEmployerSpend).toLocaleString()}
                     </h3>
                     <p className="text-xs text-slate-500 mt-1">Based on active headcount</p>
                   </div>
-                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 rounded-xl">
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 rounded-xl shrink-0">
                     <DollarSign className="w-6 h-6" />
                   </div>
                 </div>
@@ -686,16 +659,16 @@ export default function CorporateB2BPortalPage() {
             </Card>
 
             <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-              <CardContent className="p-6">
+              <CardContent className="p-5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Outstanding Invoice Balance</p>
+                    <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Outstanding Invoice Balance</p>
                     <h3 className="text-2xl font-bold mt-1 text-amber-600 dark:text-amber-400">
                       RWF {Number(accountDetails.account.outstanding_balance || 0).toLocaleString()}
                     </h3>
                     <p className="text-xs text-slate-500 mt-1">{accountDetails.invoices.filter(i => i.status !== 'paid').length} unpaid invoice(s)</p>
                   </div>
-                  <div className="p-3 bg-amber-50 dark:bg-amber-950/50 text-amber-600 rounded-xl">
+                  <div className="p-3 bg-amber-50 dark:bg-amber-950/50 text-amber-600 rounded-xl shrink-0">
                     <Receipt className="w-6 h-6" />
                   </div>
                 </div>
@@ -705,70 +678,72 @@ export default function CorporateB2BPortalPage() {
 
           {/* Main Tabbed Area */}
           <Tabs defaultValue="roster" className="space-y-6">
-            <TabsList className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl">
-              <TabsTrigger value="roster" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-lg px-4 py-2 text-sm font-medium">
-                <Users className="w-4 h-4 mr-2" />
-                Employee Roster & Benefit Quotas
-              </TabsTrigger>
-              <TabsTrigger value="copay" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-lg px-4 py-2 text-sm font-medium">
-                <SlidersHorizontal className="w-4 h-4 mr-2" />
-                Co-Pay & Subsidy Split Configuration
-              </TabsTrigger>
-              <TabsTrigger value="billing" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-lg px-4 py-2 text-sm font-medium">
-                <Receipt className="w-4 h-4 mr-2" />
-                Invoices & B2B Payments
-              </TabsTrigger>
-              <TabsTrigger value="analytics" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-lg px-4 py-2 text-sm font-medium">
-                <Activity className="w-4 h-4 mr-2" />
-                Wellness Engagement Analytics
-              </TabsTrigger>
-            </TabsList>
+            <div className="overflow-x-auto pb-1">
+              <TabsList className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl min-w-max flex">
+                <TabsTrigger value="roster" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-lg px-4 py-2 text-xs sm:text-sm font-medium min-h-[36px]">
+                  <Users className="w-4 h-4 mr-2" />
+                  Employee Roster & Benefit Quotas
+                </TabsTrigger>
+                <TabsTrigger value="copay" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-lg px-4 py-2 text-xs sm:text-sm font-medium min-h-[36px]">
+                  <SlidersHorizontal className="w-4 h-4 mr-2" />
+                  Co-Pay & Subsidy Split Configuration
+                </TabsTrigger>
+                <TabsTrigger value="billing" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-lg px-4 py-2 text-xs sm:text-sm font-medium min-h-[36px]">
+                  <Receipt className="w-4 h-4 mr-2" />
+                  Invoices & B2B Payments
+                </TabsTrigger>
+                <TabsTrigger value="analytics" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-lg px-4 py-2 text-xs sm:text-sm font-medium min-h-[36px]">
+                  <Activity className="w-4 h-4 mr-2" />
+                  Wellness Engagement Analytics
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
-            {/* TAB 1: EMPLOYEE ROSTER & BENIFIT ACCESS */}
+            {/* TAB 1: EMPLOYEE ROSTER & BENEFIT ACCESS */}
             <TabsContent value="roster" className="space-y-4">
-              <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+              <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 overflow-hidden">
                 <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
                   <div>
-                    <CardTitle className="text-lg font-bold flex items-center gap-2">
+                    <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
                       <Users className="w-5 h-5 text-indigo-600" />
                       Employee Benefit Access Roster
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="text-xs sm:text-sm">
                       Manage employee benefit approvals, department tags, individual subsidy caps, and access status.
                     </CardDescription>
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Button onClick={() => setShowCsvUploadModal(true)} variant="outline" size="sm">
-                      <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-600" />
+                    <Button onClick={() => setShowCsvUploadModal(true)} variant="outline" size="sm" className="text-xs min-h-[36px]">
+                      <FileSpreadsheet className="w-4 h-4 mr-1.5 text-emerald-600" />
                       Bulk Upload CSV Roster
                     </Button>
-                    <Button onClick={() => setShowAddEmployeeModal(true)} size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white">
-                      <Plus className="w-4 h-4 mr-2" />
+                    <Button onClick={() => setShowAddEmployeeModal(true)} size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs min-h-[36px]">
+                      <Plus className="w-4 h-4 mr-1.5" />
                       Add Employee
                     </Button>
                   </div>
                 </CardHeader>
 
-                <CardContent className="p-6 space-y-4">
+                <CardContent className="p-4 sm:p-6 space-y-4">
                   {/* Search and Filters */}
-                  <div className="flex flex-col md:flex-row gap-4 justify-between">
+                  <div className="flex flex-col md:flex-row gap-3 justify-between">
                     <div className="relative flex-1 max-w-md">
                       <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                       <Input
-                        placeholder="Search employee by name, email, or employee ID..."
+                        placeholder="Search employee by name, email, or ID..."
                         value={memberSearchQuery}
                         onChange={(e) => setMemberSearchQuery(e.target.value)}
-                        className="pl-9"
+                        className="pl-9 text-xs sm:text-sm min-h-[38px]"
                       />
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <Label className="text-xs text-slate-500">Department:</Label>
+                      <Label className="text-xs text-slate-500 whitespace-nowrap">Department:</Label>
                       <select
                         value={departmentFilter}
                         onChange={(e) => setDepartmentFilter(e.target.value)}
-                        className="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm px-3 py-2 font-medium"
+                        className="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs sm:text-sm px-3 py-2 font-medium min-h-[38px]"
                       >
                         <option value="all">All Departments ({accountDetails.members.length})</option>
                         {departments.map((d) => (
@@ -779,22 +754,22 @@ export default function CorporateB2BPortalPage() {
                   </div>
 
                   {/* Table */}
-                  <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                  <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-x-auto">
                     <Table>
                       <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
                         <TableRow>
-                          <TableHead>Employee</TableHead>
-                          <TableHead>ID & Department</TableHead>
-                          <TableHead>Benefit Status</TableHead>
-                          <TableHead>Monthly Subsidy Cap</TableHead>
-                          <TableHead>Joined</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
+                          <TableHead className="text-xs">Employee</TableHead>
+                          <TableHead className="text-xs">ID & Department</TableHead>
+                          <TableHead className="text-xs">Benefit Status</TableHead>
+                          <TableHead className="text-xs">Monthly Subsidy Cap</TableHead>
+                          <TableHead className="text-xs">Joined</TableHead>
+                          <TableHead className="text-right text-xs">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {filteredMembers.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={6} className="text-center py-8 text-slate-500">
+                            <TableCell colSpan={6} className="text-center py-8 text-xs text-slate-500">
                               No employees found matching the filters.
                             </TableCell>
                           </TableRow>
@@ -806,49 +781,49 @@ export default function CorporateB2BPortalPage() {
                               <TableRow key={m.id}>
                                 <TableCell>
                                   <div>
-                                    <div className="font-semibold text-slate-900 dark:text-slate-100">
+                                    <div className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-slate-100">
                                       {p?.first_name} {p?.last_name}
                                     </div>
-                                    <div className="text-xs text-slate-500">{p?.email}</div>
+                                    <div className="text-[11px] text-slate-500">{p?.email}</div>
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  <div className="text-sm font-mono text-slate-600 dark:text-slate-400">
+                                  <div className="text-xs font-mono text-slate-600 dark:text-slate-400">
                                     {m.employee_id_number || 'N/A'}
                                   </div>
-                                  <Badge variant="outline" className="text-xs mt-0.5">
+                                  <Badge variant="outline" className="text-[10px] mt-0.5">
                                     {m.department || 'General'}
                                   </Badge>
                                 </TableCell>
                                 <TableCell>
-                                  <Badge className={isActive ? "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300" : "bg-red-100 text-red-800 border-red-200"}>
+                                  <Badge className={isActive ? "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300 text-[10px]" : "bg-red-100 text-red-800 border-red-200 text-[10px]"}>
                                     {isActive ? "Active Benefit" : "Revoked"}
                                   </Badge>
                                 </TableCell>
-                                <TableCell className="font-medium">
+                                <TableCell className="font-medium text-xs">
                                   {m.subsidy_cap ? `RWF ${Number(m.subsidy_cap).toLocaleString()}` : 'Unlimited (Full Subsidy)'}
                                 </TableCell>
-                                <TableCell className="text-xs text-slate-500">
+                                <TableCell className="text-[11px] text-slate-500 whitespace-nowrap">
                                   {m.joined_at ? new Date(m.joined_at).toLocaleDateString() : 'N/A'}
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  <div className="flex items-center justify-end gap-2">
+                                  <div className="flex items-center justify-end gap-1">
                                     <Button
                                       onClick={() => handleToggleEmployeeStatus(m)}
                                       variant="ghost"
                                       size="sm"
-                                      className={isActive ? "text-amber-600 hover:bg-amber-50" : "text-emerald-600 hover:bg-emerald-50"}
+                                      className={isActive ? "text-amber-600 hover:bg-amber-50 h-8 text-xs" : "text-emerald-600 hover:bg-emerald-50 h-8 text-xs"}
                                     >
-                                      {isActive ? <UserX className="w-4 h-4 mr-1" /> : <UserCheck className="w-4 h-4 mr-1" />}
+                                      {isActive ? <UserX className="w-3.5 h-3.5 mr-1" /> : <UserCheck className="w-3.5 h-3.5 mr-1" />}
                                       {isActive ? "Revoke" : "Approve"}
                                     </Button>
                                     <Button
                                       onClick={() => handleRemoveEmployee(m.profiles?.id || "")}
                                       variant="ghost"
                                       size="sm"
-                                      className="text-red-600 hover:bg-red-50"
+                                      className="text-red-600 hover:bg-red-50 h-8 p-1.5"
                                     >
-                                      <Trash2 className="w-4 h-4" />
+                                      <Trash2 className="w-3.5 h-3.5" />
                                     </Button>
                                   </div>
                                 </TableCell>
@@ -867,22 +842,22 @@ export default function CorporateB2BPortalPage() {
             <TabsContent value="copay" className="space-y-4">
               <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                 <CardHeader>
-                  <CardTitle className="text-lg font-bold flex items-center gap-2">
+                  <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
                     <SlidersHorizontal className="w-5 h-5 text-indigo-600" />
                     Subsidized Benefit & Co-Pay Percentage Split Settings
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-xs sm:text-sm">
                     Configure the exact cost-sharing rules between employer sponsorship and employee co-payment.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="p-6 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <CardContent className="p-4 sm:p-6 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
                     {/* Visual Split Control */}
-                    <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-6">
-                      <h4 className="font-semibold text-sm uppercase text-slate-500">Subsidized Co-Pay Split Percentage</h4>
+                    <div className="p-4 sm:p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-6">
+                      <h4 className="font-semibold text-xs uppercase text-slate-500">Subsidized Co-Pay Split Percentage</h4>
 
                       <div className="space-y-2">
-                        <div className="flex justify-between font-bold text-base">
+                        <div className="flex flex-col sm:flex-row justify-between font-bold text-xs sm:text-sm gap-1">
                           <span className="text-indigo-600">Employer Fund: {coPayConfig.subsidyPercentage}%</span>
                           <span className="text-slate-600 dark:text-slate-400">Employee Co-Pay: {100 - coPayConfig.subsidyPercentage}%</span>
                         </div>
@@ -898,7 +873,7 @@ export default function CorporateB2BPortalPage() {
                         />
                       </div>
 
-                      <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
+                      <div className="p-3 sm:p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
                         <p className="font-semibold text-slate-800 dark:text-slate-200">Example Standard Membership (RWF 50,000 / month):</p>
                         <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
                           <span>Employer Sponsorship Portion ({coPayConfig.subsidyPercentage}%):</span>
@@ -914,7 +889,7 @@ export default function CorporateB2BPortalPage() {
                     {/* Additional Billing & Discount Settings */}
                     <div className="space-y-4">
                       <div>
-                        <Label>Corporate Account Volume Discount (%)</Label>
+                        <Label className="text-xs sm:text-sm">Corporate Account Volume Discount (%)</Label>
                         <Input
                           type="number"
                           value={coPayConfig.discountPercentage}
@@ -928,7 +903,7 @@ export default function CorporateB2BPortalPage() {
                       </div>
 
                       <div>
-                        <Label>Payment Terms (Days)</Label>
+                        <Label className="text-xs sm:text-sm">Payment Terms (Days)</Label>
                         <Input
                           type="number"
                           value={coPayConfig.paymentTermsDays}
@@ -941,7 +916,7 @@ export default function CorporateB2BPortalPage() {
                         </p>
                       </div>
 
-                      <Button onClick={handleUpdateCoPayConfig} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white mt-4">
+                      <Button onClick={handleUpdateCoPayConfig} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white mt-4 min-h-[44px]">
                         Save Co-Pay Configuration
                       </Button>
                     </div>
@@ -952,42 +927,42 @@ export default function CorporateB2BPortalPage() {
 
             {/* TAB 3: INVOICES & BILLING */}
             <TabsContent value="billing" className="space-y-4">
-              <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+              <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 overflow-hidden">
                 <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
                   <div>
-                    <CardTitle className="text-lg font-bold flex items-center gap-2">
+                    <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
                       <Receipt className="w-5 h-5 text-indigo-600" />
                       Consolidated Corporate Invoices & Auto-Debit
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="text-xs sm:text-sm">
                       Review monthly B2B statements, generate new billing statements, and settle via Paypack MoMo B2B links.
                     </CardDescription>
                   </div>
 
-                  <Button onClick={() => setShowInvoiceModal(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-                    <Plus className="w-4 h-4 mr-2" />
+                  <Button onClick={() => setShowInvoiceModal(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm min-h-[38px]">
+                    <Plus className="w-4 h-4 mr-1.5" />
                     Generate Monthly B2B Invoice
                   </Button>
                 </CardHeader>
 
-                <CardContent className="p-6">
-                  <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                <CardContent className="p-4 sm:p-6">
+                  <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-x-auto">
                     <Table>
                       <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
                         <TableRow>
-                          <TableHead>Invoice Number</TableHead>
-                          <TableHead>Billing Period</TableHead>
-                          <TableHead>Enrolled Employees</TableHead>
-                          <TableHead>Subtotal</TableHead>
-                          <TableHead>Total Due</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
+                          <TableHead className="text-xs">Invoice Number</TableHead>
+                          <TableHead className="text-xs">Billing Period</TableHead>
+                          <TableHead className="text-xs">Enrolled Employees</TableHead>
+                          <TableHead className="text-xs">Subtotal</TableHead>
+                          <TableHead className="text-xs">Total Due</TableHead>
+                          <TableHead className="text-xs">Status</TableHead>
+                          <TableHead className="text-right text-xs">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {accountDetails.invoices.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={7} className="text-center py-8 text-slate-500">
+                            <TableCell colSpan={7} className="text-center py-8 text-xs text-slate-500">
                               No corporate invoices generated yet.
                             </TableCell>
                           </TableRow>
@@ -996,43 +971,44 @@ export default function CorporateB2BPortalPage() {
                             const isPaid = inv.status === 'paid';
                             return (
                               <TableRow key={inv.id}>
-                                <TableCell className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                <TableCell className="font-mono font-bold text-xs text-indigo-600 dark:text-indigo-400">
                                   {inv.invoice_number}
                                 </TableCell>
-                                <TableCell className="text-xs text-slate-600 dark:text-slate-400">
+                                <TableCell className="text-[11px] text-slate-600 dark:text-slate-400 whitespace-nowrap">
                                   {inv.billing_period_start} to {inv.billing_period_end}
                                 </TableCell>
-                                <TableCell>{inv.total_active_employees} employees</TableCell>
-                                <TableCell className="text-xs font-mono">
+                                <TableCell className="text-xs">{inv.total_active_employees} employees</TableCell>
+                                <TableCell className="text-xs font-mono whitespace-nowrap">
                                   RWF {Number(inv.subtotal).toLocaleString()}
                                 </TableCell>
-                                <TableCell className="font-bold text-slate-900 dark:text-slate-100">
+                                <TableCell className="font-bold text-xs text-slate-900 dark:text-slate-100 whitespace-nowrap">
                                   RWF {Number(inv.total_due).toLocaleString()}
                                 </TableCell>
                                 <TableCell>
-                                  <Badge className={isPaid ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300" : "bg-amber-100 text-amber-800"}>
+                                  <Badge className={isPaid ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 text-[10px]" : "bg-amber-100 text-amber-800 text-[10px]"}>
                                     {inv.status.toUpperCase()}
                                   </Badge>
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  <div className="flex items-center justify-end gap-2">
+                                  <div className="flex items-center justify-end gap-1.5">
                                     <Button
                                       onClick={() => handleDownloadInvoicePdf(inv)}
                                       variant="ghost"
                                       size="sm"
+                                      className="h-8 text-xs px-2"
                                     >
-                                      <Download className="w-4 h-4 mr-1" />
-                                      PDF Statement
+                                      <Download className="w-3.5 h-3.5 mr-1" />
+                                      PDF
                                     </Button>
 
                                     {!isPaid && (
                                       <Button
                                         onClick={() => handleTriggerPaypackLink(inv)}
                                         size="sm"
-                                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs px-2.5"
                                       >
-                                        <Zap className="w-4 h-4 mr-1" />
-                                        Paypack B2B
+                                        <Zap className="w-3.5 h-3.5 mr-1" />
+                                        Paypack
                                       </Button>
                                     )}
                                   </div>
@@ -1052,41 +1028,41 @@ export default function CorporateB2BPortalPage() {
             <TabsContent value="analytics" className="space-y-4">
               <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                 <CardHeader>
-                  <CardTitle className="text-lg font-bold flex items-center gap-2">
+                  <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
                     <Activity className="w-5 h-5 text-indigo-600" />
                     Corporate Wellness Utilization & HR Analytics
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-xs sm:text-sm">
                     Real-time engagement metrics, department workout trends, and benefit utilization.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="p-6 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="p-5 bg-indigo-50/50 dark:bg-indigo-950/30 rounded-xl border border-indigo-100 dark:border-indigo-900/50 space-y-2">
-                      <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-400 font-semibold text-sm">
+                <CardContent className="p-4 sm:p-6 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+                    <div className="p-4 sm:p-5 bg-indigo-50/50 dark:bg-indigo-950/30 rounded-xl border border-indigo-100 dark:border-indigo-900/50 space-y-2">
+                      <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-400 font-semibold text-xs sm:text-sm">
                         <Sparkles className="w-4 h-4" /> Monthly Gym Visits (All Employees)
                       </div>
-                      <div className="text-3xl font-extrabold text-slate-900 dark:text-slate-100">
+                      <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-slate-100">
                         {totalEmployees * 8} visits
                       </div>
                       <p className="text-xs text-slate-500">Avg 8.2 workouts per employee/month</p>
                     </div>
 
-                    <div className="p-5 bg-emerald-50/50 dark:bg-emerald-950/30 rounded-xl border border-emerald-100 dark:border-emerald-900/50 space-y-2">
-                      <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-semibold text-sm">
+                    <div className="p-4 sm:p-5 bg-emerald-50/50 dark:bg-emerald-950/30 rounded-xl border border-emerald-100 dark:border-emerald-900/50 space-y-2">
+                      <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-semibold text-xs sm:text-sm">
                         <TrendingUp className="w-4 h-4" /> HR Wellness Engagement Rate
                       </div>
-                      <div className="text-3xl font-extrabold text-slate-900 dark:text-slate-100">
+                      <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-slate-100">
                         {totalEmployees > 0 ? Math.round((activePasses/totalEmployees)*100) : 85}%
                       </div>
                       <p className="text-xs text-slate-500">+12% vs last calendar month</p>
                     </div>
 
-                    <div className="p-5 bg-blue-50/50 dark:bg-blue-950/30 rounded-xl border border-blue-100 dark:border-blue-900/50 space-y-2">
-                      <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400 font-semibold text-sm">
+                    <div className="p-4 sm:p-5 bg-blue-50/50 dark:bg-blue-950/30 rounded-xl border border-blue-100 dark:border-blue-900/50 space-y-2">
+                      <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400 font-semibold text-xs sm:text-sm">
                         <ShieldCheck className="w-4 h-4" /> Top Department
                       </div>
-                      <div className="text-3xl font-extrabold text-slate-900 dark:text-slate-100">
+                      <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-slate-100">
                         {departments[0] || "Engineering"}
                       </div>
                       <p className="text-xs text-slate-500">Highest gym check-in frequency</p>
@@ -1101,16 +1077,16 @@ export default function CorporateB2BPortalPage() {
 
       {/* MODAL 1: NEW CORPORATE CLIENT ACCOUNT */}
       {showNewAccountModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 my-8">
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
-              <h3 className="font-bold text-lg">Create New Corporate Client Account</h3>
-              <button onClick={() => setShowNewAccountModal(false)} className="text-slate-400 hover:text-slate-600">
+              <h3 className="font-bold text-base sm:text-lg">Create New Corporate Client Account</h3>
+              <button onClick={() => setShowNewAccountModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateAccount} className="space-y-4 text-sm">
+            <form onSubmit={handleCreateAccount} className="space-y-4 text-xs sm:text-sm">
               <div>
                 <Label>Company Name *</Label>
                 <Input
@@ -1121,7 +1097,7 @@ export default function CorporateB2BPortalPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label>TIN Number</Label>
                   <Input
@@ -1140,7 +1116,7 @@ export default function CorporateB2BPortalPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label>HR Contact Email</Label>
                   <Input
@@ -1160,7 +1136,7 @@ export default function CorporateB2BPortalPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label>Subsidized Share (%)</Label>
                   <Input
@@ -1194,21 +1170,21 @@ export default function CorporateB2BPortalPage() {
 
       {/* MODAL 2: BULK CSV ROSTER UPLOAD */}
       {showCsvUploadModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full p-6 space-y-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full p-5 sm:p-6 space-y-4 my-8">
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
-              <h3 className="font-bold text-lg flex items-center gap-2">
+              <h3 className="font-bold text-base sm:text-lg flex items-center gap-2">
                 <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
                 Bulk CSV Employee Roster Upload
               </h3>
-              <button onClick={() => setShowCsvUploadModal(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowCsvUploadModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-3 text-xs text-slate-500">
               <p>Paste raw CSV data or employee list. Expected format per line:</p>
-              <code className="block p-2 bg-slate-100 dark:bg-slate-800 rounded font-mono text-slate-800 dark:text-slate-200">
+              <code className="block p-2 bg-slate-100 dark:bg-slate-800 rounded font-mono text-slate-800 dark:text-slate-200 overflow-x-auto">
                 email, first_name, last_name, phone, employee_id_number, department, subsidy_cap
               </code>
             </div>
@@ -1256,16 +1232,16 @@ export default function CorporateB2BPortalPage() {
 
       {/* MODAL 3: ADD SINGLE EMPLOYEE */}
       {showAddEmployeeModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 my-8">
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
-              <h3 className="font-bold text-lg">Enroll Individual Employee</h3>
-              <button onClick={() => setShowAddEmployeeModal(false)} className="text-slate-400 hover:text-slate-600">
+              <h3 className="font-bold text-base sm:text-lg">Enroll Individual Employee</h3>
+              <button onClick={() => setShowAddEmployeeModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddEmployee} className="space-y-4 text-sm">
+            <form onSubmit={handleAddEmployee} className="space-y-4 text-xs sm:text-sm">
               <div>
                 <Label>Employee Email *</Label>
                 <Input
@@ -1277,7 +1253,7 @@ export default function CorporateB2BPortalPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label>First Name</Label>
                   <Input
@@ -1296,7 +1272,7 @@ export default function CorporateB2BPortalPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label>Employee ID</Label>
                   <Input
@@ -1340,16 +1316,16 @@ export default function CorporateB2BPortalPage() {
 
       {/* MODAL 4: GENERATE MONTHLY CONSOLIDATED INVOICE */}
       {showInvoiceModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 my-8">
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
-              <h3 className="font-bold text-lg">Generate Monthly B2B Statement</h3>
-              <button onClick={() => setShowInvoiceModal(false)} className="text-slate-400 hover:text-slate-600">
+              <h3 className="font-bold text-base sm:text-lg">Generate Monthly B2B Statement</h3>
+              <button onClick={() => setShowInvoiceModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleGenerateInvoice} className="space-y-4 text-sm">
+            <form onSubmit={handleGenerateInvoice} className="space-y-4 text-xs sm:text-sm">
               <div>
                 <Label>Billing Period Start Date</Label>
                 <Input
@@ -1399,14 +1375,14 @@ export default function CorporateB2BPortalPage() {
 
       {/* MODAL 5: PAYPACK B2B PAYMENT LINK */}
       {showPaypackModal && activeInvoiceForPayment && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 my-8">
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
-              <h3 className="font-bold text-lg flex items-center gap-2">
+              <h3 className="font-bold text-base sm:text-lg flex items-center gap-2">
                 <Zap className="w-5 h-5 text-emerald-600" />
                 Paypack B2B Payment Request
               </h3>
-              <button onClick={() => setShowPaypackModal(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowPaypackModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1434,14 +1410,14 @@ export default function CorporateB2BPortalPage() {
                 <div className="flex flex-col gap-2 pt-2">
                   <Button
                     onClick={() => handleSettleInvoice(activeInvoiceForPayment.id, "paypack_momo")}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white min-h-[40px]"
                   >
                     Confirm & Settle via Paypack MoMo B2B
                   </Button>
                   <Button
                     onClick={() => handleSettleInvoice(activeInvoiceForPayment.id, "bank_transfer")}
                     variant="outline"
-                    className="w-full"
+                    className="w-full min-h-[40px]"
                   >
                     Mark Paid via Direct Bank Transfer
                   </Button>

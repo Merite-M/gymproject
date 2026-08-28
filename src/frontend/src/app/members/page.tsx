@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { useState } from "react";
-import { User, Search, Filter, Plus, Tag, Gift, Check, X } from "lucide-react";
+import { User, Search, Plus, Tag, Gift, Check, X } from "lucide-react";
 import { cn, formatCurrencyDisplay } from "@/lib/utils";
 import { MemberProfilePanel, type MemberPanelData } from "@/components/member-profile-panel";
 import { TabbedConsole } from "@/components/tabbed-console";
@@ -76,7 +76,7 @@ export default function MembersPage() {
         setAppliedPromo(data.promotion);
         setPromoCodeInput("");
       }
-    } catch (err) {
+    } catch {
       const codeUpper = promoCodeInput.trim().toUpperCase();
       if (codeUpper === "SAVE10" || codeUpper === "WELCOME10") {
         const discountVal = Math.round(planPrice * 0.1);
@@ -148,7 +148,7 @@ export default function MembersPage() {
   const voucherDiscount = appliedVoucher ? Math.min(appliedVoucher.usable_discount || appliedVoucher.current_balance_rwf || 0, subtotalAfterPromo) : 0;
   const finalPrice = Math.max(0, subtotalAfterPromo - voucherDiscount);
 
-  // Mock member data for demonstration
+  // Member data
   const [mockMembers, setMockMembers] = useState<MemberPanelData[]>([
     {
       id: "1",
@@ -200,7 +200,6 @@ export default function MembersPage() {
     try {
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-      // 1. If promo code used, increment times_used
       if (appliedPromo && appliedPromo.code) {
         await fetch(`${backendUrl}/api/payments/validate-promo`, {
           method: 'POST',
@@ -214,7 +213,6 @@ export default function MembersPage() {
         }).catch(() => {});
       }
 
-      // 2. If gift voucher used, deduct balance atomically
       if (appliedVoucher && appliedVoucher.code && voucherDiscount > 0) {
         await fetch(`${backendUrl}/api/payments/apply-gift-voucher`, {
           method: 'POST',
@@ -245,7 +243,6 @@ export default function MembersPage() {
       setSelectedMember(newMem);
       setShowAddModal(false);
 
-      // Reset form
       setFirstName("");
       setLastName("");
       setEmail("");
@@ -257,62 +254,68 @@ export default function MembersPage() {
     }
   };
 
+  const filteredMembers = mockMembers.filter(m =>
+    m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (m.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (m.phone && m.phone.includes(searchQuery))
+  );
+
   return (
-    <div className="h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-card px-6 py-4">
-        <div className="flex items-center justify-between">
+      <header className="border-b border-border bg-card px-4 sm:px-6 py-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-headline-md font-bold text-foreground">Member CRM</h1>
-            <p className="text-sm text-muted-foreground">Member management and relationship console</p>
+            <h1 className="text-xl sm:text-2xl font-headline-md font-bold text-foreground">Member CRM</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground">Member management and relationship console</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="relative">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 sm:w-64 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search members..."
-                className="pl-10 pr-4 py-2 bg-muted border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-foreground placeholder:text-muted-foreground w-64"
+                className="w-full pl-10 pr-4 py-2 bg-muted border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-xs sm:text-sm text-foreground placeholder:text-muted-foreground min-h-[40px]"
               />
             </div>
             <Link
               href="/members/leads"
-              className="px-4 py-2 bg-purple-500/10 border border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 rounded-lg flex items-center gap-2 min-h-[44px] text-sm font-semibold transition"
+              className="px-3.5 py-2 bg-purple-500/10 border border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 rounded-lg flex items-center gap-2 min-h-[44px] text-xs sm:text-sm font-semibold transition shrink-0"
             >
               <Tag className="w-4 h-4" />
-              Sales & Referrals Hub
+              <span>Sales & Referrals Hub</span>
             </Link>
             <button
               onClick={() => setShowAddModal(true)}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/80 flex items-center gap-2 min-h-[44px]"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/80 flex items-center gap-2 min-h-[44px] text-xs sm:text-sm font-semibold shrink-0"
             >
               <Plus className="w-4 h-4" />
-              Add Member
+              <span>Add Member</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Content - 30/70 Split */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel - Member Directory (30%) */}
-        <div className="w-[30%] border-r border-border flex flex-col bg-card">
+      {/* Main Content - Responsive Split */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
+        {/* Left Panel - Member Directory */}
+        <div className="w-full lg:w-[30%] border-b lg:border-b-0 lg:border-r border-border flex flex-col bg-card min-h-[250px] max-h-[400px] lg:max-h-none">
           <div className="p-4 border-b border-border">
-            <h2 className="text-sm font-headline-md font-semibold text-muted-foreground uppercase tracking-wider">
-              Member Directory
+            <h2 className="text-xs font-headline-md font-semibold text-muted-foreground uppercase tracking-wider">
+              Member Directory ({filteredMembers.length})
             </h2>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {mockMembers.map((member) => (
+            {filteredMembers.map((member) => (
               <div
                 key={member.id}
                 onClick={() => setSelectedMember(member)}
                 className={cn(
-                  "flex items-center gap-3 p-4 border-b border-border cursor-pointer transition-colors",
+                  "flex items-center gap-3 p-3.5 border-b border-border cursor-pointer transition-colors",
                   selectedMember?.id === member.id
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-primary/10 border-l-4 border-l-primary text-foreground"
                     : "hover:bg-muted"
                 )}
               >
@@ -324,16 +327,16 @@ export default function MembersPage() {
                       className="w-full h-full rounded-full object-cover"
                     />
                   ) : (
-                    <User className="w-5 h-5" />
+                    <User className="w-5 h-5 text-muted-foreground" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-medium truncate">{member.name}</h3>
-                  <p className="text-xs opacity-70 truncate">{member.email}</p>
+                  <h3 className="font-medium text-sm truncate text-foreground">{member.name}</h3>
+                  <p className="text-xs opacity-70 truncate text-muted-foreground">{member.email}</p>
                 </div>
                 <div
                   className={cn(
-                    "w-2 h-2 rounded-full shrink-0",
+                    "w-2.5 h-2.5 rounded-full shrink-0",
                     member.status === "active"
                       ? "bg-status-cleared"
                       : member.status === "frozen"
@@ -346,29 +349,26 @@ export default function MembersPage() {
           </div>
         </div>
 
-        {/* Right Panel - Tabbed Console (70%) */}
-        <div className="w-[70%] flex flex-col">
+        {/* Right Panel - Tabbed Console */}
+        <div className="w-full lg:w-[70%] flex flex-col">
           {selectedMember ? (
-            <>
-              {/* Split View: Profile Panel (30%) + Tabbed Console (70%) */}
-              <div className="flex-1 flex overflow-hidden">
-                {/* Profile Panel */}
-                <div className="w-[30%] border-r border-border p-4 overflow-y-auto">
-                  <MemberProfilePanel member={selectedMember} />
-                </div>
-
-                {/* Tabbed Console */}
-                <div className="w-[70%]">
-                  <TabbedConsole member={selectedMember} />
-                </div>
+            <div className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
+              {/* Profile Panel */}
+              <div className="w-full md:w-[35%] border-b md:border-b-0 md:border-r border-border p-4 overflow-y-auto">
+                <MemberProfilePanel member={selectedMember} />
               </div>
-            </>
+
+              {/* Tabbed Console */}
+              <div className="w-full md:w-[65%] overflow-y-auto">
+                <TabbedConsole member={selectedMember} />
+              </div>
+            </div>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground">
+            <div className="flex-1 flex items-center justify-center p-12 text-muted-foreground">
               <div className="text-center">
                 <User className="w-16 h-16 mx-auto mb-4 opacity-50" />
                 <p className="text-lg font-medium">Select a member</p>
-                <p className="text-sm mt-2">Choose a member from the directory to view their profile</p>
+                <p className="text-sm mt-1">Choose a member from the directory to view their profile</p>
               </div>
             </div>
           )}
@@ -377,51 +377,51 @@ export default function MembersPage() {
 
       {/* Add Member / Sign Up Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-xl w-full max-w-lg p-6 space-y-4 shadow-xl">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-card border border-border rounded-xl w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-xl my-8">
             <div className="flex items-center justify-between border-b border-border pb-3">
-              <h2 className="text-xl font-headline-md font-bold text-foreground">Sign Up New Member</h2>
-              <button onClick={() => setShowAddModal(false)} className="text-muted-foreground hover:text-foreground">
+              <h2 className="text-lg sm:text-xl font-headline-md font-bold text-foreground">Sign Up New Member</h2>
+              <button onClick={() => setShowAddModal(false)} className="text-muted-foreground hover:text-foreground p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleAddMemberSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground block mb-1">First Name</label>
+                  <label className="text-xs font-medium text-muted-foreground block mb-1">First Name *</label>
                   <input
                     type="text"
                     required
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     placeholder="John"
-                    className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm outline-none focus:ring-1 focus:ring-primary min-h-[40px]"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground block mb-1">Last Name</label>
+                  <label className="text-xs font-medium text-muted-foreground block mb-1">Last Name *</label>
                   <input
                     type="text"
                     required
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     placeholder="Doe"
-                    className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm outline-none focus:ring-1 focus:ring-primary min-h-[40px]"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground block mb-1">Email</label>
+                  <label className="text-xs font-medium text-muted-foreground block mb-1">Email *</label>
                   <input
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="john@example.com"
-                    className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm outline-none focus:ring-1 focus:ring-primary min-h-[40px]"
                   />
                 </div>
                 <div>
@@ -431,7 +431,7 @@ export default function MembersPage() {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="+250 788 000 000"
-                    className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm outline-none focus:ring-1 focus:ring-primary min-h-[40px]"
                   />
                 </div>
               </div>
@@ -441,7 +441,7 @@ export default function MembersPage() {
                 <select
                   value={membershipType}
                   onChange={(e) => setMembershipType(e.target.value)}
-                  className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm outline-none focus:ring-1 focus:ring-primary min-h-[40px]"
                 >
                   <option value="Standard">Standard - 30,000 RWF/mo</option>
                   <option value="Premium">Premium - 50,000 RWF/mo</option>
@@ -455,7 +455,7 @@ export default function MembersPage() {
 
                 {/* Promo Code */}
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block flex items-center gap-1">
+                  <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                     <Tag className="w-3.5 h-3.5" /> Promo Code
                   </label>
                   {appliedPromo ? (
@@ -464,7 +464,7 @@ export default function MembersPage() {
                         <Check className="w-3.5 h-3.5" />
                         <span>{appliedPromo.code} (-{formatCurrencyDisplay(promoDiscount)})</span>
                       </div>
-                      <button type="button" onClick={() => setAppliedPromo(null)} className="hover:text-status-blocked">
+                      <button type="button" onClick={() => setAppliedPromo(null)} className="hover:text-status-blocked p-1">
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -481,7 +481,7 @@ export default function MembersPage() {
                         type="button"
                         onClick={handleApplyPromo}
                         disabled={loadingPromo || !promoCodeInput.trim()}
-                        className="px-3 py-1.5 text-xs bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/80 disabled:opacity-50"
+                        className="px-3 py-1.5 text-xs bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/80 disabled:opacity-50 min-h-[36px]"
                       >
                         {loadingPromo ? "..." : "Apply"}
                       </button>
@@ -492,7 +492,7 @@ export default function MembersPage() {
 
                 {/* Gift Voucher */}
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block flex items-center gap-1">
+                  <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                     <Gift className="w-3.5 h-3.5" /> Gift Voucher
                   </label>
                   {appliedVoucher ? (
@@ -501,7 +501,7 @@ export default function MembersPage() {
                         <Check className="w-3.5 h-3.5" />
                         <span>Voucher (-{formatCurrencyDisplay(voucherDiscount)})</span>
                       </div>
-                      <button type="button" onClick={() => setAppliedVoucher(null)} className="hover:text-status-blocked">
+                      <button type="button" onClick={() => setAppliedVoucher(null)} className="hover:text-status-blocked p-1">
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -518,7 +518,7 @@ export default function MembersPage() {
                         type="button"
                         onClick={handleApplyVoucher}
                         disabled={loadingVoucher || !voucherCodeInput.trim()}
-                        className="px-3 py-1.5 text-xs bg-secondary text-secondary-foreground font-semibold rounded-lg hover:bg-secondary/80 disabled:opacity-50"
+                        className="px-3 py-1.5 text-xs bg-secondary text-secondary-foreground font-semibold rounded-lg hover:bg-secondary/80 disabled:opacity-50 min-h-[36px]"
                       >
                         {loadingVoucher ? "..." : "Apply"}
                       </button>
@@ -556,14 +556,14 @@ export default function MembersPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 border border-border rounded-lg text-sm text-foreground hover:bg-muted"
+                  className="px-4 py-2 border border-border rounded-lg text-sm text-foreground hover:bg-muted min-h-[44px]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submittingSignUp}
-                  className="px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50"
+                  className="px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50 min-h-[44px]"
                 >
                   {submittingSignUp ? "Processing..." : `Complete Sign Up (${formatCurrencyDisplay(finalPrice)})`}
                 </button>

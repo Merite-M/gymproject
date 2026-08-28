@@ -12,7 +12,6 @@ import {
   Mail,
   PhoneCall,
   Plus,
-  Play,
   Pause,
   Save,
   Trash2,
@@ -25,23 +24,22 @@ import {
   X,
   RefreshCw,
   BarChart3,
-  Layers
+  Layers,
+  Play
 } from 'lucide-react';
 
-// Helper to deep clone object to prevent mutating static templates
 function clone<T>(obj: T): T {
   return typeof structuredClone === 'function'
     ? structuredClone(obj)
     : JSON.parse(JSON.stringify(obj));
 }
 
-// --- TYPES ---
 export type NodeType = 'trigger' | 'delay' | 'condition' | 'action';
 
 export interface WorkflowNode {
   id: string;
   type: NodeType;
-  subtype: string; // e.g., 'predictive_churn', 'send_sms', 'wait_delay'
+  subtype: string;
   title: string;
   description: string;
   config: Record<string, any>;
@@ -61,7 +59,6 @@ export interface MarketingWorkflow {
   created_at?: string;
 }
 
-// --- PRE-BUILT PLAYBOOKS ---
 const PLAYBOOKS = [
   {
     id: 'win_back_churn',
@@ -314,7 +311,7 @@ export default function MarketingCanvasPage() {
   const [workflows, setWorkflows] = useState<MarketingWorkflow[]>([]);
   const [activeWorkflowIndex, setActiveWorkflowIndex] = useState<number>(0);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [showPlaybookModal, setShowPlaybookModal] = useState<boolean>(false);
@@ -328,7 +325,6 @@ export default function MarketingCanvasPage() {
     attributedRevenueRWF: 1850000
   });
 
-  // Current active workflow state
   const currentWorkflow = useMemo(() => {
     if (workflows.length > 0 && workflows[activeWorkflowIndex]) {
       return workflows[activeWorkflowIndex];
@@ -340,12 +336,10 @@ export default function MarketingCanvasPage() {
     return currentWorkflow.nodes.find(n => n.id === selectedNodeId) || null;
   }, [currentWorkflow, selectedNodeId]);
 
-  // Fetch initial workflows from Supabase
   useEffect(() => {
     async function loadData() {
       setLoading(true);
       try {
-        // 1. Get user profile / tenant_id
         const { data: { user } } = await supabase.auth.getUser();
         let currentTenant = '2c604504-41c3-406b-82a0-a43700057af8';
 
@@ -362,7 +356,6 @@ export default function MarketingCanvasPage() {
           }
         }
 
-        // 2. Fetch workflows
         const { data: wfList, error: wfError } = await supabase
           .from('marketing_workflows')
           .select('*')
@@ -372,7 +365,6 @@ export default function MarketingCanvasPage() {
         if (wfError) throw wfError;
 
         if (wfList && wfList.length > 0) {
-          // Fetch nodes for each workflow
           const loadedWorkflows: MarketingWorkflow[] = [];
 
           for (const wf of wfList) {
@@ -407,11 +399,9 @@ export default function MarketingCanvasPage() {
 
           setWorkflows(loadedWorkflows);
         } else {
-          // Default to playbooks if no workflows saved yet
           setWorkflows(clone(PLAYBOOKS as unknown as MarketingWorkflow[]));
         }
 
-        // Fetch real analytics from communications_log
         const { data: comms } = await supabase
           .from('communications_log')
           .select('status, id')
@@ -430,7 +420,6 @@ export default function MarketingCanvasPage() {
 
       } catch (err: any) {
         console.error('Error loading marketing workflows:', err);
-        // Fallback to cloned playbooks
         setWorkflows(clone(PLAYBOOKS as unknown as MarketingWorkflow[]));
       } finally {
         setLoading(false);
@@ -440,14 +429,12 @@ export default function MarketingCanvasPage() {
     loadData();
   }, []);
 
-  // Save current workflow to Supabase with ID Mapping for graph connections
   const handleSaveWorkflow = async () => {
     setSaving(true);
     setStatusMessage(null);
     try {
       const wfToSave = clone(currentWorkflow);
 
-      // 1. Build an ID Mapping Dictionary (old_id -> fresh UUID)
       const idMap: Record<string, string> = {};
       const isUUID = (str: string) =>
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
@@ -460,7 +447,6 @@ export default function MarketingCanvasPage() {
         }
       });
 
-      // 2. Remap node IDs and graph connection edges
       const remappedNodes = wfToSave.nodes.map(node => {
         const newId = idMap[node.id];
         const newNextId = node.next_node_id ? (idMap[node.next_node_id] || node.next_node_id) : null;
@@ -476,7 +462,6 @@ export default function MarketingCanvasPage() {
         };
       });
 
-      // Upsert parent workflow row with complete JSONB node graph
       const { data: wfRow, error: wfError } = await supabase
         .from('marketing_workflows')
         .upsert({
@@ -495,7 +480,6 @@ export default function MarketingCanvasPage() {
 
       const savedWfId = wfRow.id;
 
-      // Delete existing nodes for this workflow before re-inserting
       if (wfToSave.id) {
         await supabase
           .from('workflow_nodes')
@@ -504,7 +488,6 @@ export default function MarketingCanvasPage() {
           .eq('tenant_id', tenantId);
       }
 
-      // Insert child nodes with mapped UUIDs
       const nodePayloads = remappedNodes.map(n => ({
         id: n.id,
         workflow_id: savedWfId,
@@ -535,7 +518,6 @@ export default function MarketingCanvasPage() {
         nodes: remappedNodes
       };
 
-      // Update state in workflows array
       setWorkflows(prev => {
         const copy = clone(prev);
         copy[activeWorkflowIndex] = updatedWorkflow;
@@ -553,7 +535,6 @@ export default function MarketingCanvasPage() {
     }
   };
 
-  // Toggle active status
   const handleToggleActive = async () => {
     const updatedStatus = !currentWorkflow.is_active;
 
@@ -575,7 +556,6 @@ export default function MarketingCanvasPage() {
     }
   };
 
-  // Select Playbook template with deep cloning
   const handleSelectPlaybook = (pb: typeof PLAYBOOKS[0]) => {
     const pbCopy = clone(pb);
 
@@ -594,7 +574,6 @@ export default function MarketingCanvasPage() {
     setTimeout(() => setStatusMessage(null), 3000);
   };
 
-  // Add a node to current canvas
   const handleAddNode = (type: NodeType, subtype: string) => {
     const newId = `node-${Date.now()}`;
     let title = 'New Action';
@@ -642,7 +621,6 @@ export default function MarketingCanvasPage() {
       y: newY
     };
 
-    // Auto-link previous node to new node if simple sequential chain
     const updatedNodes = clone(currentWorkflow.nodes);
     if (lastNode && !lastNode.next_node_id && lastNode.type !== 'condition') {
       const idx = updatedNodes.findIndex(n => n.id === lastNode.id);
@@ -665,7 +643,6 @@ export default function MarketingCanvasPage() {
     setSelectedNodeId(newId);
   };
 
-  // Delete node
   const handleDeleteNode = (nodeId: string) => {
     const updatedNodes = clone(currentWorkflow.nodes)
       .filter(n => n.id !== nodeId)
@@ -690,7 +667,6 @@ export default function MarketingCanvasPage() {
     }
   };
 
-  // Update selected node config immutably
   const handleUpdateNodeConfig = (key: string, value: any) => {
     if (!selectedNodeId) return;
 
@@ -719,7 +695,6 @@ export default function MarketingCanvasPage() {
     });
   };
 
-  // Helper icons for node types
   const getNodeIcon = (type: NodeType, subtype?: string) => {
     if (type === 'trigger') return <Zap className="w-5 h-5 text-amber-500" />;
     if (type === 'delay') return <Clock className="w-5 h-5 text-blue-500" />;
@@ -733,22 +708,22 @@ export default function MarketingCanvasPage() {
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
       {/* TOP HEADER & ANALYTICS BAR */}
-      <header className="flex-none bg-slate-900/90 border-b border-slate-800 px-6 py-3 flex items-center justify-between z-20 backdrop-blur-md">
-        <div className="flex items-center gap-4">
+      <header className="flex-none bg-slate-900/90 border-b border-slate-800 px-4 sm:px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 z-20 backdrop-blur-md">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 px-3 py-1.5 rounded-lg">
-            <Sparkles className="w-5 h-5 text-emerald-400 animate-pulse" />
-            <span className="text-sm font-bold text-emerald-300">Marketing Automation Canvas</span>
+            <Sparkles className="w-5 h-5 text-emerald-400 animate-pulse shrink-0" />
+            <span className="text-xs sm:text-sm font-bold text-emerald-300">Marketing Automation Canvas</span>
           </div>
 
           {/* Workflow Picker */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <select
               value={activeWorkflowIndex}
               onChange={(e) => {
                 setActiveWorkflowIndex(Number(e.target.value));
                 setSelectedNodeId(null);
               }}
-              className="bg-slate-800 border border-slate-700 text-slate-200 text-sm font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500"
+              className="bg-slate-800 border border-slate-700 text-slate-200 text-xs sm:text-sm font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 min-h-[36px]"
             >
               {workflows.map((wf, idx) => (
                 <option key={wf.id || idx} value={idx}>
@@ -759,7 +734,7 @@ export default function MarketingCanvasPage() {
 
             <button
               onClick={handleToggleActive}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all min-h-[36px] ${
                 currentWorkflow.is_active
                   ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30'
                   : 'bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30'
@@ -767,11 +742,11 @@ export default function MarketingCanvasPage() {
             >
               {currentWorkflow.is_active ? (
                 <>
-                  <Pause className="w-3.5 h-3.5" /> Paused Workflow
+                  <Pause className="w-3.5 h-3.5" /> Paused
                 </>
               ) : (
                 <>
-                  <Play className="w-3.5 h-3.5" /> Enable Live Flow
+                  <Play className="w-3.5 h-3.5" /> Enable Live
                 </>
               )}
             </button>
@@ -781,7 +756,7 @@ export default function MarketingCanvasPage() {
         {/* Real-time Analytics Overlay */}
         <div className="hidden lg:flex items-center gap-6 bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-1.5">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <div>
               <p className="text-[10px] uppercase font-bold text-slate-400">Delivery Rate</p>
               <p className="text-xs font-bold text-slate-100">{analytics.deliveryRate}%</p>
@@ -791,7 +766,7 @@ export default function MarketingCanvasPage() {
           <div className="h-6 w-px bg-slate-800" />
 
           <div className="flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-sky-400" />
+            <TrendingUp className="w-4 h-4 text-sky-400 shrink-0" />
             <div>
               <p className="text-[10px] uppercase font-bold text-slate-400">Click-Through Rate</p>
               <p className="text-xs font-bold text-slate-100">{analytics.clickThroughRate}%</p>
@@ -801,7 +776,7 @@ export default function MarketingCanvasPage() {
           <div className="h-6 w-px bg-slate-800" />
 
           <div className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-amber-400" />
+            <BarChart3 className="w-4 h-4 text-amber-400 shrink-0" />
             <div>
               <p className="text-[10px] uppercase font-bold text-slate-400">Conversion ROI</p>
               <p className="text-xs font-bold text-emerald-400">{formatCurrencyDisplay(analytics.attributedRevenueRWF)}</p>
@@ -810,22 +785,22 @@ export default function MarketingCanvasPage() {
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 self-end md:self-auto">
           <button
             onClick={() => setShowPlaybookModal(true)}
-            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-lg transition-all"
+            className="flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold px-3 py-2 rounded-lg shadow-lg transition-all min-h-[36px]"
           >
             <Layers className="w-4 h-4" />
-            1-Click Playbooks
+            <span>Playbooks</span>
           </button>
 
           <button
             onClick={handleSaveWorkflow}
             disabled={saving}
-            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg transition-all disabled:opacity-50"
+            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-lg transition-all disabled:opacity-50 min-h-[36px]"
           >
             {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Save & Publish Flow
+            <span>Save & Publish</span>
           </button>
         </div>
       </header>
@@ -833,7 +808,7 @@ export default function MarketingCanvasPage() {
       {/* STATUS BANNER */}
       {statusMessage && (
         <div
-          className={`flex-none px-6 py-2 text-xs font-semibold flex items-center justify-between transition-all ${
+          className={`flex-none px-4 sm:px-6 py-2 text-xs font-semibold flex items-center justify-between transition-all ${
             statusMessage.type === 'success'
               ? 'bg-emerald-950 text-emerald-200 border-b border-emerald-800'
               : statusMessage.type === 'error'
@@ -849,9 +824,9 @@ export default function MarketingCanvasPage() {
       )}
 
       {/* MAIN CONTENT WORKSPACE */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
         {/* LEFT TOOLBOX PANEL */}
-        <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col p-4 z-10 overflow-y-auto">
+        <aside className="w-full md:w-64 bg-slate-900 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col p-4 z-10 max-h-[220px] md:max-h-none overflow-y-auto shrink-0">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
             <Plus className="w-4 h-4 text-emerald-400" /> Add Workflow Node
           </h3>
@@ -862,34 +837,20 @@ export default function MarketingCanvasPage() {
               <p className="text-[11px] font-bold text-amber-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
                 <Zap className="w-3.5 h-3.5" /> Triggers
               </p>
-              <div className="space-y-1.5">
+              <div className="grid grid-cols-2 md:grid-cols-1 gap-1.5">
                 <button
                   onClick={() => handleAddNode('trigger', 'predictive_churn')}
-                  className="w-full text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-amber-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
+                  className="text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-amber-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
                 >
-                  <span>Predictive Churn Risk</span>
-                  <Plus className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="truncate">Predictive Churn Risk</span>
+                  <Plus className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1" />
                 </button>
                 <button
                   onClick={() => handleAddNode('trigger', 'payment_failed')}
-                  className="w-full text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-amber-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
+                  className="text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-amber-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
                 >
-                  <span>Payment Failed / Dunning</span>
-                  <Plus className="w-3.5 h-3.5 text-slate-500" />
-                </button>
-                <button
-                  onClick={() => handleAddNode('trigger', 'membership_renewal')}
-                  className="w-full text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-amber-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
-                >
-                  <span>Renewal Due Soon</span>
-                  <Plus className="w-3.5 h-3.5 text-slate-500" />
-                </button>
-                <button
-                  onClick={() => handleAddNode('trigger', 'birthday')}
-                  className="w-full text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-amber-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
-                >
-                  <span>Member Birthday Morning</span>
-                  <Plus className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="truncate">Payment Failed</span>
+                  <Plus className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1" />
                 </button>
               </div>
             </div>
@@ -904,7 +865,7 @@ export default function MarketingCanvasPage() {
                 className="w-full text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-blue-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
               >
                 <span>Wait Duration Delay</span>
-                <Plus className="w-3.5 h-3.5 text-slate-500" />
+                <Plus className="w-3.5 h-3.5 text-slate-500 shrink-0" />
               </button>
             </div>
 
@@ -917,8 +878,8 @@ export default function MarketingCanvasPage() {
                 onClick={() => handleAddNode('condition', 'debtor_check')}
                 className="w-full text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-purple-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
               >
-                <span>Check Outstanding Debt / Attendance</span>
-                <Plus className="w-3.5 h-3.5 text-slate-500" />
+                <span className="truncate">Check Outstanding Debt</span>
+                <Plus className="w-3.5 h-3.5 text-slate-500 shrink-0" />
               </button>
             </div>
 
@@ -927,53 +888,36 @@ export default function MarketingCanvasPage() {
               <p className="text-[11px] font-bold text-emerald-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
                 <MessageSquare className="w-3.5 h-3.5" /> Communication Actions
               </p>
-              <div className="space-y-1.5">
+              <div className="grid grid-cols-2 md:grid-cols-1 gap-1.5">
                 <button
                   onClick={() => handleAddNode('action', 'whatsapp')}
-                  className="w-full text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
+                  className="text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
                 >
-                  <div className="flex items-center gap-2">
-                    <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>WhatsApp Alert</span>
+                  <div className="flex items-center gap-1.5 truncate">
+                    <Smartphone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span className="truncate">WhatsApp Alert</span>
                   </div>
-                  <Plus className="w-3.5 h-3.5 text-slate-500" />
+                  <Plus className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1" />
                 </button>
 
                 <button
                   onClick={() => handleAddNode('action', 'sms')}
-                  className="w-full text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
+                  className="text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
                 >
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Rwanda SMS Alert</span>
+                  <div className="flex items-center gap-1.5 truncate">
+                    <MessageSquare className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                    <span className="truncate">Rwanda SMS</span>
                   </div>
-                  <Plus className="w-3.5 h-3.5 text-slate-500" />
-                </button>
-
-                <button
-                  onClick={() => handleAddNode('action', 'staff_task')}
-                  className="w-full text-left bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-rose-500/50 p-2 rounded-lg text-xs font-medium text-slate-200 transition-all flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2">
-                    <PhoneCall className="w-3.5 h-3.5 text-rose-400" />
-                    <span>Staff Desk Call Task</span>
-                  </div>
-                  <Plus className="w-3.5 h-3.5 text-slate-500" />
+                  <Plus className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1" />
                 </button>
               </div>
             </div>
           </div>
-
-          <div className="mt-auto pt-4 border-t border-slate-800">
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              💡 <span className="font-semibold text-slate-400">Pro Tip:</span> WhatsApp & SMS have 95%+ read rates in Rwanda compared to email.
-            </p>
-          </div>
         </aside>
 
         {/* VISUAL CANVAS WORKSPACE */}
-        <main className="flex-1 bg-slate-950 p-8 overflow-auto relative">
-          <div className="min-h-[800px] w-full max-w-4xl mx-auto flex flex-col items-center gap-6 pb-24">
+        <main className="flex-1 bg-slate-950 p-4 sm:p-8 overflow-auto relative">
+          <div className="min-h-[600px] w-full max-w-4xl mx-auto flex flex-col items-center gap-6 pb-24">
             {currentWorkflow.nodes.map((node, index) => {
               const isSelected = selectedNodeId === node.id;
 
@@ -988,7 +932,6 @@ export default function MarketingCanvasPage() {
                         : 'border-slate-800 hover:border-slate-700'
                     }`}
                   >
-                    {/* Node Type Indicator Line */}
                     <div
                       className={`absolute top-0 left-4 right-4 h-0.5 rounded-full ${
                         node.type === 'trigger'
@@ -1003,14 +946,14 @@ export default function MarketingCanvasPage() {
 
                     <div className="flex items-start justify-between mb-2 pt-1">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-slate-950 border border-slate-800 rounded-lg">
+                        <div className="p-2 bg-slate-950 border border-slate-800 rounded-lg shrink-0">
                           {getNodeIcon(node.type, node.subtype)}
                         </div>
                         <div>
                           <span className="text-[10px] font-extrabold tracking-wider uppercase text-slate-400">
                             {node.type}
                           </span>
-                          <h4 className="text-sm font-bold text-slate-100">{node.title}</h4>
+                          <h4 className="text-xs sm:text-sm font-bold text-slate-100">{node.title}</h4>
                         </div>
                       </div>
 
@@ -1019,7 +962,7 @@ export default function MarketingCanvasPage() {
                           e.stopPropagation();
                           handleDeleteNode(node.id);
                         }}
-                        className="text-slate-500 hover:text-rose-400 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="text-slate-500 hover:text-rose-400 p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -1027,7 +970,6 @@ export default function MarketingCanvasPage() {
 
                     <p className="text-xs text-slate-400 mb-3">{node.description}</p>
 
-                    {/* CONFIG DETAILS BADGE */}
                     {node.config && Object.keys(node.config).length > 0 && (
                       <div className="bg-slate-950/80 border border-slate-800/80 rounded-lg p-2.5 text-xs text-slate-300 font-mono">
                         {node.config.template && (
@@ -1061,14 +1003,14 @@ export default function MarketingCanvasPage() {
 
         {/* RIGHT SIDE CONFIGURATION DRAWER */}
         {selectedNode && (
-          <aside className="w-80 bg-slate-900 border-l border-slate-800 flex flex-col p-5 z-10 overflow-y-auto">
+          <aside className="w-full md:w-80 bg-slate-900 border-t md:border-t-0 md:border-l border-slate-800 flex flex-col p-5 z-10 overflow-y-auto shrink-0">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
               <div className="flex items-center gap-2">
                 <Settings className="w-4 h-4 text-emerald-400" />
                 <h3 className="text-sm font-bold text-slate-200">Node Configuration</h3>
               </div>
-              <button onClick={() => setSelectedNodeId(null)}>
-                <X className="w-4 h-4 text-slate-400 hover:text-white" />
+              <button onClick={() => setSelectedNodeId(null)} className="p-1 text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -1079,7 +1021,7 @@ export default function MarketingCanvasPage() {
                   type="text"
                   value={selectedNode.title}
                   onChange={(e) => handleUpdateNodeConfig('title', e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-emerald-500 min-h-[38px]"
                 />
               </div>
 
@@ -1089,11 +1031,10 @@ export default function MarketingCanvasPage() {
                   type="text"
                   value={selectedNode.description}
                   onChange={(e) => handleUpdateNodeConfig('description', e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-emerald-500 min-h-[38px]"
                 />
               </div>
 
-              {/* SPECIFIC CONFIG FOR ACTIONS (SMS / WHATSAPP) */}
               {(selectedNode.subtype === 'sms' || selectedNode.subtype === 'whatsapp') && (
                 <div>
                   <label className="block text-slate-400 font-medium mb-1">Message Template</label>
@@ -1105,12 +1046,11 @@ export default function MarketingCanvasPage() {
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-emerald-500 leading-relaxed font-sans"
                   />
                   <p className="text-[10px] text-slate-500 mt-1">
-                    Available variables: <code className="text-emerald-400">&#123;first_name&#125;</code>, <code className="text-emerald-400">&#123;last_name&#125;</code>, <code className="text-emerald-400">&#123;invoice_id&#125;</code>
+                    Available variables: <code className="text-emerald-400">&#123;first_name&#125;</code>, <code className="text-emerald-400">&#123;last_name&#125;</code>
                   </p>
                 </div>
               )}
 
-              {/* SPECIFIC CONFIG FOR DELAY */}
               {selectedNode.type === 'delay' && (
                 <div>
                   <label className="block text-slate-400 font-medium mb-1">Wait Delay (Days)</label>
@@ -1118,39 +1058,15 @@ export default function MarketingCanvasPage() {
                     type="number"
                     value={selectedNode.config?.delay_days || 1}
                     onChange={(e) => handleUpdateNodeConfig('delay_days', Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-emerald-500 min-h-[38px]"
                   />
-                </div>
-              )}
-
-              {/* SPECIFIC CONFIG FOR STAFF TASK */}
-              {selectedNode.subtype === 'staff_task' && (
-                <div>
-                  <label className="block text-slate-400 font-medium mb-1">Staff Task Title</label>
-                  <input
-                    type="text"
-                    value={selectedNode.config?.task_title || ''}
-                    onChange={(e) => handleUpdateNodeConfig('task_title', e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-emerald-500 mb-3"
-                  />
-                  <label className="block text-slate-400 font-medium mb-1">Priority</label>
-                  <select
-                    value={selectedNode.config?.priority || 'medium'}
-                    onChange={(e) => handleUpdateNodeConfig('priority', e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
                 </div>
               )}
 
               <div className="pt-4 border-t border-slate-800">
                 <button
                   onClick={() => handleDeleteNode(selectedNode.id)}
-                  className="w-full flex items-center justify-center gap-2 bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 py-2 rounded-lg text-xs font-semibold transition-all"
+                  className="w-full flex items-center justify-center gap-2 bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 py-2.5 rounded-lg text-xs font-semibold transition-all min-h-[40px]"
                 >
                   <Trash2 className="w-4 h-4" /> Remove Node
                 </button>
@@ -1162,19 +1078,19 @@ export default function MarketingCanvasPage() {
 
       {/* 1-CLICK PLAYBOOK MODAL */}
       {showPlaybookModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl my-8">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-6">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-purple-500/20 border border-purple-500/30 rounded-xl">
+                <div className="p-2.5 bg-purple-500/20 border border-purple-500/30 rounded-xl shrink-0">
                   <Layers className="w-6 h-6 text-purple-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-100">1-Click Marketing Playbook Library</h3>
+                  <h3 className="text-base sm:text-lg font-bold text-slate-100">1-Click Marketing Playbook Library</h3>
                   <p className="text-xs text-slate-400">Pre-built, battle-tested automated retention & acquisition flows</p>
                 </div>
               </div>
-              <button onClick={() => setShowPlaybookModal(false)}>
+              <button onClick={() => setShowPlaybookModal(false)} className="p-1">
                 <X className="w-5 h-5 text-slate-400 hover:text-white" />
               </button>
             </div>
@@ -1184,14 +1100,14 @@ export default function MarketingCanvasPage() {
                 <div
                   key={pb.id}
                   onClick={() => handleSelectPlaybook(pb)}
-                  className="bg-slate-950 hover:bg-slate-850 border border-slate-800 hover:border-purple-500/50 p-4 rounded-xl cursor-pointer transition-all flex items-start justify-between group"
+                  className="bg-slate-950 hover:bg-slate-850 border border-slate-800 hover:border-purple-500/50 p-4 rounded-xl cursor-pointer transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 group"
                 >
                   <div className="space-y-1.5 max-w-lg">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full">
                         {pb.badge}
                       </span>
-                      <h4 className="text-sm font-bold text-slate-200 group-hover:text-purple-300 transition-colors">
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-200 group-hover:text-purple-300 transition-colors">
                         {pb.name}
                       </h4>
                     </div>
@@ -1201,7 +1117,7 @@ export default function MarketingCanvasPage() {
                     </p>
                   </div>
 
-                  <button className="flex items-center gap-1 text-xs font-bold text-purple-400 group-hover:text-purple-300 bg-purple-500/10 group-hover:bg-purple-500/20 border border-purple-500/30 px-3 py-1.5 rounded-lg transition-all">
+                  <button className="flex items-center gap-1 text-xs font-bold text-purple-400 group-hover:text-purple-300 bg-purple-500/10 group-hover:bg-purple-500/20 border border-purple-500/30 px-3 py-1.5 rounded-lg transition-all min-h-[36px] shrink-0 self-end sm:self-auto">
                     Load Playbook <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
