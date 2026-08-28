@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useTenantId } from "@/contexts/AuthContext";
+import { fetchCalendarPolicies, updateCalendarPolicies, fetchWaitlists, updateSchedule } from "@/lib/api/calendar";
 import Link from "next/link";
 import {
   Calendar as CalendarIcon,
@@ -21,6 +23,7 @@ import {
 import { cn, formatCurrencyDisplay } from "@/lib/utils";
 
 export default function SchedulePage() {
+  const tenantId = useTenantId();
   const [viewMode, setViewMode] = useState<"weekly" | "day" | "conflicts" | "rooms" | "rentals" | "policies">("weekly");
   const [selectedDay, setSelectedDay] = useState<string>("Monday");
   const [searchQuery, setSearchQuery] = useState("");
@@ -147,11 +150,74 @@ export default function SchedulePage() {
     }
   ]);
 
-  const [waitlistEntries] = useState([
+  const [waitlistEntries, setWaitlistEntries] = useState<any[]>([
     { id: "w1", className: "CrossFit WOD", memberName: "Eric Mugisha", joinedAt: "10 mins ago", status: "Waiting", position: 1 },
     { id: "w2", className: "CrossFit WOD", memberName: "Divine Ineza", joinedAt: "5 mins ago", status: "Waiting", position: 2 },
     { id: "w3", className: "Pilates Reformer", memberName: "Alice Kayitesi", joinedAt: "1 hour ago", status: "Promoted & Booked", position: 0 },
   ]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    const loadPoliciesAndWaitlist = async () => {
+      try {
+        const polRes = await fetchCalendarPolicies(tenantId);
+        if (polRes.success && polRes.policies) {
+          setCancellationWindowHours(polRes.policies.cancellation_window_hours ?? 2);
+          setLateCancelFeeRwf(polRes.policies.late_cancel_fee_rwf ?? 5000);
+          setNoShowPenaltyRwf(polRes.policies.no_show_penalty_rwf ?? 10000);
+          setMaxNoShowStrikes(polRes.policies.max_no_show_strikes ?? 3);
+        }
+      } catch (err) {
+        console.error("Failed to load calendar policies:", err);
+      }
+
+      try {
+        const waitRes = await fetchWaitlists(tenantId);
+        if (waitRes.success && waitRes.waitlists && waitRes.waitlists.length > 0) {
+          const mapped = waitRes.waitlists.map((w: any) => ({
+            id: w.id,
+            className: w.class_schedules?.title || "Group Fitness Class",
+            memberName: w.profiles ? `${w.profiles.first_name || ''} ${w.profiles.last_name || ''}`.trim() : "Member",
+            joinedAt: new Date(w.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: w.status === 'promoted' ? "Promoted & Booked" : "Waiting",
+            position: 1
+          }));
+          setWaitlistEntries(mapped);
+        }
+      } catch (err) {
+        console.error("Failed to load waitlists:", err);
+      }
+    };
+    loadPoliciesAndWaitlist();
+  }, [tenantId]);
+
+  const handleSavePolicyEngineSettings = async () => {
+    if (!tenantId) return;
+    try {
+      await updateCalendarPolicies({
+        tenant_id: tenantId,
+        cancellation_window_hours: cancellationWindowHours,
+        late_cancel_fee_rwf: lateCancelFeeRwf,
+        no_show_penalty_rwf: noShowPenaltyRwf,
+        max_no_show_strikes: maxNoShowStrikes
+      });
+      setPolicySaved(true);
+      setTimeout(() => setPolicySaved(false), 2000);
+    } catch (err) {
+      console.error("Failed to save policy settings:", err);
+    }
+  };
+
+  const handleFixConflict = async (scheduleId: string, updates: Partial<ScheduleItem>) => {
+    if (tenantId) {
+      try {
+        await updateSchedule(scheduleId, { tenant_id: tenantId, ...updates });
+      } catch (err) {
+        console.error("Failed to update schedule conflict fix:", err);
+      }
+    }
+    setSchedules(prev => prev.map(s => s.id === scheduleId ? { ...s, ...updates, conflicts: [] } : s));
+  };
 
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const timeSlots = ["06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00"];
@@ -651,27 +717,21 @@ export default function SchedulePage() {
                             <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">Recommended Conflict Fixes:</h4>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                               <button
-                                onClick={() => {
-                                  setSchedules(schedules.map(s => s.id === schedule.id ? { ...s, room: "Studio B", conflicts: [] } : s));
-                                }}
+                                onClick={() => handleFixConflict(schedule.id, { room: "Studio B" })}
                                 className="px-3 py-2 bg-card border border-border text-foreground rounded-lg text-xs hover:border-primary flex items-center gap-2 transition-colors font-medium min-h-[40px]"
                               >
                                 <MapPin className="w-4 h-4 text-primary shrink-0" />
                                 Reassign to Studio B
                               </button>
                               <button
-                                onClick={() => {
-                                  setSchedules(schedules.map(s => s.id === schedule.id ? { ...s, instructor: "Coach Emma", conflicts: [] } : s));
-                                }}
+                                onClick={() => handleFixConflict(schedule.id, { instructor: "Coach Emma" })}
                                 className="px-3 py-2 bg-card border border-border text-foreground rounded-lg text-xs hover:border-primary flex items-center gap-2 transition-colors font-medium min-h-[40px]"
                               >
                                 <Users className="w-4 h-4 text-primary shrink-0" />
                                 Reassign to Coach Emma
                               </button>
                               <button
-                                onClick={() => {
-                                  setSchedules(schedules.map(s => s.id === schedule.id ? { ...s, time: "11:00", conflicts: [] } : s));
-                                }}
+                                onClick={() => handleFixConflict(schedule.id, { time: "11:00" })}
                                 className="px-3 py-2 bg-card border border-border text-foreground rounded-lg text-xs hover:border-primary flex items-center gap-2 transition-colors font-medium min-h-[40px]"
                               >
                                 <Clock className="w-4 h-4 text-primary shrink-0" />
@@ -753,7 +813,7 @@ export default function SchedulePage() {
 
                 <div className="flex items-center gap-3 pt-2">
                   <button
-                    onClick={() => { setPolicySaved(true); setTimeout(() => setPolicySaved(false), 2000); }}
+                    onClick={handleSavePolicyEngineSettings}
                     className="px-4 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm font-semibold min-h-[44px]"
                   >
                     Save Policy Engine Settings

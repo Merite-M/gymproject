@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { useTenantId } from "@/contexts/AuthContext";
 import { Loader2, Calendar, CheckCircle2, AlertCircle } from "lucide-react";
 
 interface TaskTemplate {
@@ -33,7 +34,7 @@ interface Shift {
 export default function ManagerPage() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
-  const tenantId = "t-001"; // Mock tenant
+  const tenantId = useTenantId();
   const [dateFilter, setDateFilter] = useState("");
 
   const fetchReviews = useCallback(async () => {
@@ -42,7 +43,7 @@ export default function ManagerPage() {
       const url = new URL(
         `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/staff/manager/review`,
       );
-      url.searchParams.append("tenant_id", tenantId);
+      if (tenantId) url.searchParams.append("tenant_id", tenantId);
       if (dateFilter) url.searchParams.append("date", dateFilter);
 
       const res = await fetch(url.toString());

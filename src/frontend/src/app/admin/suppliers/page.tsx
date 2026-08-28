@@ -159,7 +159,7 @@ export default function SuppliersPage() {
         setSelectedSupplier(null);
       }
     } catch (err: any) {
-      alert("Failed to delete supplier: " + err.message);
+      setFormError("Failed to delete supplier: " + err.message);
     }
   };
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,7 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "dummy_key_for_
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default function MarketingAnalytics() {
+  const router = useRouter();
   const [snapshots, setSnapshots] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -170,8 +172,8 @@ export default function MarketingAnalytics() {
                             </Badge>
                           </td>
                           <td className="p-4 text-right space-x-2">
-                            <Button size="sm" variant="outline">View Profile</Button>
-                            <Button size="sm">Initiate Outreach</Button>
+                            <Button size="sm" variant="outline" onClick={() => router.push('/members/' + snapshot.profile_id)}>View Profile</Button>
+                            <Button size="sm" onClick={() => router.push('/communications?recipient=' + snapshot.profile_id)}>Initiate Outreach</Button>
                           </td>
                         </tr>
                       );
