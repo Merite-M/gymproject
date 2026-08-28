@@ -1,12 +1,13 @@
 # GymPartner — Operations Console
 
-> High-agency mission control for gym operations. A multi-tenant platform for managing members, check-ins, billing, staff, and IoT access control — built for the Rwandan market.
+> High-agency mission control for gym operations. A multi-tenant B2B SaaS platform for managing members, check-ins, billing, staff, IoT access control, corporate wellness, and communications — built for high performance and offline resilience in emerging markets.
 
 ---
 
 ## Table of Contents
 
 - [Overview](#overview)
+- [Architecture & Design Principles](#architecture--design-principles)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
@@ -23,9 +24,20 @@
 
 ## Overview
 
-GymPartner is a full-stack, multi-tenant gym management platform. Each gym (tenant) operates in complete data isolation. The system handles the full member lifecycle — from sign-up and waiver signing through billing, access control, membership holds, and retention.
+GymPartner is an enterprise-grade, multi-tenant gym management ecosystem. Each gym (tenant) operates with strict data isolation using Row-Level Security (RLS) in PostgreSQL. The system manages the entire member lifecycle — from online join widgets and digital waiver signatures to automated billing, IoT turnstile check-ins, corporate B2B contracts, and staff task dispatches.
 
-Currency is denominated in **Rwandan Francs (RWF)**.
+All financial transactions are denominated in **Rwandan Francs (RWF)**, with built-in integrations for local payment channels (Paypack, MTN Mobile Money, Airtel Money) alongside card and tab payments.
+
+---
+
+## Architecture & Design Principles
+
+GymPartner uses a decoupled, capital-efficient architecture designed for 99.99% uptime and low operational cost:
+
+1. **Persistent Express Backend (`gym-backend-core`)**: An always-on Node.js 5 service hosted on Render. Handles real-time WebSockets, IoT relay triggers, background billing crons, dunning workflows, and payment gateway webhooks.
+2. **Static Next.js Frontend (`gym-frontend-app`)**: A Next.js 16 (App Router) frontend compiled as a static export (`output: export`) and served globally via Render's free CDN.
+3. **Database & Isolation**: Powered by Supabase PostgreSQL with tenant-level Row Level Security (RLS) and branching support.
+4. **Offline Resilience**: PWA client-side WebAssembly SQLite storage (`sql.js`) with background CRDT synchronization to handle local power and network drops seamlessly.
 
 ---
 
@@ -33,39 +45,43 @@ Currency is denominated in **Rwandan Francs (RWF)**.
 
 | Module | Description |
 |---|---|
-| **Member CRM** | Full member profiles, dependents/family links, notes, status management |
-| **Check-in / Access Control** | QR code scanning with GPS geofencing, manual override, IoT device triggers |
-| **Waivers** | Digital signature capture, PDF upload to Supabase Storage, 1-year expiry tracking |
-| **Billing & Payments** | Invoicing, payment processing (cash, card, MoMo, bank transfer, member tab) |
-| **Membership Holds & Freezes** | Hold/freeze with proration calculations and dependent impact analysis |
-| **Point of Sale (POS)** | In-gym product and service sales |
-| **Staff Management** | Role-based access control (admin, staff, trainer) |
-| **Calendar** | Class and appointment scheduling |
-| **IoT Integration** | Device-based gate/door access triggers |
-| **Marketing / Retention** | Member outreach and retention tooling |
-| **Cron Jobs** | Background billing runs, membership renewals, reminders |
-| **Sync** | Data synchronisation utilities |
+| **Member CRM** | Profiles, family/dependent links, membership holds, notes, member tab balances |
+| **Check-in & Access Control** | Geofenced QR check-ins, dynamic TOTP codes, hardware turnstile triggers, capacity gating |
+| **Self-Service Kiosk** | Tablet-friendly PIN check-in interface with staff override & real-time verification |
+| **Live Occupancy Monitor** | Real-time capacity monitoring and gate event streaming |
+| **Digital Waivers** | Signature capture, automated PDF generation, Supabase storage, 1-year expiration tracking |
+| **Billing & Payments** | Invoicing, promo codes, gift vouchers with atomic deduction (`FOR UPDATE` locking), MoMo, card, and cash |
+| **Corporate B2B Portal** | Corporate company wellness plans, bulk member management, and automated invoicing |
+| **Communications Hub** | Multi-channel messaging gateway (SMS, Email, WhatsApp) for staff & member outreach |
+| **Automated Drip Engine** | Retention workflows, churn-prevention triggers, automated lifecycle messages |
+| **Staff & Task Management** | Role-based access control (admin, staff, trainer), task assignments, duty shifts |
+| **Point of Sale (POS)** | Product catalog, inventory tracking, instant item sales, running tab management |
+| **Calendar & Facility Rentals**| Class scheduling, trainer appointments, court/facility availability & rentals |
+| **IoT Integration** | Shelly Wi-Fi relays, turnstile scanner integration, hardware credential pairing |
+| **Digital Contracts** | Membership agreement generation and digital signature archiving |
+| **Public Embed Widgets** | Unauthenticated schedule widgets, web join flows, and iframe embed scripts |
 
 ---
 
 ## Tech Stack
 
 ### Frontend
-- **Framework**: [Next.js 16](https://nextjs.org) (App Router) + React 19 + TypeScript 5
-- **UI**: [shadcn/ui](https://ui.shadcn.com) · Tailwind CSS v4 · Base UI React · Lucide React
-- **State**: Zustand
-- **PDF / Signatures**: jsPDF + react-signature-canvas
-- **Fonts**: Manrope, Inter, JetBrains Mono + Material Symbols Outlined
+- **Framework**: [Next.js 16](https://nextjs.org) (App Router, Static Export) · React 19 · TypeScript 5
+- **UI & Styling**: [shadcn/ui](https://ui.shadcn.com) · Tailwind CSS v4 (`@tailwindcss/postcss`) · Base UI React · Lucide React
+- **State Management**: Zustand
+- **PDF & Digital Signatures**: jsPDF · react-signature-canvas
+- **Design Tokens**: CSS Custom Properties (`:root` theme in `globals.css`)
 
 ### Backend
 - **Runtime**: Node.js (CommonJS)
 - **Framework**: Express 5
-- **File Uploads**: Multer (in-memory storage)
-- **Scheduling**: node-cron
+- **File Uploads**: Multer (In-Memory Storage)
+- **Rate Limiting**: express-rate-limit
+- **Background Jobs & Events**: node-cron · Node.js EventEmitter
 
-### Infrastructure
-- **Database / Auth / Storage**: [Supabase](https://supabase.com) (PostgreSQL + Auth + Storage)
-- **Deployment**: [Render.com](https://render.com) — Web Service (backend) + Static Site (frontend CDN)
+### Infrastructure & Database
+- **Database / Auth / Storage**: [Supabase](https://supabase.com) (PostgreSQL + RLS + Auth + Storage)
+- **Hosting**: [Render.com](https://render.com) — Web Service (`gym-backend-core`) + Static Site (`gym-frontend-app`)
 
 ---
 
@@ -73,42 +89,55 @@ Currency is denominated in **Rwandan Francs (RWF)**.
 
 ```
 gymproject/
-├── render.yaml                  # Render deployment config
+├── render.yaml                  # Render infrastructure-as-code deployment config
 ├── supabase/
 │   └── migrations/              # Database migration files
 └── src/
     ├── backend/                 # Node.js / Express API
-    │   ├── index.js             # Entry point, core routes (check-in, waivers)
-    │   ├── member-crm.js        # Member CRUD, billing, dependents, holds
-    │   ├── payments.js          # Payment processing
-    │   ├── pos.js               # Point of sale
-    │   ├── staff.js             # Staff management
-    │   ├── calendar.js          # Scheduling
-    │   ├── iot.js               # IoT device integration
-    │   ├── marketing.js         # Marketing / outreach
-    │   ├── membership_holds.js  # Hold management
-    │   ├── cron.js              # Background jobs
-    │   ├── sync.js              # Data sync
-    │   ├── admin.js             # Admin utilities
-    │   ├── events.js            # Internal event emitter
+    │   ├── index.js             # Server entry point, health check, waiver & checkin endpoints
+    │   ├── admin.js             # System administration & tenant settings
+    │   ├── authMiddleware.js    # Centralized Bearer JWT auth middleware
+    │   ├── calendar.js          # Class scheduling & facility rentals
+    │   ├── communications.js    # Staff & member communication hub
+    │   ├── contracts.js         # Digital contract agreements
+    │   ├── corporate.js         # Corporate B2B wellness portal
+    │   ├── cron.js              # Background billing, renewals, and dunning engine
+    │   ├── drip_engine.js       # Automated member retention drip campaigns
+    │   ├── events.js            # Internal Node.js EventEmitters
+    │   ├── gateways.js          # Multi-channel messaging gateways (SMS, Email, WhatsApp)
+    │   ├── iot.js               # Turnstiles, TOTP QR generation, hardware credentials
+    │   ├── marketing.js         # Member outreach & marketing campaigns
+    │   ├── member-crm.js        # Member CRUD, billing, tabs, family links
+    │   ├── membership_holds.js  # Freeze & hold proration logic
+    │   ├── payments.js          # Promo codes, gift vouchers, payment gateways
+    │   ├── pos.js               # Point of Sale & inventory management
+    │   ├── public.js            # Unauthenticated web widgets & join flows
+    │   ├── staff.js             # Staff RBAC & duty roster
+    │   ├── staff_tasks.js       # Staff task assignments & workflows
+    │   ├── sync.js              # Offline-first SQLite sync engine
+    │   ├── tier_proration.js    # Membership tier upgrades/downgrades
     │   └── MEMBER_CRM_API.md    # API documentation
-    └── frontend/                # Next.js application
+    └── frontend/                # Next.js Static Export Application
         └── src/
             ├── app/             # App Router pages
-            │   ├── admin/
-            │   ├── calendar/
-            │   ├── login/
-            │   ├── members/
-            │   ├── monitor/
-            │   ├── pos/
-            │   ├── reception/
-            │   ├── retention/
-            │   ├── staff/
-            │   └── waiver/
-            ├── components/      # Shared UI components
-            ├── contexts/        # React contexts (Auth, etc.)
-            ├── lib/             # Utilities and state context
-            └── store/           # Zustand stores
+            │   ├── admin/       # Tenant management & settings
+            │   ├── calendar/    # Class & facility scheduling
+            │   ├── communications/ # Communication Hub
+            │   ├── corporate/   # Corporate B2B wellness management
+            │   ├── kiosk/       # Self-service tablet check-in interface
+            │   ├── login/       # Authentication login
+            │   ├── marketing/   # Campaign manager
+            │   ├── members/     # Member CRM profiles & billing
+            │   ├── monitor/     # Real-time occupancy monitor
+            │   ├── pos/         # Point of Sale interface
+            │   ├── reception/   # Front desk check-in dashboard
+            │   ├── retention/   # Retention automation & drip workflows
+            │   ├── staff/       # Staff management & duty roster
+            │   └── waiver/      # Digital waiver signing
+            ├── components/      # Reusable UI components & dialogs
+            ├── contexts/        # React contexts (Auth, Tenant)
+            ├── lib/             # API client modules & utilities
+            └── store/           # Zustand state management stores
 ```
 
 ---
@@ -118,30 +147,37 @@ gymproject/
 ### Prerequisites
 
 - Node.js v20+
-- A [Supabase](https://supabase.com) project with the required tables provisioned
 - npm
+- A [Supabase](https://supabase.com) project with provisioned tables and RLS policies
 
 ### Backend Setup
 
 ```bash
 cd src/backend
 npm install
-cp .env.example .env   # fill in your values
+cp .env.example .env   # Fill in Supabase credentials and HMAC keys
 node index.js
 ```
 
-The backend runs on **port 3001** by default.
+The backend API server runs on **port 3001** by default.
 
 ### Frontend Setup
 
 ```bash
 cd src/frontend
 npm install
-cp .env.local.example .env.local   # fill in your values
+cp .env.local.example .env.local   # Fill in Supabase anon keys and backend URL
 npm run dev
 ```
 
-The frontend runs on **[http://localhost:3000](http://localhost:3000)**.
+The development server runs on **[http://localhost:3000](http://localhost:3000)**.
+To test the static build locally:
+
+```bash
+cd src/frontend
+npm run build
+npx serve@latest out -l 3000
+```
 
 ---
 
@@ -155,7 +191,11 @@ The frontend runs on **[http://localhost:3000](http://localhost:3000)**.
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role secret key |
 | `FRONTEND_URL` | Allowed CORS origin (e.g. `http://localhost:3000`) |
 | `PORT` | Server port (default: `3001`) |
-| `NODE_ENV` | `development` or `production` |
+| `JWT_SECRET` | Secret key for custom token validation |
+| `INTERNAL_API_KEY` | Internal system-to-system API key |
+| `PAYPACK_WEBHOOK_SECRET` | HMAC secret for Paypack webhooks |
+| `MOMO_WEBHOOK_SECRET` | HMAC secret for MTN Mobile Money webhooks |
+| `AIRTEL_WEBHOOK_SECRET` | HMAC secret for Airtel Money webhooks |
 
 ### Frontend (`src/frontend/.env.local`)
 
@@ -163,57 +203,68 @@ The frontend runs on **[http://localhost:3000](http://localhost:3000)**.
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public key |
-| `NEXT_PUBLIC_BACKEND_URL` | Backend API base URL |
+| `NEXT_PUBLIC_API_URL` | Backend API base URL (e.g. `http://localhost:3001`) |
 
 ---
 
 ## API Overview
 
-All API endpoints are prefixed with `/api/` and require a valid Supabase JWT in the `Authorization: Bearer <token>` header. All queries are scoped to a `tenant_id`.
+All authenticated API endpoints require a valid Supabase Bearer JWT in the `Authorization: Bearer <token>` header. Operations are automatically scoped to the user's `tenant_id`.
 
-| Route prefix | Module |
+| Route Prefix | Module |
 |---|---|
-| `POST /api/checkin` | Member check-in with geofencing |
-| `POST /api/waivers/sign` | Upload signed waiver PDF |
-| `/api/members/:id` | Member CRM (profile, billing, holds, dependents, waiver) |
-| `/api/payments` | Payment processing |
-| `/api/pos` | Point of sale |
-| `/api/staff` | Staff management |
-| `/api/calendar` | Scheduling |
-| `/api/iot` | IoT device access |
-| `/api/membership-holds` | Hold management |
-| `/api/admin` | Admin utilities |
-| `/api/sync` | Data sync |
-
-See [`src/backend/MEMBER_CRM_API.md`](src/backend/MEMBER_CRM_API.md) for full Member CRM endpoint documentation.
+| `GET /health` | Backend and database status health check |
+| `POST /api/checkin` | Member check-in with GPS geofencing & capacity checks |
+| `POST /api/waivers/sign` | Digital liability waiver PDF upload & signature |
+| `/api/members` | Member CRM (profiles, family links, tabs, billing) |
+| `/api/payments` | Payment processing, promo codes, gift vouchers |
+| `/api/corporate` | Corporate B2B wellness portal & company invoicing |
+| `/api/communications` | Multi-channel communication hub (SMS, Email, WhatsApp) |
+| `/api/workflows` | Retention drip campaigns & automated triggers |
+| `/api/tasks` | Staff task assignments & duty management |
+| `/api/pos` | Point of Sale catalog, transactions & inventory |
+| `/api/staff` | Staff RBAC & duty roster |
+| `/api/calendar` | Class scheduling & facility rentals |
+| `/api/iot` | Turnstiles, dynamic TOTP QR generation, credentials |
+| `/api/membership-holds` | Freeze/hold proration management |
+| `/api/tiers` | Tier upgrades/downgrades & proration |
+| `/api/contracts` | Digital contracts & agreement archives |
+| `/api/public` & `/widgets` | Unauthenticated web widgets & public join flows |
+| `/api/admin` | System settings & tenant configuration |
+| `/api/sync` | Offline-first WASM SQLite data synchronization |
 
 ---
 
 ## Deployment
 
-The project deploys to [Render.com](https://render.com) via [`render.yaml`](render.yaml):
+Deployment configuration is managed via [`render.yaml`](render.yaml):
 
-| Service | Type | Config |
+| Service Name | Render Service Type | Build & Start Command |
 |---|---|---|
-| `gym-backend-core` | Web Service (Node.js, Free tier) | `cd src/backend && node index.js` |
+| `gym-backend-core` | Web Service (Node.js) | `cd src/backend && npm install` → `node index.js` |
 | `gym-frontend-app` | Static Site (CDN) | `cd src/frontend && npm run build` → publishes `src/frontend/out` |
 
 ---
 
 ## Database
 
-The Supabase PostgreSQL schema includes the following core tables:
+The database is built on Supabase PostgreSQL with Row Level Security (RLS) enforcement per tenant:
 
-| Table | Purpose |
+| Core Table | Purpose |
 |---|---|
-| `tenants` | Gym tenant records (includes geofence lat/lon/radius) |
-| `profiles` | Member profiles, roles, waiver status |
-| `memberships` | Membership records per member |
-| `membership_holds` | Hold and freeze records |
-| `invoices` | Billing invoices |
-| `payments` | Payment transactions |
-| `member_tabs` | Running tab balances |
-| `family_links` | Dependent/family relationships |
-| `check_ins` | Access log (approved, warning, denied) |
+| `tenants` | Tenant records, geofence parameters, feature toggles, capacity limits |
+| `profiles` | Member and staff profiles, roles, waiver verification status |
+| `memberships` | Active & historical membership plans |
+| `membership_holds` | Active & upcoming membership freezes/holds |
+| `invoices` | Member and corporate billing invoices |
+| `payments` | Payment ledger (Cash, Card, MoMo, Tab, Gift Voucher) |
+| `member_tabs` | Member running tab credit balances |
+| `family_links` | Dependent and family member associations |
+| `check_ins` | Real-time access log (Approved, Warning, Denied) |
+| `corporate_companies` | Corporate accounts & B2B subscription plans |
+| `communications_log` | Audit trail for multi-channel dispatches |
+| `staff_tasks` | Staff task assignments & completion statuses |
+| `facility_rentals` | Court and facility scheduling & reservations |
+| `gift_vouchers` | Gift voucher codes, initial balance, and remaining balance |
 
 Database migrations live in [`supabase/migrations/`](supabase/migrations/).
