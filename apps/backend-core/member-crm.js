@@ -2,7 +2,7 @@ const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const router = express.Router();
 const authMiddleware = require('./authMiddleware');
-const { validateTenantAccess: sharedValidateTenantAccess, formatRWF } = require('./shared/utils');
+const { validateTenantAccess: sharedValidateTenantAccess, formatRWF } = require('@gym-partner/shared-utils');
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

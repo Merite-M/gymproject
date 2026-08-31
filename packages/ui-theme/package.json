@@ -1,0 +1,7 @@
+{
+  "name": "@gym-partner/ui-theme",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "private": true,
+  "description": "Shared UI theme and Tailwind CSS configuration for GymPartner applications"
+}

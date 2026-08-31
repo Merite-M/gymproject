@@ -8,7 +8,7 @@ const dns = require('dns');
 const { promisify } = require('util');
 const lookupAsync = promisify(dns.lookup);
 const authMiddleware = require('./authMiddleware');
-const { getLiveOccupancy: sharedGetLiveOccupancy } = require('./shared/utils');
+const { getLiveOccupancy: sharedGetLiveOccupancy } = require('@gym-partner/shared-utils');
 
 require('dotenv').config();
 
