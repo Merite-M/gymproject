@@ -311,3 +311,124 @@ export interface StaffTaskItem {
   due_date?: string | null;
   created_at?: string;
 }
+
+export type PlanTier = 'Standard' | 'Premium' | 'Elite';
+export type CorporateEmployeeStatus = 'Active' | 'Suspended' | 'Terminated';
+export type WellnessCategory = 'Gym' | 'Swimming Pool' | 'Sauna/Steam' | 'Sports Club' | 'Yoga Studio';
+export type ProviderTierLevel = 'Standard' | 'Premium' | 'Luxury';
+export type NetworkPayoutStatus = 'Pending' | 'Approved' | 'Capped_Zero_Rate' | 'Settled' | 'Denied';
+
+export interface CorporateEmployer {
+  id: string;
+  tenant_id: string;
+  company_name: string;
+  tax_id_ebm: string;
+  plan_tier: PlanTier;
+  monthly_budget_rwf: number;
+  employer_subsidy_percentage: number;
+  billing_cycle_day: number;
+  status: 'active' | 'suspended' | 'inactive';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CorporateEmployee {
+  id: string;
+  tenant_id: string;
+  employer_id: string;
+  user_id?: string | null;
+  profile_id?: string | null;
+  employee_code: string;
+  department?: string | null;
+  status: CorporateEmployeeStatus;
+  monthly_co_pay_limit_rwf: number;
+  created_at: string;
+  updated_at: string;
+  employer?: CorporateEmployer;
+  profile?: Profile | null;
+}
+
+export interface WellnessProvider {
+  id: string;
+  tenant_id: string;
+  provider_name: string;
+  category: WellnessCategory;
+  tier_level: ProviderTierLevel;
+  payout_bank_account?: string | null;
+  spenn_wallet_msisdn?: string | null;
+  status: 'active' | 'suspended' | 'inactive';
+  created_at: string;
+  updated_at: string;
+  facilities?: ProviderFacility[];
+}
+
+export interface ProviderFacility {
+  id: string;
+  tenant_id: string;
+  provider_id: string;
+  facility_name: string;
+  category: WellnessCategory;
+  tier_level: ProviderTierLevel;
+  base_payout_per_visit_rwf: number;
+  monthly_visit_cap_per_user: number;
+  geofence_lat?: number | null;
+  geofence_lng?: number | null;
+  geofence_radius_meters: number;
+  payout_bank_account?: string | null;
+  spenn_wallet_msisdn?: string | null;
+  status: 'active' | 'suspended' | 'inactive';
+  created_at: string;
+  updated_at: string;
+  provider?: WellnessProvider;
+}
+
+export interface NetworkCheckin {
+  id: string;
+  tenant_id: string;
+  employee_id: string;
+  facility_id: string;
+  verified_at: string;
+  totp_token_used?: string | null;
+  payout_amount_rwf: number;
+  payout_status: NetworkPayoutStatus;
+  is_co_pay_triggered: boolean;
+  created_at: string;
+  employee?: CorporateEmployee;
+  facility?: ProviderFacility;
+}
+
+export interface NetworkCheckinVerificationResult {
+  success: boolean;
+  checkin_id?: string;
+  employee_id?: string;
+  facility_id?: string;
+  facility_name?: string;
+  visit_count_this_month?: number;
+  monthly_visit_cap?: number;
+  payout_amount_rwf?: number;
+  payout_status?: NetworkPayoutStatus;
+  is_co_pay_triggered?: boolean;
+  verified_at?: string;
+  error?: string;
+  code?: string;
+  last_checkin_at?: string;
+}
+
+export interface MonthlyProviderPayoutSummary {
+  success: boolean;
+  facility_id: string;
+  facility_name: string;
+  provider_id: string;
+  period_year: number;
+  period_month: number;
+  total_visits: number;
+  payable_visits: number;
+  capped_zero_rate_visits: number;
+  base_payout_per_visit_rwf: number;
+  total_payout_due_rwf: number;
+  payout_bank_account?: string | null;
+  spenn_wallet_msisdn?: string | null;
+  error?: string;
+  code?: string;
+}
+
