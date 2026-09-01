@@ -34,8 +34,8 @@ All financial transactions are denominated in **Rwandan Francs (RWF)**, with bui
 
 PolyFit uses a decoupled, capital-efficient architecture designed for 99.99% uptime and low operational cost:
 
-1. **Persistent Express Backend (`gym-backend-core`)**: An always-on Node.js 5 service hosted on Render. Handles real-time WebSockets, IoT relay triggers, background billing crons, dunning workflows, and payment gateway webhooks.
-2. **Static Next.js Frontend (`gym-frontend-app`)**: A Next.js 16 (App Router) frontend compiled as a static export (`output: export`) and served globally via Render's free CDN.
+1. **Persistent Express Backend (`polyfit-backend`)**: An always-on Node.js 5 service hosted on Render. Handles real-time WebSockets, IoT relay triggers, background billing crons, dunning workflows, and payment gateway webhooks.
+2. **Static Next.js Frontend (`polyfit`)**: A Next.js 16 (App Router) frontend compiled as a static export (`output: export`) and served globally via Render's free CDN.
 3. **Database & Isolation**: Powered by Supabase PostgreSQL with tenant-level Row Level Security (RLS) and branching support.
 4. **Offline Resilience**: PWA client-side WebAssembly SQLite storage (`sql.js`) with background CRDT synchronization to handle local power and network drops seamlessly.
 
@@ -81,7 +81,7 @@ PolyFit uses a decoupled, capital-efficient architecture designed for 99.99% upt
 
 ### Infrastructure & Database
 - **Database / Auth / Storage**: [Supabase](https://supabase.com) (PostgreSQL + RLS + Auth + Storage)
-- **Hosting**: [Render.com](https://render.com) — Web Service (`gym-backend-core`) + Static Site (`gym-frontend-app`)
+- **Hosting**: [Render.com](https://render.com) — Web Service (`polyfit-backend`) + Static Site (`polyfit`)
 
 ---
 
@@ -239,10 +239,8 @@ All authenticated API endpoints require a valid Supabase Bearer JWT in the `Auth
 
 Deployment configuration is managed via [`render.yaml`](render.yaml):
 
-| Service Name | Render Service Type | Build & Start Command |
-|---|---|---|
-| `gym-backend-core` | Web Service (Node.js) | `cd src/backend && npm install` → `node index.js` |
-| `gym-frontend-app` | Static Site (CDN) | `cd src/frontend && npm run build` → publishes `src/frontend/out` |
+| `polyfit-backend` | Web Service (Node.js) | `pnpm install --filter @polyfit/backend-core...` → `node apps/backend-core/index.js` |
+| `polyfit` | Static Site (CDN) | `pnpm install --filter @polyfit/web-gym-saas... && pnpm --filter @polyfit/web-gym-saas build` → publishes `apps/web-gym-saas/out` |
 
 ---
 

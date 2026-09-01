@@ -88,7 +88,7 @@ export default function WidgetCustomizerPage() {
     loadTenantInfo();
   }, []);
 
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://gym-backend-core.onrender.com';
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://polyfit-backend.onrender.com';
 
   const scriptCodeSnippet = `<script
   src="${backendUrl}/widgets/${widgetType}.js"

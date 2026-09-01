@@ -14,7 +14,7 @@
     return scripts[scripts.length - 1];
   })();
 
-  const backendOrigin = currentScript ? (new URL(currentScript.src)).origin : (window.location.origin || 'https://gym-backend-core.onrender.com');
+  const backendOrigin = currentScript ? (new URL(currentScript.src)).origin : (window.location.origin || 'https://polyfit-backend.onrender.com');
   const tenantSlug = currentScript ? (currentScript.getAttribute('data-tenant-slug') || currentScript.getAttribute('data-tenant-id')) : null;
   const primaryColor = currentScript ? (currentScript.getAttribute('data-primary-color') || '#2563eb') : '#2563eb';
   const targetId = currentScript ? (currentScript.getAttribute('data-target') || 'polyfit-join-widget') : 'polyfit-join-widget';

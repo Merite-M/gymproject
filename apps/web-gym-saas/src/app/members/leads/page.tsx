@@ -415,7 +415,7 @@ export default function LeadsPipelinePage() {
   // Widget Embed Snippets
   const scriptSnippet = `<!-- PolyFit Embeddable ${widgetMode === 'schedule' ? 'Tour Booking' : 'Member Join'} Widget -->
 <div id="polyfit-widget" data-tenant-id="${widgetTenantId}" data-mode="${widgetMode}"></div>
-<script src="https://gym-backend-core.onrender.com/api/public/widget.js" async></script>`;
+<script src="https://polyfit-backend.onrender.com/api/public/widget.js" async></script>`;
 
   const reactSnippet = `// React / Next.js Component Embed
 import { useEffect } from "react";
@@ -423,7 +423,7 @@ import { useEffect } from "react";
 export function PolyFitEmbed() {
   useEffect(() => {
     const script = document.createElement("script");
-    script.src = "https://gym-backend-core.onrender.com/api/public/widget.js";
+    script.src = "https://polyfit-backend.onrender.com/api/public/widget.js";
     script.setAttribute("data-tenant-id", "${widgetTenantId}");
     script.setAttribute("data-mode", "${widgetMode}");
     script.async = true;

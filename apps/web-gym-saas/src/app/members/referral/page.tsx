@@ -97,8 +97,8 @@ export default function MemberReferralHubPage() {
       // Fallback mock data if server isn't authenticated or unreachable in local dev
       setData({
         profile_id: memberId,
-        referral_code: "GP-MEMBER10K",
-        share_url: `https://gym-frontend-app.onrender.com/join?ref=GP-MEMBER10K&tenant=${tenantId}`,
+        referral_code: "PF-MEMBER10K",
+        share_url: `https://polyfit.onrender.com/join?ref=PF-MEMBER10K&tenant=${tenantId}`,
         metrics: {
           total_referrals: 5,
           converted_count: 2,
@@ -182,7 +182,7 @@ export default function MemberReferralHubPage() {
           setData(prev => prev ? {
             ...prev,
             referral_code: json.referral_code,
-            share_url: `https://gym-frontend-app.onrender.com/join?ref=${json.referral_code}&tenant=${tenantId}`
+            share_url: `https://polyfit.onrender.com/join?ref=${json.referral_code}&tenant=${tenantId}`
           } : null);
         }
       }

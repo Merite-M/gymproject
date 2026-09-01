@@ -978,7 +978,7 @@ async function processLeadDripSequences(supabase) {
                     channel: 'sms',
                     recipient: lead.phone,
                     subject: 'Free VIP Gym Pass',
-                    content: `Hi ${lead.first_name}! Are you still looking to reach your fitness goals? Book a free gym tour and workout pass here: https://gym-frontend-app.onrender.com/join`,
+                    content: `Hi ${lead.first_name}! Are you still looking to reach your fitness goals? Book a free gym tour and workout pass here: https://polyfit.onrender.com/join`,
                     status: 'pending'
                 });
 
@@ -1180,7 +1180,7 @@ async function processGuestPassConversionDrips(supabase) {
                     channel: 'sms',
                     recipient: pass.guest_phone,
                     subject: 'Guest Trial Offer',
-                    content: `Hi ${guestName}! Hope you enjoyed your guest visit yesterday! Claim 20% off your 1st month membership today: https://gym-frontend-app.onrender.com/join (Ref: Guest Conversion ${pass.guest_phone})`,
+                    content: `Hi ${guestName}! Hope you enjoyed your guest visit yesterday! Claim 20% off your 1st month membership today: https://polyfit.onrender.com/join (Ref: Guest Conversion ${pass.guest_phone})`,
                     status: 'pending',
                     metadata: { type: 'guest_pass_conversion_drip', guest_pass_id: pass.id, lead_id: pass.converted_lead_id }
                 });

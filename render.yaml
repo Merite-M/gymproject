@@ -1,7 +1,7 @@
 services:
   # 1. Render Web Service (Always-on Node.js API backend hosting Express 5, WebSockets, background billing crons, IoT triggers, and payment webhooks)
   - type: web
-    name: gym-backend-core
+    name: polyfit-backend
     env: node
     plan: free
     buildCommand: pnpm install --filter @polyfit/backend-core...
@@ -16,7 +16,7 @@ services:
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: FRONTEND_URL
-        value: https://gym-frontend-app.onrender.com
+        value: https://polyfit.onrender.com
       - key: JWT_SECRET
         sync: false
       - key: INTERNAL_API_KEY
@@ -30,7 +30,7 @@ services:
 
   # 2. Render Static Site (Free-tier CDN Next.js frontend static export)
   - type: web
-    name: gym-frontend-app
+    name: polyfit
     env: static
     buildCommand: pnpm install --filter @polyfit/web-gym-saas... && pnpm --filter @polyfit/web-gym-saas build
     staticPublishPath: apps/web-gym-saas/out
@@ -44,4 +44,4 @@ services:
       - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
         sync: false
       - key: NEXT_PUBLIC_API_URL
-        value: https://gym-backend-core.onrender.com
+        value: https://polyfit-backend.onrender.com

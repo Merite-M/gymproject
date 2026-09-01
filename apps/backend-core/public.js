@@ -935,7 +935,7 @@ router.get('/widget.js', (req, res) => {
     return scripts[scripts.length - 1];
   })();
 
-  const backendOrigin = currentScript ? (new URL(currentScript.src)).origin : 'https://gym-backend-core.onrender.com';
+  const backendOrigin = currentScript ? (new URL(currentScript.src)).origin : 'https://polyfit-backend.onrender.com';
   const tenantId = currentScript ? currentScript.getAttribute('data-tenant-id') : null;
   const mode = (currentScript ? currentScript.getAttribute('data-mode') : 'schedule') || 'schedule';
   const targetId = currentScript ? (currentScript.getAttribute('data-target') || 'polyfit-widget') : 'polyfit-widget';

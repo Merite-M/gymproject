@@ -1029,7 +1029,7 @@ router.get('/:id/referral', async (req, res) => {
     const rewardedReferrals = (referrals || []).filter(r => r.status === 'rewarded');
     const totalEarnedRWF = rewardedReferrals.reduce((sum, r) => sum + parseFloat(r.reward_amount_rwf || 0), 0);
 
-    const shareUrl = `https://gym-frontend-app.onrender.com/join?ref=${referralCode}&tenant=${tenant_id}`;
+    const shareUrl = `https://polyfit.onrender.com/join?ref=${referralCode}&tenant=${tenant_id}`;
 
     res.json({
       profile_id: id,
