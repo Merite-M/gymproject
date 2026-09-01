@@ -3,7 +3,7 @@ const { createClient } = require('@supabase/supabase-js');
 const multer = require('multer');
 const router = express.Router();
 const authMiddleware = require('./authMiddleware');
-const { validateTenantAccess } = require('@gym-partner/shared-utils');
+const { validateTenantAccess } = require('@polyfit/shared-utils');
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

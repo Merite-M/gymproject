@@ -194,9 +194,9 @@ export default function WaiverPortalPage() {
       y += 26;
       doc.setFontSize(8);
       doc.setTextColor(120);
-      doc.text('Cryptographically validated by GymPartner Core E-Signature Vault', 20, y);
+      doc.text('Cryptographically validated by PolyFit Core E-Signature Vault', 20, y);
 
-      doc.save(`Gym_Contract_${signerName.replace(/\s+/g, '_')}.pdf`);
+      doc.save(`PolyFit_Contract_${signerName.replace(/\s+/g, '_')}.pdf`);
     } catch (e) {
       console.error(e);
       alert('Could not download PDF.');

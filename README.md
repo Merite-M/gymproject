@@ -1,4 +1,4 @@
-# GymPartner — Operations Console
+# PolyFit — Operations Console
 
 > High-agency mission control for gym operations. A multi-tenant B2B SaaS platform for managing members, check-ins, billing, staff, IoT access control, corporate wellness, and communications — built for high performance and offline resilience in emerging markets.
 
@@ -24,7 +24,7 @@
 
 ## Overview
 
-GymPartner is an enterprise-grade, multi-tenant gym management ecosystem. Each gym (tenant) operates with strict data isolation using Row-Level Security (RLS) in PostgreSQL. The system manages the entire member lifecycle — from online join widgets and digital waiver signatures to automated billing, IoT turnstile check-ins, corporate B2B contracts, and staff task dispatches.
+PolyFit is an enterprise-grade, multi-tenant gym management ecosystem and B2B corporate wellness network. Each gym (tenant) operates with strict data isolation using Row-Level Security (RLS) in PostgreSQL. The system manages the entire member lifecycle — from online join widgets and digital waiver signatures to automated billing, IoT turnstile check-ins, corporate B2B contracts, and staff task dispatches.
 
 All financial transactions are denominated in **Rwandan Francs (RWF)**, with built-in integrations for local payment channels (Paypack, MTN Mobile Money, Airtel Money) alongside card and tab payments.
 
@@ -32,7 +32,7 @@ All financial transactions are denominated in **Rwandan Francs (RWF)**, with bui
 
 ## Architecture & Design Principles
 
-GymPartner uses a decoupled, capital-efficient architecture designed for 99.99% uptime and low operational cost:
+PolyFit uses a decoupled, capital-efficient architecture designed for 99.99% uptime and low operational cost:
 
 1. **Persistent Express Backend (`gym-backend-core`)**: An always-on Node.js 5 service hosted on Render. Handles real-time WebSockets, IoT relay triggers, background billing crons, dunning workflows, and payment gateway webhooks.
 2. **Static Next.js Frontend (`gym-frontend-app`)**: A Next.js 16 (App Router) frontend compiled as a static export (`output: export`) and served globally via Render's free CDN.

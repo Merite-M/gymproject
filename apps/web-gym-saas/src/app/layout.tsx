@@ -26,8 +26,13 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GymPartner - Operations Console",
-  description: "High-Agency Mission Control for Gym Operations",
+  title: "PolyFit — B2B Corporate Wellness Network & BOH SaaS",
+  description: "PolyFit BOH SaaS Operations Console & B2B Corporate Wellness Network",
+  openGraph: {
+    title: "PolyFit — B2B Corporate Wellness Network & BOH SaaS",
+    description: "PolyFit BOH SaaS Operations Console & B2B Corporate Wellness Network",
+    siteName: "PolyFit",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

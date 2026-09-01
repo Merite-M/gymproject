@@ -1,8 +1,8 @@
 {
-  "name": "@gym-partner/shared-utils",
+  "name": "@polyfit/shared-utils",
   "version": "1.0.0",
   "main": "src/index.js",
   "type": "commonjs",
   "private": true,
-  "description": "Shared utility functions for GymPartner applications"
+  "description": "Shared utility functions for PolyFit applications"
 }

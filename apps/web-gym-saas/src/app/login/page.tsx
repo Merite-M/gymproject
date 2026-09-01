@@ -141,8 +141,8 @@ export default function LoginPage() {
           <div className="w-16 h-16 rounded-lg bg-primary flex items-center justify-center mx-auto mb-4">
             <ScanLine className="w-8 h-8 text-primary-foreground" />
           </div>
-          <h1 className="text-3xl font-headline-md font-bold text-foreground mb-2">GymPartner</h1>
-          <p className="text-muted-foreground">Operations Console</p>
+          <h1 className="text-3xl font-headline-md font-bold text-foreground mb-2">PolyFit</h1>
+          <p className="text-muted-foreground">BOH SaaS Operations Console</p>
         </div>
 
         {error && (

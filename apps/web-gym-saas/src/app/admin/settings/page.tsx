@@ -126,7 +126,7 @@ export default function SettingsPage() {
       }
 
       setTenantId(tenant.id);
-      setTenantName(tenant.name || 'GymPartner');
+      setTenantName(tenant.name || 'PolyFit Network');
 
       // 2. Fetch full settings via API service
       const data = await getTenantSettings(tenant.id);
@@ -438,7 +438,7 @@ export default function SettingsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-6">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-heading font-bold tracking-tight text-foreground">Admin Settings</h1>
+            <h1 className="text-3xl font-heading font-bold tracking-tight text-foreground">PolyFit BOH SaaS Operations Console</h1>
             <Badge variant="outline" className="text-xs bg-surface-container text-foreground">
               {tenantName}
             </Badge>

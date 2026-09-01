@@ -66,7 +66,7 @@ async function executeWorkflowStep({ tenant_id, profile_id, workflow, currentNod
     const message = template
       .replace(/{{first_name}}/gi, member?.first_name || 'Member')
       .replace(/{{last_name}}/gi, member?.last_name || '')
-      .replace(/{{gym_name}}/gi, 'GymPartner Kigali')
+      .replace(/{{gym_name}}/gi, 'PolyFit Kigali')
       .replace(/{{phone}}/gi, member?.phone || '');
 
     if (member?.phone) {

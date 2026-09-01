@@ -14,7 +14,7 @@ importers:
 
   apps/backend-core:
     dependencies:
-      '@gym-partner/shared-utils':
+      '@polyfit/shared-utils':
         specifier: workspace:*
         version: link:../../packages/shared-utils
       '@supabase/supabase-js':

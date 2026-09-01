@@ -32,7 +32,7 @@ export default function WidgetCustomizerPage() {
   const [primaryColor, setPrimaryColor] = useState<string>('#29C47A');
   const [embedType, setEmbedType] = useState<'script' | 'iframe'>('script');
   const [buttonText, setButtonText] = useState<string>('Schedule Free VIP Tour');
-  const [targetId, setTargetId] = useState<string>('gympartner-widget');
+  const [targetId, setTargetId] = useState<string>('polyfit-widget');
   const [copied, setCopied] = useState<boolean>(false);
 
   // Live preview mockup state
@@ -50,7 +50,7 @@ export default function WidgetCustomizerPage() {
           first_name: previewName || "Demo",
           last_name: "Member",
           phone: previewPhone || "+250788000000",
-          email: "demo@gympartner.rw",
+          email: "demo@polyfit.africa",
           membership_type: mode === 'schedule' ? 'VIP Tour Pass' : 'Trial Signup'
         })
       });
@@ -265,7 +265,7 @@ export default function WidgetCustomizerPage() {
                 <Input
                   id="targetId"
                   value={targetId}
-                  onChange={(e) => setTargetId(e.target.value || 'gympartner-widget')}
+                  onChange={(e) => setTargetId(e.target.value || 'polyfit-widget')}
                   className="font-mono-id text-xs bg-background border-border"
                 />
                 <p className="text-xs text-muted-foreground">

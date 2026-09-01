@@ -2,7 +2,7 @@ const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const router = express.Router();
 const authMiddleware = require('./authMiddleware');
-const { validateTenantAccess: sharedValidateTenantAccess, formatRWF } = require('@gym-partner/shared-utils');
+const { validateTenantAccess: sharedValidateTenantAccess, formatRWF } = require('@polyfit/shared-utils');
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -620,7 +620,7 @@ router.post('/leads/:leadId/stage', async (req, res) => {
                   channel: 'sms',
                   recipient: referrer.phone,
                   subject: 'Referral Reward Voucher Issued! 🎉',
-                  content: `Great news ${referrer.first_name}! Your referral ${currentLead.first_name} joined GymPartner! Your RWF 10,000 credit voucher is ${voucherCode}. Present at front desk to redeem!`,
+                  content: `Great news ${referrer.first_name}! Your referral ${currentLead.first_name} joined PolyFit! Your RWF 10,000 credit voucher is ${voucherCode}. Present at front desk to redeem!`,
                   status: 'pending'
                 });
               }

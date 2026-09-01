@@ -657,7 +657,7 @@ router.post('/join', async (req, res) => {
       profile_id: profile.id,
       channel: 'sms',
       recipient: phone.trim(),
-      subject: 'Welcome to GymPartner',
+      subject: 'Welcome to PolyFit',
       content: `Welcome to ${tenant.name}! Your membership is active. Share your referral code [${newMemberReferralCode}] with friends to earn RWF 10,000 for each friend who joins!`,
       status: 'pending'
     });
@@ -938,10 +938,10 @@ router.get('/widget.js', (req, res) => {
   const backendOrigin = currentScript ? (new URL(currentScript.src)).origin : 'https://gym-backend-core.onrender.com';
   const tenantId = currentScript ? currentScript.getAttribute('data-tenant-id') : null;
   const mode = (currentScript ? currentScript.getAttribute('data-mode') : 'schedule') || 'schedule';
-  const targetId = currentScript ? currentScript.getAttribute('data-target') : 'gympartner-widget';
+  const targetId = currentScript ? (currentScript.getAttribute('data-target') || 'polyfit-widget') : 'polyfit-widget';
 
   if (!tenantId) {
-    console.warn('[GymPartner Widget] Missing data-tenant-id attribute on script tag.');
+    console.warn('[PolyFit Widget] Missing data-tenant-id attribute on script tag.');
     return;
   }
 
@@ -956,7 +956,7 @@ router.get('/widget.js', (req, res) => {
 
     container.innerHTML = '<div style="font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; padding: 20px; border-radius: 12px; background: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); max-width: 440px; margin: 0 auto;">' +
       '<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 16px;">' +
-        '<h3 id="gp-gym-name" style="margin:0; font-size: 18px; font-weight: 700; color: #0f172a;">GymPartner</h3>' +
+        '<h3 id="gp-gym-name" style="margin:0; font-size: 18px; font-weight: 700; color: #0f172a;">PolyFit</h3>' +
         '<span style="font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 999px; background: #dbeafe; color: #1e40af;">' + (mode === 'join' ? 'Online Sign-up' : 'Book Free Tour') + '</span>' +
       '</div>' +
       '<div id="gp-form-body">' +
@@ -970,7 +970,7 @@ router.get('/widget.js', (req, res) => {
           '<div style="margin-bottom: 12px;"><label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Preferred Tour Date & Time</label><input id="gp-date" type="datetime-local" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px;" /></div>' :
           '<div style="margin-bottom: 12px;"><label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Membership Option</label><select id="gp-plan" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px;"><option value="standard">Standard (RWF 30,000/mo)</option><option value="premium">Premium All-Access (RWF 50,000/mo)</option><option value="vip">VIP Executive (RWF 80,000/mo)</option></select></div>'
         ) +
-        '<div style="margin-bottom: 16px;"><label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Friend Referral Code (Optional)</label><input id="gp-ref-code" type="text" placeholder="e.g. GP-ALICE88" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; text-transform:uppercase;" /></div>' +
+        '<div style="margin-bottom: 16px;"><label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Friend Referral Code (Optional)</label><input id="gp-ref-code" type="text" placeholder="e.g. PF-ALICE88" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; text-transform:uppercase;" /></div>' +
         '<button id="gp-submit-btn" style="width:100%; background:#2563eb; color:#ffffff; font-weight:600; padding:12px; border-radius:8px; border:none; cursor:pointer; font-size:15px; transition:background 0.2s;">' + (mode === 'join' ? 'Activate Membership' : 'Book Free Tour Pass') + '</button>' +
         '<div id="gp-msg" style="margin-top:12px; font-size:13px; text-align:center; display:none;"></div>' +
       '</div>' +
@@ -987,7 +987,7 @@ router.get('/widget.js', (req, res) => {
           if (btn && data.gym.primary_color) btn.style.background = data.gym.primary_color;
         }
       })
-      .catch(function(e) { console.error('[GymPartner Widget] Config fetch failed:', e); });
+      .catch(function(e) { console.error('[PolyFit Widget] Config fetch failed:', e); });
 
     // Handle submit
     const submitBtn = document.getElementById('gp-submit-btn');
@@ -1110,8 +1110,8 @@ router.get('/:tenant_slug/embed/schedule', async (req, res) => {
   </style>
 </head>
 <body>
-  <div id="gympartner-schedule-embed"></div>
-  <script src="/widgets/schedule.js" data-tenant-slug="${escapeHtml(tenant.slug || tenant.id)}" data-primary-color="${escapeHtml(tenant.primary_color || '#2563eb')}" data-target="gympartner-schedule-embed"></script>
+  <div id="polyfit-schedule-embed"></div>
+  <script src="/widgets/schedule.js" data-tenant-slug="${escapeHtml(tenant.slug || tenant.id)}" data-primary-color="${escapeHtml(tenant.primary_color || '#2563eb')}" data-target="polyfit-schedule-embed"></script>
 </body>
 </html>`;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -1139,8 +1139,8 @@ router.get('/:tenant_slug/embed/join', async (req, res) => {
   </style>
 </head>
 <body>
-  <div id="gympartner-join-embed"></div>
-  <script src="/widgets/join.js" data-tenant-slug="${escapeHtml(tenant.slug || tenant.id)}" data-primary-color="${escapeHtml(tenant.primary_color || '#2563eb')}" data-target="gympartner-join-embed"></script>
+  <div id="polyfit-join-embed"></div>
+  <script src="/widgets/join.js" data-tenant-slug="${escapeHtml(tenant.slug || tenant.id)}" data-primary-color="${escapeHtml(tenant.primary_color || '#2563eb')}" data-target="polyfit-join-embed"></script>
 </body>
 </html>`;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');

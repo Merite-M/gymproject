@@ -48,7 +48,7 @@ function resolveMergeTags(template, profile = {}, extra = {}) {
     first_name: profile.first_name || 'Member',
     last_name: profile.last_name || '',
     full_name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Valued Member',
-    gym_name: extra.gym_name || 'GymPartner',
+    gym_name: extra.gym_name || 'PolyFit',
     phone: profile.phone || '',
     email: profile.email || '',
     ...extra
@@ -194,7 +194,7 @@ router.post('/broadcast', requireStaffAuth, async (req, res) => {
 
     // 2. Dispatch to each recipient with merge tags
     for (const member of filteredRecipients) {
-      const personalizedMessage = resolveMergeTags(message_template, member, { gym_name: 'GymPartner Kigali' });
+      const personalizedMessage = resolveMergeTags(message_template, member, { gym_name: 'PolyFit Kigali' });
       try {
         await dispatchMultiChannelMessage({
           tenant_id,

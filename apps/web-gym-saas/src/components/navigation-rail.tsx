@@ -112,9 +112,15 @@ export function NavigationRail() {
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
               <ScanLine className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="font-headline-md font-bold text-foreground text-base">
-              GymPartner
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="font-headline-md font-bold text-foreground text-base">
+                PolyFit
+              </span>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                Live
+              </span>
+            </div>
           </div>
         </div>
 
@@ -149,7 +155,13 @@ export function NavigationRail() {
               <ScanLine className="w-6 h-6 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="font-headline-md font-bold text-foreground text-base">GymPartner</h1>
+              <div className="flex items-center gap-1.5">
+                <h1 className="font-headline-md font-bold text-foreground text-base">PolyFit</h1>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Live
+                </span>
+              </div>
               <p className="text-xs text-muted-foreground">Operations Console</p>
             </div>
           </div>

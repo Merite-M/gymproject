@@ -17,10 +17,10 @@
   const backendOrigin = currentScript ? (new URL(currentScript.src)).origin : (window.location.origin || 'https://gym-backend-core.onrender.com');
   const tenantSlug = currentScript ? (currentScript.getAttribute('data-tenant-slug') || currentScript.getAttribute('data-tenant-id')) : null;
   const primaryColor = currentScript ? (currentScript.getAttribute('data-primary-color') || '#2563eb') : '#2563eb';
-  const targetId = currentScript ? (currentScript.getAttribute('data-target') || 'gympartner-schedule-widget') : 'gympartner-schedule-widget';
+  const targetId = currentScript ? (currentScript.getAttribute('data-target') || 'polyfit-schedule-widget') : 'polyfit-schedule-widget';
 
   if (!tenantSlug) {
-    console.warn('[GymPartner Schedule Widget] Missing data-tenant-slug or data-tenant-id attribute.');
+    console.warn('[PolyFit Schedule Widget] Missing data-tenant-slug or data-tenant-id attribute.');
     return;
   }
 
@@ -132,7 +132,7 @@
         }
       })
       .catch(err => {
-        console.error('[GymPartner Schedule Widget] Fetch error:', err);
+        console.error('[PolyFit Schedule Widget] Fetch error:', err);
         const loading = document.getElementById('gp-sched-loading');
         if (loading) loading.textContent = 'Unable to load schedule. Please try again later.';
       });

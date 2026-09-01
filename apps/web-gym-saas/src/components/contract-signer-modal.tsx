@@ -267,7 +267,7 @@ export function ContractSignerModal({
 
       doc.setFontSize(8);
       doc.setTextColor(120);
-      doc.text('This document has been digitally executed and cryptographically timestamped by GymPartner OS.', margin, cursorY);
+      doc.text('This document has been digitally executed and cryptographically timestamped by PolyFit OS.', margin, cursorY);
 
       doc.save(`${contractData.title.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`);
     } catch (e) {

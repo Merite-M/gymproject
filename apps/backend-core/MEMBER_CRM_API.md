@@ -537,7 +537,7 @@ Returns personal referral code, share link, list of referee leads/members, and e
 
 Embed snippet:
 ```html
-<div id="gympartner-widget" data-tenant-id="<TENANT_UUID>" data-mode="schedule"></div>
+<div id="polyfit-widget" data-tenant-id="<TENANT_UUID>" data-mode="schedule"></div>
 <script src="https://gym-backend-core.onrender.com/api/public/widget.js"></script>
 ```
 

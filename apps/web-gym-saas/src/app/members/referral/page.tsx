@@ -158,7 +158,7 @@ export default function MemberReferralHubPage() {
   const handleShareWhatsApp = () => {
     if (!data) return;
     const message = encodeURIComponent(
-      `Join me at GymPartner! Use my referral code ${data.referral_code} or sign up directly here to get a bonus on your membership: ${data.share_url}`
+      `Join me at PolyFit! Use my referral code ${data.referral_code} or sign up directly here to get a bonus on your membership: ${data.share_url}`
     );
     window.open(`https://wa.me/?text=${message}`, '_blank');
   };
@@ -216,7 +216,7 @@ export default function MemberReferralHubPage() {
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Member Referral Hub</h1>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Invite your friends to GymPartner and earn <strong>RWF 10,000 gift vouchers</strong> for every friend who joins!
+            Invite your friends to PolyFit and earn <strong>RWF 10,000 gift vouchers</strong> for every friend who joins!
           </p>
         </div>
 

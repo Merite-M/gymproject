@@ -3,13 +3,13 @@ import tsPlugin from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
 import reactHooksPlugin from "eslint-plugin-react-hooks";
 
-const gympartnerDesignSystemPlugin = {
+const polyfitDesignSystemPlugin = {
   rules: {
     "no-arbitrary-hex-classes": {
       meta: {
         type: "problem",
         docs: {
-          description: "Disallow arbitrary hex color values in Tailwind classes (e.g. bg-[#123456], text-[#abc]). Use GymPartner design tokens instead.",
+          description: "Disallow arbitrary hex color values in Tailwind classes (e.g. bg-[#123456], text-[#abc]). Use PolyFit design tokens instead.",
         },
         messages: {
           noArbitraryHex: "Arbitrary Tailwind hex class '{{value}}' is forbidden. Use a semantic design token instead.",
@@ -72,7 +72,7 @@ export default [
       "@typescript-eslint": tsPlugin,
       "react-hooks": reactHooksPlugin,
       "@next/next": nextPlugin,
-      "gympartner": gympartnerDesignSystemPlugin,
+      "polyfit": polyfitDesignSystemPlugin,
     },
     rules: {
       // Allow any temporarily
@@ -80,7 +80,7 @@ export default [
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "off", // Suppress exhaust-deps
       "@next/next/no-img-element": "warn",
-      "gympartner/no-arbitrary-hex-classes": "error",
+      "polyfit/no-arbitrary-hex-classes": "error",
     },
   },
 ];

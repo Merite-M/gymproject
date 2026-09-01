@@ -923,7 +923,7 @@ async function processTrialExpirations(supabase) {
                     channel: 'sms',
                     recipient: lead.phone,
                     subject: 'Your Free Trial Has Ended',
-                    content: `Hi ${lead.first_name}, your 7-day GymPartner VIP trial has concluded! Join this week to receive a 15% discount on your first month. Sign up online or visit the front desk.`,
+                    content: `Hi ${lead.first_name}, your 7-day PolyFit VIP trial has concluded! Join this week to receive a 15% discount on your first month. Sign up online or visit the front desk.`,
                     status: 'pending'
                 });
             }

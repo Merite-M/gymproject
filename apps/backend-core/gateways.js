@@ -65,7 +65,7 @@ function normalizePhoneNumber(rawPhone, defaultCountry = 'RW') {
 /**
  * Dispatches an SMS via Africa's Talking API
  */
-async function sendAfricasTalkingSMS({ to, message, senderId = 'GYMPARTNER', username, apiKey }) {
+async function sendAfricasTalkingSMS({ to, message, senderId = 'POLYFIT', username, apiKey }) {
   const normalizedPhone = normalizePhoneNumber(to);
   const atUsername = username || process.env.AFRICASTALKING_USERNAME || 'sandbox';
   const atApiKey = apiKey || process.env.AFRICASTALKING_API_KEY;

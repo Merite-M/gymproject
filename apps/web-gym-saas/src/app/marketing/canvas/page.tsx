@@ -120,7 +120,7 @@ const PLAYBOOKS = [
         description: 'Send WhatsApp message with 20% renewal voucher',
         config: {
           channel: 'whatsapp',
-          template: 'Hey {first_name}! We miss seeing you at GymPartner. Here is a 20% renewal discount for your next month: WINBACK20.'
+          template: 'Hey {first_name}! We miss seeing you at PolyFit. Here is a 20% renewal discount for your next month: WINBACK20.'
         },
         x: 280,
         y: 480
@@ -153,7 +153,7 @@ const PLAYBOOKS = [
         title: 'Action: Send PT Intro Video',
         description: 'WhatsApp video guide on gym equipment & personal training',
         config: {
-          template: 'Hi {first_name}! Check out our free Personal Training Intro guide to get maximum results during your trial: https://gympartner.rw/pt-guide'
+          template: 'Hi {first_name}! Check out our free Personal Training Intro guide to get maximum results during your trial: https://polyfit.africa/pt-guide'
         },
         x: 80,
         y: 220,
@@ -177,7 +177,7 @@ const PLAYBOOKS = [
         title: 'Action: Send Conversion SMS',
         description: 'SMS offer with 15% off first 3 months',
         config: {
-          template: 'Your GymPartner trial ends today! Lock in 15% off your first 3 months by upgrading now: https://gympartner.rw/upgrade'
+          template: 'Your PolyFit trial ends today! Lock in 15% off your first 3 months by upgrading now: https://polyfit.africa/upgrade'
         },
         x: 80,
         y: 460
@@ -210,7 +210,7 @@ const PLAYBOOKS = [
         title: 'Action: WhatsApp Birthday Gift',
         description: 'Send free smoothie coupon code',
         config: {
-          template: 'Happy Birthday {first_name}! 🎉 GymPartner wishes you a fantastic day. Stop by the front desk today for a FREE Protein Shake on us! Show code: BDAYGIFT.'
+          template: 'Happy Birthday {first_name}! 🎉 PolyFit wishes you a fantastic day. Stop by the front desk today for a FREE Protein Shake on us! Show code: BDAYGIFT.'
         },
         x: 80,
         y: 220
@@ -254,7 +254,7 @@ const PLAYBOOKS = [
         title: 'Action: SMS MoMo Payment Link',
         description: 'Send direct Paypack Mobile Money retry link',
         config: {
-          template: 'GymPartner Notice: Your recent payment attempt was unsuccessful. Click here to safely complete payment via Mobile Money: https://gympartner.rw/pay/{invoice_id}'
+          template: 'PolyFit Notice: Your recent payment attempt was unsuccessful. Click here to safely complete payment via Mobile Money: https://polyfit.africa/pay/{invoice_id}'
         },
         x: 80,
         y: 340,
@@ -594,7 +594,7 @@ export default function MarketingCanvasPage() {
       if (subtype === 'sms') {
         title = 'Action: Send SMS';
         description = 'Outbound SMS via Rwanda Telco';
-        config = { template: 'Hello {first_name}, special update from GymPartner!' };
+        config = { template: 'Hello {first_name}, special update from PolyFit!' };
       } else if (subtype === 'whatsapp') {
         title = 'Action: WhatsApp Message';
         description = 'Interactive WhatsApp alert';

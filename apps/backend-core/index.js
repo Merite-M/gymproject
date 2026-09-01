@@ -3,7 +3,7 @@ const cors = require('cors');
 const multer = require('multer');
 const { rateLimit } = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
-const { getLiveOccupancy, getDistanceFromLatLonInM } = require('@gym-partner/shared-utils');
+const { getLiveOccupancy, getDistanceFromLatLonInM } = require('@polyfit/shared-utils');
 require('dotenv').config();
 
 const app = express();

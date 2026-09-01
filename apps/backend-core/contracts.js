@@ -52,7 +52,7 @@ function resolveMergeTags(templateText, { tenant, profile, membership, customDat
   const memberFullName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'Valued Member';
   
   const tags = {
-    '{{gym_name}}': tenant?.name || 'GymPartner Facility',
+    '{{gym_name}}': tenant?.name || 'PolyFit Facility',
     '{{gym_address}}': tenant?.address || 'Kigali, Rwanda',
     '{{operating_hours}}': tenant?.operating_hours || '06:00 - 22:00 (Mon-Sat)',
     '{{currency}}': tenant?.default_currency || 'RWF',

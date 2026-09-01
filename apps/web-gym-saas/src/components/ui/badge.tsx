@@ -19,7 +19,7 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground",
         link: "text-primary underline-offset-4 hover:underline",
-        // GymPartner status variants with icons
+        // PolyFit status variants with icons
         success: "bg-status-cleared/10 text-status-cleared border-status-cleared/20 [a]:hover:bg-status-cleared/20",
         warning: "bg-status-action/10 text-status-action border-status-action/20 [a]:hover:bg-status-action/20",
         error: "bg-status-blocked/10 text-status-blocked border-status-blocked/20 [a]:hover:bg-status-blocked/20",

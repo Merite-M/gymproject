@@ -3,7 +3,7 @@ const { createClient } = require('@supabase/supabase-js');
 const router = express.Router();
 const gymEmitter = require("./events");
 const authMiddleware = require('./authMiddleware');
-const { validateTenantAccess: sharedValidateTenantAccess, formatRWF } = require('@gym-partner/shared-utils');
+const { validateTenantAccess: sharedValidateTenantAccess, formatRWF } = require('@polyfit/shared-utils');
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -1470,7 +1470,7 @@ router.get('/invoices/:id/receipt', async (req, res) => {
       if (profile) memberName = profile.full_name || profile.email;
     }
 
-    const gymName = tenant?.name || 'GYMPARTNER FITNESS';
+    const gymName = tenant?.name || 'POLYFIT FITNESS';
     const receiptNo = `REC-${invoice.id.substring(0, 8).toUpperCase()}`;
     const dateStr = new Date(invoice.created_at).toLocaleString('en-GB');
 
@@ -1520,7 +1520,7 @@ router.get('/invoices/:id/receipt', async (req, res) => {
     textReceipt += lineSeparator;
     textReceipt += 'Tax Codes: A=Standard 18% | B=Exempt | C=Zero\n';
     textReceipt += '           Thank you for your visit!          \n';
-    textReceipt += '        Powered by GymPartner Cloud POS       \n\n\n';
+    textReceipt += '        Powered by PolyFit Cloud POS       \n\n\n';
 
     // ESC/POS raw initialization commands
     const ESC = '\x1B';

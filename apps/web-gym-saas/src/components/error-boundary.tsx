@@ -48,7 +48,7 @@ export class ErrorBoundary extends Component<Props, State> {
       const { error, isNetworkError } = this.state;
       const title = this.props.fallbackTitle || (isNetworkError ? 'Connection Issue' : 'Something went wrong');
       const description = isNetworkError
-        ? 'Unable to connect to GymPartner servers. Please check your internet connection and try again.'
+        ? 'Unable to connect to PolyFit servers. Please check your internet connection and try again.'
         : error?.message || 'An unexpected application error occurred.';
 
       return (

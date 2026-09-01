@@ -17,10 +17,10 @@
   const backendOrigin = currentScript ? (new URL(currentScript.src)).origin : (window.location.origin || 'https://gym-backend-core.onrender.com');
   const tenantSlug = currentScript ? (currentScript.getAttribute('data-tenant-slug') || currentScript.getAttribute('data-tenant-id')) : null;
   const primaryColor = currentScript ? (currentScript.getAttribute('data-primary-color') || '#2563eb') : '#2563eb';
-  const targetId = currentScript ? (currentScript.getAttribute('data-target') || 'gympartner-join-widget') : 'gympartner-join-widget';
+  const targetId = currentScript ? (currentScript.getAttribute('data-target') || 'polyfit-join-widget') : 'polyfit-join-widget';
 
   if (!tenantSlug) {
-    console.warn('[GymPartner Join Widget] Missing data-tenant-slug or data-tenant-id attribute.');
+    console.warn('[PolyFit Join Widget] Missing data-tenant-slug or data-tenant-id attribute.');
     return;
   }
 

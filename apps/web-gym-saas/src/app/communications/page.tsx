@@ -719,7 +719,7 @@ export default function CommunicationsPage() {
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between text-muted-foreground">
                   <span>Sender ID:</span>
-                  <span className="font-mono text-foreground font-semibold">GYMPARTNER</span>
+                  <span className="font-mono text-foreground font-semibold">POLYFIT</span>
                 </div>
                 <div className="flex justify-between text-muted-foreground">
                   <span>Rate:</span>

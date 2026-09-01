@@ -41,7 +41,7 @@ interface CheckInResult {
 export default function KioskPage() {
   const [mode, setMode] = useState<KioskMode>("ambient");
   const [tenantId, setTenantId] = useState<string>("");
-  const [tenantName, setTenantName] = useState<string>("GymPartner Kiosk");
+  const [tenantName, setTenantName] = useState<string>("PolyFit Kiosk");
   const [inputVal, setInputVal] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [result, setResult] = useState<CheckInResult | null>(null);
@@ -566,7 +566,7 @@ export default function KioskPage() {
 
       {/* Footer Branding */}
       <footer className="text-center text-xs text-muted-foreground border-t border-surface-container-highest pt-3">
-        <span>Powered by GymPartner Operations OS • Wall-Mounted Kiosk Mode</span>
+        <span>Powered by PolyFit Operations OS • Wall-Mounted Kiosk Mode</span>
       </footer>
     </div>
   );

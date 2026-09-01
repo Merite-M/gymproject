@@ -1,5 +1,5 @@
 /**
- * GymPartner Resilient API Client
+ * PolyFit Resilient API Client
  * Provides timeout handling, safe idempotency-aware retries, user-friendly error mapping,
  * and offline detection across all frontend API service calls.
  */

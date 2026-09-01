@@ -413,14 +413,14 @@ export default function LeadsPipelinePage() {
   const conversionRate = totalLeads > 0 ? ((closedWonCount / totalLeads) * 100).toFixed(1) : "0";
 
   // Widget Embed Snippets
-  const scriptSnippet = `<!-- GymPartner Embeddable ${widgetMode === 'schedule' ? 'Tour Booking' : 'Member Join'} Widget -->
-<div id="gympartner-widget" data-tenant-id="${widgetTenantId}" data-mode="${widgetMode}"></div>
+  const scriptSnippet = `<!-- PolyFit Embeddable ${widgetMode === 'schedule' ? 'Tour Booking' : 'Member Join'} Widget -->
+<div id="polyfit-widget" data-tenant-id="${widgetTenantId}" data-mode="${widgetMode}"></div>
 <script src="https://gym-backend-core.onrender.com/api/public/widget.js" async></script>`;
 
   const reactSnippet = `// React / Next.js Component Embed
 import { useEffect } from "react";
 
-export function GymPartnerEmbed() {
+export function PolyFitEmbed() {
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://gym-backend-core.onrender.com/api/public/widget.js";
@@ -430,7 +430,7 @@ export function GymPartnerEmbed() {
     document.body.appendChild(script);
   }, []);
 
-  return <div id="gympartner-widget" className="my-6 max-w-md mx-auto" />;
+  return <div id="polyfit-widget" className="my-6 max-w-md mx-auto" />;
 }`;
 
   return (
@@ -902,7 +902,7 @@ export function GymPartnerEmbed() {
               <div className="p-6 bg-card rounded-2xl border border-border shadow-xl space-y-5">
                 <div className="flex items-center justify-between pb-3 border-b border-border">
                   <div>
-                    <h3 className="text-base font-bold text-foreground">GymPartner Kigali</h3>
+                    <h3 className="text-base font-bold text-foreground">PolyFit Kigali</h3>
                     <p className="text-[11px] text-muted-foreground">Operations & Fitness Center</p>
                   </div>
                   <span
@@ -976,7 +976,7 @@ export function GymPartnerEmbed() {
                       <Tag className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                       <input
                         type="text"
-                        placeholder="e.g. GP-ALI920"
+                        placeholder="e.g. PF-ALI920"
                         className="w-full pl-9 pr-3 p-2.5 bg-background border border-border rounded-lg text-xs uppercase font-mono-id outline-none focus:border-primary"
                       />
                     </div>
@@ -990,7 +990,7 @@ export function GymPartnerEmbed() {
                   </button>
 
                   <p className="text-[10px] text-center text-muted-foreground pt-1">
-                    Powered by GymPartner Operations Cloud • SSL Secure
+                    Powered by PolyFit Operations Cloud • SSL Secure
                   </p>
                 </div>
               </div>

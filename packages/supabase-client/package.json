@@ -1,10 +1,10 @@
 {
-  "name": "@gym-partner/supabase-client",
+  "name": "@polyfit/supabase-client",
   "version": "1.0.0",
   "main": "src/index.js",
   "types": "src/index.d.ts",
   "private": true,
-  "description": "Shared Supabase client initialization for GymPartner applications",
+  "description": "Shared Supabase client initialization for PolyFit applications",
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
     "dotenv": "^17.4.2"

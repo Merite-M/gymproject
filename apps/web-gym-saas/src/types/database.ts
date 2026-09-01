@@ -1,5 +1,5 @@
 /**
- * GymPartner Database Types
+ * PolyFit Database Types
  * Fully-typed entity models corresponding to Supabase schema.
  */
 

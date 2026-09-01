@@ -49,7 +49,7 @@
 }
 
 :root {
-  /* GymPartner Dark Theme Colors */
+  /* PolyFit Dark Theme Colors */
   --background: #090f0d;
   --foreground: #dae9e2;
   --card: #121b18;
@@ -137,13 +137,13 @@
   html {
     @apply font-sans;
   }
-  /* Dark mode by default for GymPartner */
+  /* Dark mode by default for PolyFit */
   .dark {
     color-scheme: dark;
   }
 }
 @theme inline {
-  /* GymPartner Color Tokens - Dark Theme */
+  /* PolyFit Color Tokens - Dark Theme */
   --color-outline-variant: #3e4b46;
   --color-surface-tint: #4edf92;
   --color-on-tertiary-fixed: #271901;

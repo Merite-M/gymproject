@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
-const { verifyHmacSignature, formatRWF } = require('@gym-partner/shared-utils');
+const { verifyHmacSignature, formatRWF } = require('@polyfit/shared-utils');
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
