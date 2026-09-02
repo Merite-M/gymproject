@@ -47,7 +47,7 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 
-  /* PolyFit Brand v1.0 Explicit Tokens */
+  /* PolyFit Brand v1.0 Custom Theme Tokens */
   --color-brand-navy: #0B1F33;
   --color-brand-green: #28D17C;
   --color-brand-blue: #3B82F6;
@@ -56,25 +56,16 @@
   --color-neutral-bg: #F7F9FC;
   --color-neutral-surface2: #F1F4F8;
   --color-neutral-border: #E2E8F0;
-  --color-text-primary-navy: #0B1F33;
-  --color-text-secondary-slate: #526173;
-  --color-text-muted-grey: #8491A3;
 }
 
 :root {
-  /* Harmonized PolyFit Brand Theme Colors */
-  --brand-navy: #0B1F33;
-  --brand-green: #28D17C;
-  --brand-blue: #3B82F6;
-  --brand-lime: #B8F36B;
-
-  /* Default Surface Colors (Light/Hybrid Base, Dark Option) */
+  /* PolyFit Brand v1.0 Primary Theme Variables */
   --background: #0B1F33;
-  --foreground: #F8FAFC;
+  --foreground: #dae9e2;
   --card: #0D2235;
-  --card-foreground: #F8FAFC;
+  --card-foreground: #dae9e2;
   --popover: #0D2235;
-  --popover-foreground: #F8FAFC;
+  --popover-foreground: #dae9e2;
   --primary: #28D17C;
   --primary-foreground: #0B1F33;
   --secondary: #3B82F6;
@@ -82,21 +73,21 @@
   --tertiary: #B8F36B;
   --tertiary-foreground: #0B1F33;
   --muted: #132D43;
-  --muted-foreground: #B8C5D3;
+  --muted-foreground: #a0aea8;
   --accent: #28D17C;
   --accent-foreground: #0B1F33;
-  --destructive: #DC2626;
-  --destructive-foreground: #FFFFFF;
-  --success: #16A34A;
-  --success-foreground: #FFFFFF;
-  --warning: #F59E0B;
-  --warning-foreground: #0B1F33;
-  --info: #2563EB;
+  --destructive: #fa746f;
+  --destructive-foreground: #490006;
+  --success: #28D17C;
+  --success-foreground: #0B1F33;
+  --warning: #ffc16b;
+  --warning-foreground: #5f3c00;
+  --info: #3B82F6;
   --info-foreground: #FFFFFF;
   --border: #21405A;
   --input: #21405A;
   --ring: #28D17C;
-  --radius: 0.875rem; /* 14px cards per design system v1.0 */
+  --radius: 0.875rem;
   
   /* Surface variants */
   --surface: #071521;
@@ -108,38 +99,38 @@
   --surface-container-high: #132D43;
   --surface-container-highest: #1A3852;
   --surface-variant: #132D43;
-  --on-surface: #F8FAFC;
-  --on-surface-variant: #B8C5D3;
-  --inverse-surface: #F7F9FC;
-  --inverse-on-surface: #0B1F33;
-  --outline: #21405A;
-  --outline-variant: #132D43;
+  --on-surface: #dae9e2;
+  --on-surface-variant: #a0aea8;
+  --inverse-surface: #f5fbf7;
+  --inverse-on-surface: #505654;
+  --outline: #6b7873;
+  --outline-variant: #21405A;
   --surface-tint: #28D17C;
   
   /* Status colors */
   --status-cleared: #28D17C;
   --status-cleared-foreground: #0B1F33;
-  --status-action: #F59E0B;
-  --status-action-foreground: #0B1F33;
-  --status-blocked: #DC2626;
-  --status-blocked-foreground: #FFFFFF;
-  --status-info: #3B82F6;
-  --status-info-foreground: #FFFFFF;
+  --status-action-foreground: #5f3c00;
+  --status-blocked-foreground: #490006;
+  --status-info-foreground: #003f80;
+  --status-action: #ffc16b;
+  --status-blocked: #fa746f;
+  --status-info: #a9c7ff;
   
   /* Chart colors */
   --chart-1: #28D17C;
   --chart-2: #3B82F6;
   --chart-3: #B8F36B;
-  --chart-4: #F59E0B;
-  --chart-5: #DC2626;
+  --chart-4: #fa746f;
+  --chart-5: #e9a236;
   
   /* Sidebar colors */
   --sidebar: #071521;
-  --sidebar-foreground: #F8FAFC;
+  --sidebar-foreground: #dae9e2;
   --sidebar-primary: #28D17C;
   --sidebar-primary-foreground: #0B1F33;
   --sidebar-accent: #132D43;
-  --sidebar-accent-foreground: #F8FAFC;
+  --sidebar-accent-foreground: #dae9e2;
   --sidebar-border: #21405A;
   --sidebar-ring: #28D17C;
 }
@@ -160,53 +151,129 @@
 }
 
 @theme inline {
-  /* PolyFit Harmonized Design Tokens */
-  --color-brand-navy: #0B1F33;
-  --color-brand-green: #28D17C;
-  --color-brand-blue: #3B82F6;
-  --color-brand-lime: #B8F36B;
-  --color-neutral-white: #FFFFFF;
-  --color-neutral-bg: #F7F9FC;
-  --color-neutral-surface2: #F1F4F8;
-  --color-neutral-border: #E2E8F0;
-
   --color-outline-variant: #21405A;
   --color-surface-tint: #28D17C;
+  --color-on-tertiary-fixed: #271901;
+  --color-on-tertiary: #dae9e2;
+  --color-on-primary-container: #0B1F33;
+  --color-inverse-surface: #f5fbf7;
+  --color-surface-container-high: #132D43;
+  --color-on-secondary-fixed: #003f80;
+  --color-on-primary-fixed-variant: #006a3d;
+  --color-on-secondary-fixed-variant: #005ab2;
+  --color-warning-soft: rgba(255, 193, 107, 0.2);
+  --color-slate-hover: #132D43;
+  --color-primary-fixed-dim: #28D17C;
+  --color-surface-container-highest: #1A3852;
   --color-canvas-bg: #071521;
-  --color-border-hairline: #21405A;
-  --color-surface-muted: #132D43;
-  --color-text-muted: #8491A3;
-  --color-text-secondary: #526173;
-  --color-secondary: #3B82F6;
+  --color-error-container: #871f21;
+  --color-tertiary-container: #B8F36B;
+  --color-on-error: #dae9e2;
   --color-tertiary: #B8F36B;
-  --color-background: #0B1F33;
+  --color-on-tertiary-fixed-variant: #5f3c00;
+  --color-on-error-container: #ff9993;
+  --color-tertiary-fixed: #B8F36B;
+  --color-border-hairline: #21405A;
+  --color-primary-fixed: #28D17C;
+  --color-surface-muted: #132D43;
+  --color-danger-crimson: #fa746f;
+  --color-on-primary-fixed: #004a29;
+  --color-warning-amber: #ffc16b;
+  --color-text-muted: #a0aea8;
+  --color-outline: #6b7873;
+  --color-text-secondary: #a0aea8;
+  --color-secondary: #3B82F6;
+  --color-secondary-fixed: #d6e3ff;
+  --color-surface-bright: #132D43;
+  --color-secondary-container: #003a78;
+  --color-on-secondary: #dae9e2;
+  --color-danger-soft: rgba(250, 116, 111, 0.2);
+  --color-on-background: #dae9e2;
+  --color-surface-container-lowest: #000000;
+  --color-surface-container: #0D2235;
+  --color-surface-container-low: #0B1F33;
+  --color-on-primary: #0B1F33;
+  --color-on-tertiary-container: #533400;
+  --color-surface: #071521;
   --color-primary: #28D17C;
+  --color-on-surface: #dae9e2;
+  --color-inverse-on-surface: #505654;
+  --color-surface-variant: #132D43;
+  --color-success-soft: rgba(40, 209, 124, 0.2);
+  --color-tertiary-fixed-dim: #B8F36B;
+  --color-secondary-fixed-dim: #c0d5ff;
+  --color-background: #0B1F33;
+  --color-surface-dim: #071521;
+  --color-inverse-primary: #006d40;
+  --color-error: #fa746f;
+  --color-primary-container: #28D17C;
+  --color-on-secondary-container: #9dc0ff;
+  --color-on-surface-variant: #a0aea8;
 
   /* Status Colors */
   --color-status-cleared: #28D17C;
   --color-status-cleared-foreground: #0B1F33;
-  --color-status-action: #F59E0B;
-  --color-status-action-foreground: #0B1F33;
-  --color-status-blocked: #DC2626;
-  --color-status-blocked-foreground: #FFFFFF;
-  --color-status-info: #3B82F6;
-  --color-status-info-foreground: #FFFFFF;
+  --color-status-action-foreground: #5f3c00;
+  --color-status-blocked-foreground: #490006;
+  --color-status-info-foreground: #003f80;
+  --color-status-action: #ffc16b;
+  --color-status-blocked: #fa746f;
+  --color-status-info: #a9c7ff;
 
   --color-currency: #28D17C;
 
-  /* Fonts - Inter for primary body, Manrope for headlines */
-  --font-headline-md: "Manrope", "Inter", sans-serif;
+  /* Fonts - Manrope for headlines, Inter for body/labels */
+  --font-headline-md: "Manrope", sans-serif;
   --font-mono-id: "JetBrains Mono", monospace;
-  --font-headline-md-mobile: "Manrope", "Inter", sans-serif;
+  --font-headline-md-mobile: "Manrope", sans-serif;
   --font-label-caps: "Inter", sans-serif;
-  --font-subhead-sm: "Manrope", "Inter", sans-serif;
+  --font-subhead-sm: "Manrope", sans-serif;
   --font-body-base: "Inter", sans-serif;
   --font-body-dense: "Inter", sans-serif;
-  --font-display-lg: "Manrope", "Inter", sans-serif;
+  --font-display-lg: "Manrope", sans-serif;
+
+  /* Typography Text Sizes */
+  --text-headline-md: 24px;
+  --text-headline-md--line-height: 32px;
+  --text-mono-id: 12px;
+  --text-mono-id--line-height: 16px;
+  --text-headline-md-mobile: 20px;
+  --text-headline-md-mobile--line-height: 28px;
+  --text-label-caps: 11px;
+  --text-label-caps--line-height: 14px;
+  --text-subhead-sm: 18px;
+  --text-subhead-sm--line-height: 26px;
+  --text-body-base: 14px;
+  --text-body-base--line-height: 20px;
+  --text-body-dense: 13px;
+  --text-body-dense--line-height: 18px;
+  --text-display-lg: 32px;
+  --text-display-lg--line-height: 40px;
+
+  /* Font Weights */
+  --font-weight-headline-md: 700;
+  --font-weight-mono-id: 500;
+  --font-weight-headline-md-mobile: 700;
+  --font-weight-label-caps: 700;
+  --font-weight-subhead-sm: 600;
+  --font-weight-body-base: 400;
+  --font-weight-body-dense: 400;
+  --font-weight-display-lg: 700;
+
+  /* Letter Spacing */
+  --tracking-headline-md: -0.01em;
+  --tracking-headline-md-mobile: -0.01em;
+  --tracking-label-caps: 0.05em;
+  --tracking-subhead-sm: -0.01em;
+  --tracking-display-lg: -0.02em;
 
   /* Spacing */
+  --spacing-split-crm-nav: 30%;
+  --spacing-split-monitor-log: 65%;
+  --spacing-split-crm-content: 70%;
   --spacing-gutter: 16px;
   --spacing-unit: 4px;
+  --spacing-split-monitor-card: 35%;
   --spacing-margin-page: 24px;
   --spacing-navigation-rail: 240px;
   --spacing-touch-target: 44px;
@@ -225,7 +292,37 @@
   border-width: 0;
 }
 
+.focus\:not-sr-only:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+.skip-to-main {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  padding: 8px;
+  z-index: 100;
+  transition: top 0.3s;
+}
+
+.skip-to-main:focus {
+  top: 0;
+}
+
 *:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
+}
+
+*:focus:not(:focus-visible) {
+  outline: none;
 }
