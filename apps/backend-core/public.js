@@ -1197,10 +1197,9 @@ async function handlePublicLeadSubmission(req, res) {
       return res.status(400).json({ error: "Phone number is required" });
     }
 
-    // Clean phone number (strip whitespace, ensure digits)
-    const cleanPhone = phone.trim();
-    const digitCount = (cleanPhone.match(/\d/g) || []).length;
-    if (digitCount < 8) {
+    // Normalize phone number to digits-only for consistent dedupe/storage
+    const cleanPhone = String(phone).replace(/\D/g, "");
+    if (cleanPhone.length < 8) {
       return res.status(400).json({ error: "Invalid phone number - must contain at least 8 digits" });
     }
 
