@@ -163,20 +163,9 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
           throw new Error(errData.error || `Server responded with status ${response.status}`);
         }
       } catch (apiErr) {
-        console.warn("[LeadForms] Primary API endpoint error, attempting Supabase fallback:", apiErr);
-
-        // 2. Direct Supabase Fallback
-        const nameTokens = payload.name.split(/\s+/);
-        const { error: sbError } = await supabase.from('leads').insert({
-          first_name: nameTokens[0] || 'Lead',
-          last_name: nameTokens.slice(1).join(' ') || (formType === 'employer' ? 'Corporate' : 'Provider'),
-          email: payload.email,
-          phone: payload.phone,
-          pipeline_stage: 'inquiry',
-          source: 'website_widget',
-          notes: payload.message || `Inquiry from ${formType} form`,
-          custom_fields: payload
-        });
+        console.warn("[LeadForms] Primary API endpoint error:", apiErr);
+        throw new Error("Unable to submit your inquiry right now. Please try again shortly.");
+      }
 
         if (!sbError) {
           submissionSuccess = true;
