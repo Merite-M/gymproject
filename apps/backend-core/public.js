@@ -1150,4 +1150,204 @@ router.get('/:tenant_slug/embed/join', async (req, res) => {
   }
 });
 
+// ==========================================
+// 8. PUBLIC LEAD & INQUIRY SUBMISSION (B2B Landing Page GYM-70)
+// ==========================================
+
+/**
+ * POST /api/public/lead & POST /api/public/inquiry
+ * Unauthenticated public endpoint for B2B corporate and provider inquiries from the marketing landing page.
+ */
+async function handlePublicLeadSubmission(req, res) {
+  if (!supabase) return res.status(500).json({ error: "Supabase config missing" });
+
+  try {
+    const {
+      name,
+      first_name,
+      last_name,
+      email,
+      phone,
+      type = 'employer',
+      organization,
+      employees,
+      business,
+      location,
+      locations,
+      message,
+      tenant_id
+    } = req.body;
+
+    // 1. Validation
+    const rawName = (name || `${first_name || ''} ${last_name || ''}`).trim();
+    if (!rawName) {
+      return res.status(400).json({ error: "Name is required" });
+    }
+
+    if (!email || !email.trim()) {
+      return res.status(400).json({ error: "Work email is required" });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      return res.status(400).json({ error: "Invalid email format" });
+    }
+
+    if (!phone || !phone.trim()) {
+      return res.status(400).json({ error: "Phone number is required" });
+    }
+
+    // Normalize phone number to digits-only for consistent dedupe/storage
+    const cleanPhone = String(phone).replace(/\D/g, "");
+    if (cleanPhone.length < 8) {
+      return res.status(400).json({ error: "Invalid phone number - must contain at least 8 digits" });
+    }
+
+    // Parse names
+    const nameTokens = rawName.split(/\s+/);
+    const parsedFirst = first_name || nameTokens[0] || 'Lead';
+    const parsedLast = last_name || nameTokens.slice(1).join(' ') || (type === 'employer' ? 'Corporate' : 'Provider');
+
+    // Resolve tenant (if none provided, use default platform tenant)
+    let realTenantId = tenant_id;
+    if (realTenantId) {
+      const tenant = await resolveTenant(realTenantId);
+      if (tenant) realTenantId = tenant.id;
+    }
+    if (!realTenantId) {
+      realTenantId = process.env.PLATFORM_TENANT_ID || '2c604504-41c3-406b-82a0-a43700057af8';
+    }
+
+    const customFields = {
+      lead_type: type,
+      organization: organization || business || null,
+      employee_count_range: employees || null,
+      business_name: business || organization || null,
+      facility_location: location || null,
+      locations_count: locations || null,
+      submitted_at: new Date().toISOString()
+    };
+
+    // Check if lead already exists
+    const { data: existingLead } = await supabase
+      .from('leads')
+      .select('id, pipeline_stage, notes, custom_fields')
+      .eq('tenant_id', realTenantId)
+      .eq('phone', cleanPhone)
+      .maybeSingle();
+
+    let leadRecord;
+    const nowIso = new Date().toISOString();
+
+    if (existingLead) {
+      const mergedNotes = message
+        ? `${existingLead.notes || ''}\n[${new Date().toLocaleDateString()} Update]: ${message}`.trim()
+        : existingLead.notes;
+
+      const { data: updated, error: updateErr } = await supabase
+        .from('leads')
+        .update({
+          first_name: parsedFirst,
+          last_name: parsedLast,
+          email: email.trim(),
+          notes: mergedNotes,
+          custom_fields: { ...(existingLead.custom_fields || {}), ...customFields },
+          updated_at: nowIso
+        })
+        .eq('id', existingLead.id)
+        .select()
+        .single();
+
+      if (updateErr) throw updateErr;
+      leadRecord = updated;
+    } else {
+      const { data: created, error: insertErr } = await supabase
+        .from('leads')
+        .insert({
+          tenant_id: realTenantId,
+          first_name: parsedFirst,
+          last_name: parsedLast,
+          email: email.trim(),
+          phone: cleanPhone,
+          pipeline_stage: 'inquiry',
+          stage_entered_at: nowIso,
+          source: 'marketing_landing_page',
+          notes: message ? message.trim() : `Inquiry from ${type} form on PolyFit acquisition page`,
+          custom_fields: customFields
+        })
+        .select()
+        .single();
+
+      if (insertErr) throw insertErr;
+      leadRecord = created;
+
+      // Log stage history
+      await supabase.from('lead_stage_history').insert({
+        tenant_id: realTenantId,
+        lead_id: created.id,
+        from_stage: null,
+        to_stage: 'inquiry',
+        trigger_source: 'landing_page_lead',
+        notes: `New ${type} lead captured from PolyFit public acquisition page`
+      });
+    }
+
+    // Queue confirmation notification
+    try {
+      await supabase.from('notification_queue').insert({
+        tenant_id: realTenantId,
+        profile_id: null,
+        channel: 'sms',
+        recipient: cleanPhone,
+        subject: 'PolyFit Inquiry Received',
+        content: `Hello ${parsedFirst}! Thank you for your interest in PolyFit. A network specialist will contact you within 1-2 business days.`,
+        status: 'pending'
+      });
+
+      await supabase.from('communications_log').insert({
+        tenant_id: realTenantId,
+        profile_id: null,
+        channel: 'sms',
+        direction: 'outbound',
+        status: 'pending',
+        content: `[Automated] Welcome & confirmation SMS queued for ${cleanPhone} (${type} lead)`
+      });
+    } catch (notifyErr) {
+      console.warn('[public/lead] Non-fatal notification queue warning:', notifyErr.message);
+    }
+
+    // Emit live event
+    if (gymEmitter) {
+      gymEmitter.emit('lead.inquiry_created', {
+        tenant_id: realTenantId,
+        lead_id: leadRecord.id,
+        name: rawName,
+        phone: cleanPhone,
+        email: email.trim(),
+        type
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Inquiry received successfully. Our team will be in touch shortly.',
+      lead: {
+        id: leadRecord.id,
+        first_name: leadRecord.first_name,
+        last_name: leadRecord.last_name,
+        pipeline_stage: leadRecord.pipeline_stage,
+        type
+      }
+    });
+
+  } catch (error) {
+    console.error('[public/lead] error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error processing inquiry' });
+  }
+}
+
+router.post('/lead', handlePublicLeadSubmission);
+router.post('/inquiry', handlePublicLeadSubmission);
+
 module.exports = router;
+

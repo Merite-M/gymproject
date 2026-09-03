@@ -49,7 +49,7 @@
 }
 
 :root {
-  /* PolyFit Dark Theme Colors */
+  /* PolyFit Dark Theme Colors (Default for Operations Console) */
   --background: #090f0d;
   --foreground: #dae9e2;
   --card: #121b18;
@@ -123,6 +123,51 @@
   --sidebar-accent-foreground: #dae9e2;
   --sidebar-border: #3e4b46;
   --sidebar-ring: #4edf92;
+}
+
+/* Marketing Theme Tokens (Light Mode for Landing Page) */
+.marketing-theme {
+  --background: #F7F9FC;
+  --foreground: #0B1F33;
+  --card: #FFFFFF;
+  --card-foreground: #0B1F33;
+  --popover: #FFFFFF;
+  --popover-foreground: #0B1F33;
+  --primary: #0B1F33;
+  --primary-foreground: #FFFFFF;
+  --secondary: #3B82F6;
+  --secondary-foreground: #FFFFFF;
+  --tertiary: #B8F36B;
+  --tertiary-foreground: #0B1F33;
+  --muted-foreground: #64748B;
+  --destructive: #EF4444;
+  --destructive-foreground: #FFFFFF;
+  --success: #28D17C;
+  --success-foreground: #FFFFFF;
+  --warning: #F59E0B;
+  --warning-foreground: #FFFFFF;
+  --info: #3B82F6;
+  --info-foreground: #FFFFFF;
+  --border: #E2E8F0;
+  --input: #E2E8F0;
+  --ring: #28D17C;
+  --radius: 0.5rem;
+}
+
+/* Skip to main link for accessibility */
+.skip-to-main {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--accent);
+  color: var(--accent-foreground);
+  padding: 8px;
+  z-index: 100;
+  transition: top 0.3s;
+}
+
+.skip-to-main:focus {
+  top: 0;
 }
 
 
