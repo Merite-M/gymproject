@@ -207,9 +207,9 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
   };
 
   const EmployerForm = () => (
-    <form onSubmit={handleSubmit} noValidate className="space-y-4">
+    <form onSubmit={handleSubmit} noValidate className="space-y-3.5 sm:space-y-4">
       <div>
-        <label htmlFor="employer-name" className="block text-sm font-medium text-foreground mb-1.5">
+        <label htmlFor="employer-name" className="block text-xs sm:text-sm font-medium text-foreground mb-1">
           Full Name <span className="text-destructive">*</span>
         </label>
         <input
@@ -225,7 +225,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
             setEmployerForm({ ...employerForm, name: e.target.value });
             if (fieldErrors.name) setFieldErrors({ ...fieldErrors, name: '' });
           }}
-          className={`w-full px-4 py-3 bg-background border ${
+          className={`w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-background border text-sm ${
             fieldErrors.name ? 'border-destructive focus:ring-destructive' : 'border-border focus:ring-accent'
           } rounded-lg focus:ring-2 focus:border-transparent outline-none transition-all disabled:opacity-50`}
           placeholder="e.g. Jean Claude Munyana"
@@ -239,7 +239,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
       </div>
 
       <div>
-        <label htmlFor="employer-org" className="block text-sm font-medium text-foreground mb-1.5">
+        <label htmlFor="employer-org" className="block text-xs sm:text-sm font-medium text-foreground mb-1">
           Organization / Company Name <span className="text-destructive">*</span>
         </label>
         <input
@@ -255,7 +255,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
             setEmployerForm({ ...employerForm, organization: e.target.value });
             if (fieldErrors.organization) setFieldErrors({ ...fieldErrors, organization: '' });
           }}
-          className={`w-full px-4 py-3 bg-background border ${
+          className={`w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-background border text-sm ${
             fieldErrors.organization ? 'border-destructive focus:ring-destructive' : 'border-border focus:ring-accent'
           } rounded-lg focus:ring-2 focus:border-transparent outline-none transition-all disabled:opacity-50`}
           placeholder="e.g. Bank of Kigali, Irembo, etc."
@@ -268,9 +268,9 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
         )}
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
         <div>
-          <label htmlFor="employer-email" className="block text-sm font-medium text-foreground mb-1.5">
+          <label htmlFor="employer-email" className="block text-xs sm:text-sm font-medium text-foreground mb-1">
             Work Email <span className="text-destructive">*</span>
           </label>
           <input
@@ -286,7 +286,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
               setEmployerForm({ ...employerForm, email: e.target.value });
               if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: '' });
             }}
-            className={`w-full px-4 py-3 bg-background border ${
+            className={`w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-background border text-sm ${
               fieldErrors.email ? 'border-destructive focus:ring-destructive' : 'border-border focus:ring-accent'
             } rounded-lg focus:ring-2 focus:border-transparent outline-none transition-all disabled:opacity-50`}
             placeholder="hr@company.com"
@@ -300,7 +300,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
         </div>
 
         <div>
-          <label htmlFor="employer-phone" className="block text-sm font-medium text-foreground mb-1.5">
+          <label htmlFor="employer-phone" className="block text-xs sm:text-sm font-medium text-foreground mb-1">
             Phone Number <span className="text-destructive">*</span>
           </label>
           <input
@@ -316,7 +316,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
               setEmployerForm({ ...employerForm, phone: e.target.value });
               if (fieldErrors.phone) setFieldErrors({ ...fieldErrors, phone: '' });
             }}
-            className={`w-full px-4 py-3 bg-background border ${
+            className={`w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-background border text-sm ${
               fieldErrors.phone ? 'border-destructive focus:ring-destructive' : 'border-border focus:ring-accent'
             } rounded-lg focus:ring-2 focus:border-transparent outline-none transition-all disabled:opacity-50`}
             placeholder="+250 788 123 456"
@@ -331,7 +331,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
       </div>
 
       <div>
-        <label htmlFor="employer-employees" className="block text-sm font-medium text-foreground mb-1.5">
+        <label htmlFor="employer-employees" className="block text-xs sm:text-sm font-medium text-foreground mb-1">
           Number of Employees <span className="text-destructive">*</span>
         </label>
         <select
@@ -346,7 +346,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
             setEmployerForm({ ...employerForm, employees: e.target.value });
             if (fieldErrors.employees) setFieldErrors({ ...fieldErrors, employees: '' });
           }}
-          className={`w-full px-4 py-3 bg-background border ${
+          className={`w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-background border text-sm ${
             fieldErrors.employees ? 'border-destructive focus:ring-destructive' : 'border-border focus:ring-accent'
           } rounded-lg focus:ring-2 focus:border-transparent outline-none transition-all disabled:opacity-50`}
         >
@@ -365,7 +365,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
       </div>
 
       <div>
-        <label htmlFor="employer-message" className="block text-sm font-medium text-foreground mb-1.5">
+        <label htmlFor="employer-message" className="block text-xs sm:text-sm font-medium text-foreground mb-1">
           Message & Wellness Objectives (Optional)
         </label>
         <textarea
@@ -374,7 +374,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
           disabled={isSubmitting}
           value={employerForm.message}
           onChange={(e) => setEmployerForm({ ...employerForm, message: e.target.value })}
-          className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent outline-none transition-all resize-none disabled:opacity-50"
+          className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-background border border-border text-sm rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent outline-none transition-all resize-none disabled:opacity-50"
           placeholder="Tell us about your locations, existing gym subsidies, or timeline..."
         />
       </div>
@@ -382,11 +382,11 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
       <button
         type="submit"
         disabled={isSubmitting}
-        className="w-full bg-accent hover:bg-accent/90 text-white px-6 py-4 rounded-lg font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px] flex items-center justify-center gap-2 shadow-md hover:shadow-lg focus-visible:ring-2 focus-visible:ring-white"
+        className="w-full bg-[#28D17C] hover:bg-[#28D17C]/90 text-[#0B1F33] px-6 py-3.5 sm:py-4 rounded-lg font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px] sm:min-h-[52px] flex items-center justify-center gap-2 shadow-md hover:shadow-lg focus-visible:ring-2 focus-visible:ring-white"
       >
         {isSubmitting ? (
           <>
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <div className="w-5 h-5 border-2 border-[#0B1F33]/30 border-t-[#0B1F33] rounded-full animate-spin" />
             <span>Submitting Inquiry...</span>
           </>
         ) : (
@@ -400,9 +400,9 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
   );
 
   const ProviderForm = () => (
-    <form onSubmit={handleSubmit} noValidate className="space-y-4">
+    <form onSubmit={handleSubmit} noValidate className="space-y-3.5 sm:space-y-4">
       <div>
-        <label htmlFor="provider-name" className="block text-sm font-medium text-foreground mb-1.5">
+        <label htmlFor="provider-name" className="block text-xs sm:text-sm font-medium text-foreground mb-1">
           Contact Person Name <span className="text-destructive">*</span>
         </label>
         <input
@@ -418,7 +418,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
             setProviderForm({ ...providerForm, name: e.target.value });
             if (fieldErrors.name) setFieldErrors({ ...fieldErrors, name: '' });
           }}
-          className={`w-full px-4 py-3 bg-background border ${
+          className={`w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-background border text-sm ${
             fieldErrors.name ? 'border-destructive focus:ring-destructive' : 'border-border focus:ring-accent'
           } rounded-lg focus:ring-2 focus:border-transparent outline-none transition-all disabled:opacity-50`}
           placeholder="e.g. Patrick Mugabo"
@@ -431,9 +431,9 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
         )}
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
         <div>
-          <label htmlFor="provider-business" className="block text-sm font-medium text-foreground mb-1.5">
+          <label htmlFor="provider-business" className="block text-xs sm:text-sm font-medium text-foreground mb-1">
             Gym / Studio Business Name <span className="text-destructive">*</span>
           </label>
           <input
@@ -449,7 +449,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
               setProviderForm({ ...providerForm, business: e.target.value });
               if (fieldErrors.business) setFieldErrors({ ...fieldErrors, business: '' });
             }}
-            className={`w-full px-4 py-3 bg-background border ${
+            className={`w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-background border text-sm ${
               fieldErrors.business ? 'border-destructive focus:ring-destructive' : 'border-border focus:ring-accent'
             } rounded-lg focus:ring-2 focus:border-transparent outline-none transition-all disabled:opacity-50`}
             placeholder="e.g. Cali Fitness, Kigali"
@@ -463,7 +463,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
         </div>
 
         <div>
-          <label htmlFor="provider-location" className="block text-sm font-medium text-foreground mb-1.5">
+          <label htmlFor="provider-location" className="block text-xs sm:text-sm font-medium text-foreground mb-1">
             Primary Location / District <span className="text-destructive">*</span>
           </label>
           <input
@@ -479,7 +479,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
               setProviderForm({ ...providerForm, location: e.target.value });
               if (fieldErrors.location) setFieldErrors({ ...fieldErrors, location: '' });
             }}
-            className={`w-full px-4 py-3 bg-background border ${
+            className={`w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-background border text-sm ${
               fieldErrors.location ? 'border-destructive focus:ring-destructive' : 'border-border focus:ring-accent'
             } rounded-lg focus:ring-2 focus:border-transparent outline-none transition-all disabled:opacity-50`}
             placeholder="e.g. Musanze or Nyarutarama, Kigali"
@@ -493,9 +493,9 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
         <div>
-          <label htmlFor="provider-phone" className="block text-sm font-medium text-foreground mb-1.5">
+          <label htmlFor="provider-phone" className="block text-xs sm:text-sm font-medium text-foreground mb-1">
             Phone Number <span className="text-destructive">*</span>
           </label>
           <input
@@ -511,7 +511,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
               setProviderForm({ ...providerForm, phone: e.target.value });
               if (fieldErrors.phone) setFieldErrors({ ...fieldErrors, phone: '' });
             }}
-            className={`w-full px-4 py-3 bg-background border ${
+            className={`w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-background border text-sm ${
               fieldErrors.phone ? 'border-destructive focus:ring-destructive' : 'border-border focus:ring-accent'
             } rounded-lg focus:ring-2 focus:border-transparent outline-none transition-all disabled:opacity-50`}
             placeholder="+250 7XX XXX XXX"
@@ -525,7 +525,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
         </div>
 
         <div>
-          <label htmlFor="provider-email" className="block text-sm font-medium text-foreground mb-1.5">
+          <label htmlFor="provider-email" className="block text-xs sm:text-sm font-medium text-foreground mb-1">
             Contact Email <span className="text-destructive">*</span>
           </label>
           <input
@@ -541,7 +541,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
               setProviderForm({ ...providerForm, email: e.target.value });
               if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: '' });
             }}
-            className={`w-full px-4 py-3 bg-background border ${
+            className={`w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-background border text-sm ${
               fieldErrors.email ? 'border-destructive focus:ring-destructive' : 'border-border focus:ring-accent'
             } rounded-lg focus:ring-2 focus:border-transparent outline-none transition-all disabled:opacity-50`}
             placeholder="management@facility.rw"
@@ -556,7 +556,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
       </div>
 
       <div>
-        <label htmlFor="provider-locations" className="block text-sm font-medium text-foreground mb-1.5">
+        <label htmlFor="provider-locations" className="block text-xs sm:text-sm font-medium text-foreground mb-1">
           Number of Branches / Facilities <span className="text-destructive">*</span>
         </label>
         <select
@@ -571,7 +571,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
             setProviderForm({ ...providerForm, locations: e.target.value });
             if (fieldErrors.locations) setFieldErrors({ ...fieldErrors, locations: '' });
           }}
-          className={`w-full px-4 py-3 bg-background border ${
+          className={`w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-background border text-sm ${
             fieldErrors.locations ? 'border-destructive focus:ring-destructive' : 'border-border focus:ring-accent'
           } rounded-lg focus:ring-2 focus:border-transparent outline-none transition-all disabled:opacity-50`}
         >
@@ -590,7 +590,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
       </div>
 
       <div>
-        <label htmlFor="provider-message" className="block text-sm font-medium text-foreground mb-1.5">
+        <label htmlFor="provider-message" className="block text-xs sm:text-sm font-medium text-foreground mb-1">
           Facility Details (Optional)
         </label>
         <textarea
@@ -599,7 +599,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
           disabled={isSubmitting}
           value={providerForm.message}
           onChange={(e) => setProviderForm({ ...providerForm, message: e.target.value })}
-          className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent outline-none transition-all resize-none disabled:opacity-50"
+          className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-background border border-border text-sm rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent outline-none transition-all resize-none disabled:opacity-50"
           placeholder="Tell us about amenities: swimming pool, sauna, group fitness classes, turnstile hardware..."
         />
       </div>
@@ -607,11 +607,11 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
       <button
         type="submit"
         disabled={isSubmitting}
-        className="w-full bg-secondary hover:bg-secondary/90 text-white px-6 py-4 rounded-lg font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px] flex items-center justify-center gap-2 shadow-md hover:shadow-lg focus-visible:ring-2 focus-visible:ring-white"
+        className="w-full bg-[#28D17C] hover:bg-[#28D17C]/90 text-[#0B1F33] px-6 py-3.5 sm:py-4 rounded-lg font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px] sm:min-h-[52px] flex items-center justify-center gap-2 shadow-md hover:shadow-lg focus-visible:ring-2 focus-visible:ring-white"
       >
         {isSubmitting ? (
           <>
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <div className="w-5 h-5 border-2 border-[#0B1F33]/30 border-t-[#0B1F33] rounded-full animate-spin" />
             <span>Registering Venue...</span>
           </>
         ) : (
@@ -626,32 +626,32 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-200 animate-in fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm transition-opacity duration-200 animate-in fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby="lead-modal-title"
     >
       <div 
-        className="bg-background border border-border rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto transform transition-all duration-200"
+        className="bg-background border border-border rounded-2xl shadow-2xl max-w-lg w-full max-h-[92vh] sm:max-h-[90vh] overflow-y-auto transform transition-all duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-border bg-card/40">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border bg-card/40 sticky top-0 bg-background/95 backdrop-blur-md z-10">
           <div className="flex items-center gap-3">
             {formType === 'employer' ? (
-              <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
-                <Building2 className="w-5 h-5 text-accent" />
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#28D17C]/15 flex items-center justify-center flex-shrink-0">
+                <Building2 className="w-5 h-5 text-[#28D17C]" />
               </div>
             ) : (
-              <div className="w-10 h-10 rounded-xl bg-secondary/10 flex items-center justify-center">
-                <Dumbbell className="w-5 h-5 text-secondary" />
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#3B82F6]/15 flex items-center justify-center flex-shrink-0">
+                <Dumbbell className="w-5 h-5 text-[#3B82F6]" />
               </div>
             )}
             <div>
-              <h2 id="lead-modal-title" className="text-xl font-bold text-foreground leading-tight">
+              <h2 id="lead-modal-title" className="text-lg sm:text-xl font-bold text-foreground leading-tight">
                 {formType === 'employer' ? 'Talk to PolyFit' : 'Join Provider Network'}
               </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
                 {formType === 'employer' 
                   ? 'Schedule corporate demo & ROI assessment'
                   : 'Receive corporate wellness members & free BOH software'}
@@ -660,7 +660,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-accent"
+            className="p-2 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-accent flex-shrink-0"
             aria-label="Close dialog"
           >
             <X className="w-5 h-5" />
@@ -668,10 +668,10 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           {/* Submit Error Banner */}
           {submitError && (
-            <div className="mb-6 p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-start gap-3">
+            <div className="mb-4 sm:mb-6 p-3.5 sm:p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-start gap-3">
               <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="font-semibold">Submission failed</p>
@@ -688,14 +688,14 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
           )}
 
           {isSubmitted ? (
-            <div className="text-center py-10 animate-in zoom-in-95 duration-200">
-              <div className="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CheckCircle className="w-8 h-8 text-accent" />
+            <div className="text-center py-8 sm:py-10 animate-in zoom-in-95 duration-200">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 bg-[#28D17C]/15 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-7 h-7 sm:w-8 sm:h-8 text-[#28D17C]" />
               </div>
-              <h3 className="text-2xl font-bold text-foreground mb-2">
+              <h3 className="text-xl sm:text-2xl font-bold text-foreground mb-2">
                 Inquiry Received!
               </h3>
-              <p className="text-muted-foreground max-w-sm mx-auto text-sm leading-relaxed">
+              <p className="text-muted-foreground max-w-sm mx-auto text-xs sm:text-sm leading-relaxed">
                 Thank you for connecting with PolyFit. Our East African corporate wellness team will contact you within 1-2 business days.
               </p>
               <div className="mt-6">
@@ -710,7 +710,7 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
           ) : (
             <>
               {/* Form Type Toggle */}
-              <div className="flex gap-2 mb-6 p-1 bg-muted/60 rounded-xl" role="tablist">
+              <div className="flex gap-1.5 sm:gap-2 mb-5 sm:mb-6 p-1 bg-muted/60 rounded-xl" role="tablist">
                 <button
                   type="button"
                   role="tab"
@@ -720,13 +720,13 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
                     setSubmitError(null);
                     setFieldErrors({});
                   }}
-                  className={`flex-1 px-4 py-2.5 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2 ${
+                  className={`flex-1 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 sm:gap-2 ${
                     formType === 'employer'
                       ? 'bg-background text-foreground shadow-sm'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <Building2 className="w-4 h-4 text-accent" />
+                  <Building2 className="w-4 h-4 text-[#28D17C]" />
                   <span>I am an Employer</span>
                 </button>
                 <button
@@ -738,13 +738,13 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
                     setSubmitError(null);
                     setFieldErrors({});
                   }}
-                  className={`flex-1 px-4 py-2.5 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2 ${
+                  className={`flex-1 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 sm:gap-2 ${
                     formType === 'provider'
                       ? 'bg-background text-foreground shadow-sm'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <Dumbbell className="w-4 h-4 text-secondary" />
+                  <Dumbbell className="w-4 h-4 text-[#3B82F6]" />
                   <span>Fitness Provider</span>
                 </button>
               </div>
@@ -755,8 +755,8 @@ export default function LeadForms({ isOpen, onClose, defaultType = 'employer' }:
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-border bg-card/30">
-          <p className="text-xs text-muted-foreground text-center">
+        <div className="p-3.5 sm:p-4 border-t border-border bg-card/30">
+          <p className="text-[10px] sm:text-xs text-muted-foreground text-center">
             By submitting, you agree to our{" "}
             <a href="/privacy" target="_blank" rel="noreferrer" className="underline hover:text-foreground">
               Privacy Policy
