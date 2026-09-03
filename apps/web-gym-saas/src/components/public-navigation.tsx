@@ -18,21 +18,21 @@ export default function PublicNavigation({ onOpenLeadForm }: PublicNavigationPro
   ];
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0B1F33]/90 backdrop-blur-md border-b border-white/10" aria-label="Main Navigation">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0B1F33]/95 backdrop-blur-md border-b border-white/10" aria-label="Main Navigation">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-20">
+        <div className="flex justify-between items-center h-16 sm:h-20">
           {/* Logo */}
           <div className="flex-shrink-0 flex items-center">
-            <a href="/" className="flex items-center space-x-3 group">
-              <div className="w-9 h-9 bg-[#28D17C] rounded-[10px] flex items-center justify-center shadow-sm">
-                <span className="text-[#0B1F33] font-bold text-xl leading-none">P</span>
+            <a href="/" className="flex items-center space-x-2.5 sm:space-x-3 group">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 bg-[#28D17C] rounded-[10px] flex items-center justify-center shadow-sm">
+                <span className="text-[#0B1F33] font-bold text-lg sm:text-xl leading-none">P</span>
               </div>
-              <span className="text-2xl font-bold tracking-tight text-white">PolyFit</span>
+              <span className="text-xl sm:text-2xl font-bold tracking-tight text-white">PolyFit</span>
             </a>
           </div>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-8">
+          <div className="hidden md:flex items-center space-x-6 lg:space-x-8">
             {navLinks.map((link) => (
               <a
                 key={link.name}
@@ -68,13 +68,13 @@ export default function PublicNavigation({ onOpenLeadForm }: PublicNavigationPro
 
       {/* Mobile menu */}
       {isMenuOpen && (
-        <div className="md:hidden bg-[#0B1F33] border-t border-white/10 px-4 pt-3 pb-6 space-y-3">
+        <div className="md:hidden bg-[#0B1F33] border-t border-white/10 px-4 pt-3 pb-6 space-y-3 max-h-[calc(100vh-4rem)] overflow-y-auto shadow-2xl">
           <div className="space-y-1">
             {navLinks.map((link) => (
               <a
                 key={link.name}
                 href={link.href}
-                className="block px-3 py-2.5 rounded-[10px] text-base font-medium text-gray-200 hover:text-white hover:bg-white/5 transition-colors"
+                className="block px-3 py-3 rounded-[10px] text-base font-medium text-gray-200 hover:text-white hover:bg-white/5 transition-colors active:bg-white/10"
                 onClick={() => setIsMenuOpen(false)}
               >
                 {link.name}
@@ -89,7 +89,7 @@ export default function PublicNavigation({ onOpenLeadForm }: PublicNavigationPro
                 onOpenLeadForm?.('employer');
               }}
               aria-label="Talk to us - Open employer inquiry modal"
-              className="w-full bg-[#28D17C] hover:bg-[#28D17C]/90 text-[#0B1F33] px-5 py-3 rounded-[10px] text-sm font-semibold transition-colors min-h-[44px]"
+              className="w-full bg-[#28D17C] hover:bg-[#28D17C]/90 text-[#0B1F33] px-5 py-3 rounded-[10px] text-sm font-semibold transition-colors min-h-[44px] flex items-center justify-center"
             >
               Talk to us
             </button>

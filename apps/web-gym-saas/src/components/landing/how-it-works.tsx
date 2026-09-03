@@ -29,28 +29,28 @@ export default function HowItWorks() {
   ];
 
   return (
-    <section id="how-it-works" className="py-24 bg-[#F7F9FC] text-[#0B1F33]">
+    <section id="how-it-works" className="py-16 sm:py-24 bg-[#F7F9FC] text-[#0B1F33]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-3xl mx-auto mb-16">
+        <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-16">
           <p className="text-xs font-semibold uppercase tracking-widest text-[#28D17C] mb-2">
             Simple Process
           </p>
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#0B1F33]">
+          <h2 className="text-2xl sm:text-4xl font-bold tracking-tight text-[#0B1F33]">
             How PolyFit works
           </h2>
-          <p className="text-base sm:text-lg text-gray-600 mt-4 leading-relaxed">
+          <p className="text-sm sm:text-lg text-gray-600 mt-3 sm:mt-4 leading-relaxed">
             Four simple steps to connect organizations, employees, and local fitness providers.
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
           {steps.map((step, index) => (
             <div
               key={index}
-              className="bg-white border border-gray-200/80 rounded-[14px] p-6 sm:p-7 shadow-sm hover:border-[#28D17C]/50 transition-all duration-200 flex flex-col justify-between"
+              className="bg-white border border-gray-200/80 rounded-[14px] p-5 sm:p-7 shadow-sm hover:border-[#28D17C]/50 transition-all duration-200 flex flex-col justify-between"
             >
               <div>
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-4 sm:mb-6">
                   <div className="w-10 h-10 rounded-[10px] bg-[#28D17C]/15 flex items-center justify-center">
                     <step.icon className="w-5 h-5 text-[#28D17C]" />
                   </div>

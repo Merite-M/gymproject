@@ -42,21 +42,21 @@ export default function FAQSection({ onOpenLeadForm }: FAQSectionProps) {
   };
 
   return (
-    <section id="faq" className="py-24 bg-white text-[#0B1F33] border-t border-gray-200/60">
+    <section id="faq" className="py-16 sm:py-24 bg-white text-[#0B1F33] border-t border-gray-200/60">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
+        <div className="text-center mb-10 sm:mb-16">
           <p className="text-xs font-semibold uppercase tracking-widest text-[#28D17C] mb-2">
             Common Questions
           </p>
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#0B1F33]">
+          <h2 className="text-2xl sm:text-4xl font-bold tracking-tight text-[#0B1F33]">
             Frequently Asked Questions
           </h2>
-          <p className="text-base sm:text-lg text-gray-600 mt-4">
+          <p className="text-sm sm:text-lg text-gray-600 mt-3 sm:mt-4">
             Everything you need to know about the PolyFit corporate network.
           </p>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
           {faqs.map((faq, index) => (
             <div
               key={index}
@@ -67,9 +67,9 @@ export default function FAQSection({ onOpenLeadForm }: FAQSectionProps) {
                 onClick={() => toggleFAQ(index)}
                 aria-controls={`faq-answer-${index}`}
                 aria-expanded={openIndex === index}
-                className="w-full px-6 py-5 text-left flex items-center justify-between hover:bg-gray-100/60 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#28D17C]"
+                className="w-full px-5 sm:px-6 py-4 sm:py-5 text-left flex items-center justify-between hover:bg-gray-100/60 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#28D17C]"
               >
-                <span className="font-semibold text-[#0B1F33] text-base pr-4">
+                <span className="font-semibold text-[#0B1F33] text-sm sm:text-base pr-4">
                   {faq.question}
                 </span>
                 {openIndex === index ? (
@@ -84,9 +84,9 @@ export default function FAQSection({ onOpenLeadForm }: FAQSectionProps) {
                   id={`faq-answer-${index}`}
                   role="region"
                   aria-labelledby={`faq-btn-${index}`}
-                  className="px-6 pb-5 pt-0"
+                  className="px-5 sm:px-6 pb-4 sm:pb-5 pt-0"
                 >
-                  <p className="text-gray-600 text-sm leading-relaxed border-t border-gray-200/40 pt-3">
+                  <p className="text-gray-600 text-xs sm:text-sm leading-relaxed border-t border-gray-200/40 pt-3">
                     {faq.answer}
                   </p>
                 </div>
@@ -95,14 +95,14 @@ export default function FAQSection({ onOpenLeadForm }: FAQSectionProps) {
           ))}
         </div>
 
-        <div className="mt-12 text-center">
-          <p className="text-sm text-gray-600 mb-4">
+        <div className="mt-8 sm:mt-12 text-center">
+          <p className="text-xs sm:text-sm text-gray-600 mb-3 sm:mb-4">
             Still have questions about corporate partnerships or joining as a gym?
           </p>
           <button
             onClick={() => onOpenLeadForm?.('employer')}
             aria-label="Contact PolyFit team"
-            className="inline-flex items-center gap-2 text-sm font-semibold text-[#0B1F33] hover:text-[#28D17C] underline underline-offset-4 transition-colors"
+            className="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#0B1F33] hover:text-[#28D17C] underline underline-offset-4 transition-colors"
           >
             Talk to our team →
           </button>

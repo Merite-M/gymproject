@@ -2,21 +2,21 @@ import { MapPin, Navigation, Compass } from "lucide-react";
 
 export default function NetworkSection() {
   return (
-    <section id="network" className="py-24 bg-white text-[#0B1F33] border-t border-gray-200/60">
+    <section id="network" className="py-16 sm:py-24 bg-white text-[#0B1F33] border-t border-gray-200/60">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid lg:grid-cols-12 gap-12 lg:gap-16 items-center">
+        <div className="grid lg:grid-cols-12 gap-10 sm:gap-12 lg:gap-16 items-center">
           {/* Left Text */}
           <div className="lg:col-span-6">
             <p className="text-xs font-semibold uppercase tracking-widest text-[#28D17C] mb-2">
               Local Density & Geography
             </p>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#0B1F33] mb-4">
+            <h2 className="text-2xl sm:text-4xl font-bold tracking-tight text-[#0B1F33] mb-3 sm:mb-4">
               Your employees. Their choice.
             </h2>
-            <p className="text-lg font-medium text-gray-800 mb-4">
+            <p className="text-base sm:text-lg font-medium text-gray-800 mb-3 sm:mb-4">
               Built around how people actually move.
             </p>
-            <p className="text-gray-600 leading-relaxed mb-6">
+            <p className="text-sm sm:text-base text-gray-600 leading-relaxed mb-6">
               PolyFit starts by building dense local networks—connecting organizations with fitness providers in the places where their employees live and work. Rather than claiming thin nationwide coverage from day one, we focus on high-density clusters that deliver real utility.
             </p>
 
@@ -48,23 +48,23 @@ export default function NetworkSection() {
           </div>
 
           {/* Right Map Visual */}
-          <div className="lg:col-span-6">
-            <div className="bg-[#0B1F33] rounded-[14px] p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
-              <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/10">
+          <div className="lg:col-span-6 w-full overflow-hidden">
+            <div className="bg-[#0B1F33] rounded-[14px] p-5 sm:p-8 text-white shadow-xl relative overflow-hidden">
+              <div className="flex items-center justify-between mb-4 sm:mb-6 pb-4 border-b border-white/10 gap-2">
                 <div className="flex items-center gap-2">
-                  <Navigation className="w-4 h-4 text-[#28D17C]" />
+                  <Navigation className="w-4 h-4 text-[#28D17C] flex-shrink-0" />
                   <span className="text-xs font-bold uppercase tracking-wider text-gray-300">
                     Network Geography
                   </span>
                 </div>
-                <span className="text-[11px] font-medium text-[#28D17C] bg-[#28D17C]/10 border border-[#28D17C]/30 px-2.5 py-0.5 rounded-full">
+                <span className="text-[10px] sm:text-[11px] font-medium text-[#28D17C] bg-[#28D17C]/10 border border-[#28D17C]/30 px-2 sm:px-2.5 py-0.5 rounded-full flex-shrink-0">
                   Rwanda Focus
                 </span>
               </div>
 
               {/* Simplified Rwanda Map Vector with Nodes */}
-              <div className="relative py-4">
-                <svg className="w-full h-64" viewBox="0 0 400 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <div className="relative py-2 sm:py-4">
+                <svg className="w-full h-48 sm:h-64" viewBox="0 0 400 240" preserveAspectRatio="xMidYMid meet" fill="none" xmlns="http://www.w3.org/2000/svg">
                   {/* Stylized Rwanda boundary outline */}
                   <path
                     d="M 120 40 L 220 25 L 300 60 L 330 110 L 320 180 L 260 220 L 160 225 L 90 190 L 60 135 L 75 75 Z"
@@ -110,8 +110,8 @@ export default function NetworkSection() {
                 </svg>
               </div>
 
-              <div className="pt-4 border-t border-white/10 text-center">
-                <p className="text-xs text-gray-400">
+              <div className="pt-3 sm:pt-4 border-t border-white/10 text-center">
+                <p className="text-[10px] sm:text-xs text-gray-400">
                   Starting with dense local clusters before expanding across East Africa.
                 </p>
               </div>
