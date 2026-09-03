@@ -1,17 +1,9 @@
 import type { Metadata } from "next";
-import { Manrope, Inter, JetBrains_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { NavigationRail } from "@/components/navigation-rail";
-import { OfflineIndicator } from "@/components/offline-indicator";
 import { AppStateProvider } from "@/lib/state-context";
-
-const manrope = Manrope({ 
-  subsets: ["latin"], 
-  variable: "--font-manrope",
-  display: 'swap',
-});
 
 const inter = Inter({ 
   subsets: ["latin"], 
@@ -19,25 +11,20 @@ const inter = Inter({
   display: 'swap',
 });
 
-const jetbrainsMono = JetBrains_Mono({ 
-  subsets: ["latin"], 
-  variable: "--font-jetbrains-mono",
-  display: 'swap',
-});
-
 export const metadata: Metadata = {
-  title: "PolyFit — B2B Corporate Wellness Network & BOH SaaS",
-  description: "PolyFit BOH SaaS Operations Console & B2B Corporate Wellness Network",
+  title: "PolyFit — Corporate Fitness & Wellness Network",
+  description: "PolyFit connects companies and employees to a network of gyms and fitness providers, making corporate fitness benefits more accessible, flexible and measurable.",
   openGraph: {
-    title: "PolyFit — B2B Corporate Wellness Network & BOH SaaS",
-    description: "PolyFit BOH SaaS Operations Console & B2B Corporate Wellness Network",
+    title: "PolyFit — Corporate Fitness & Wellness Network",
+    description: "PolyFit connects companies and employees to a network of gyms and fitness providers, making corporate fitness benefits more accessible, flexible and measurable.",
     siteName: "PolyFit",
+    type: "website",
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`dark ${manrope.variable} ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}>
+    <html lang="en" className={`marketing-theme ${inter.variable} antialiased`}>
       <head>
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
         <style>
@@ -51,18 +38,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           `}
         </style>
       </head>
-      <body className="min-h-full flex bg-background text-foreground">
+      <body className="min-h-screen bg-background text-foreground">
         <ErrorBoundary>
           <AuthProvider>
             <AppStateProvider>
               <a href="#main-content" className="skip-to-main">
                 Skip to main content
               </a>
-              <NavigationRail />
-              <OfflineIndicator />
-              <main className="flex-1 ml-0 lg:ml-[240px] pt-14 lg:pt-0 min-h-screen" id="main-content" role="main">
-                {children}
-              </main>
+              {children}
             </AppStateProvider>
           </AuthProvider>
         </ErrorBoundary>

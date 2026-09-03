@@ -1,0 +1,22 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle -->
+  <circle cx="100" cy="100" r="90" fill="#0B1F33"/>
+  
+  <!-- Network Nodes -->
+  <circle cx="100" cy="100" r="35" fill="#28D17C" opacity="0.9"/>
+  
+  <!-- Outer Connection Points -->
+  <circle cx="60" cy="60" r="12" fill="#28D17C" opacity="0.7"/>
+  <circle cx="140" cy="60" r="12" fill="#28D17C" opacity="0.7"/>
+  <circle cx="60" cy="140" r="12" fill="#28D17C" opacity="0.7"/>
+  <circle cx="140" cy="140" r="12" fill="#28D17C" opacity="0.7"/>
+  
+  <!-- Connection Lines -->
+  <line x1="75" y1="75" x2="60" y2="60" stroke="#28D17C" strokeWidth="3" opacity="0.5"/>
+  <line x1="125" y1="75" x2="140" y2="60" stroke="#28D17C" strokeWidth="3" opacity="0.5"/>
+  <line x1="75" y1="125" x2="60" y2="140" stroke="#28D17C" strokeWidth="3" opacity="0.5"/>
+  <line x1="125" y1="125" x2="140" y2="140" stroke="#28D17C" strokeWidth="3" opacity="0.5"/>
+  
+  <!-- P Letter -->
+  <text x="100" y="115" text-anchor="middle" fill="white" font-size="40" font-weight="bold" font-family="Arial, sans-serif">P</text>
+</svg>
