@@ -1215,12 +1215,7 @@ async function handlePublicLeadSubmission(req, res) {
       if (tenant) realTenantId = tenant.id;
     }
     if (!realTenantId) {
-      const { data: defaultTenant } = await supabase
-        .from('tenants')
-        .select('id')
-        .limit(1)
-        .maybeSingle();
-      realTenantId = defaultTenant ? defaultTenant.id : '2c604504-41c3-406b-82a0-a43700057af8';
+      realTenantId = process.env.PLATFORM_TENANT_ID || '2c604504-41c3-406b-82a0-a43700057af8';
     }
 
     const customFields = {
