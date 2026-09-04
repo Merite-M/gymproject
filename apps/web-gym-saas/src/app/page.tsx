@@ -9,7 +9,6 @@ import SolutionSection from "@/components/landing/solution-section";
 import HowItWorks from "@/components/landing/how-it-works";
 import ForCompanies from "@/components/landing/for-companies";
 import ForProviders from "@/components/landing/for-providers";
-import NetworkSection from "@/components/landing/network-section";
 import FacilityDirectory from "@/components/landing/facility-directory";
 import RoiCalculator from "@/components/landing/roi-calculator";
 import AboutSection from "@/components/landing/about-section";
@@ -41,7 +40,6 @@ export default function Home() {
         <FacilityDirectory />
         <ForCompanies onOpenLeadForm={openLeadForm} />
         <ForProviders onOpenLeadForm={openLeadForm} />
-        <NetworkSection />
         <AboutSection />
         <FAQSection onOpenLeadForm={openLeadForm} />
         <EarlyAccessCTA onOpenLeadForm={openLeadForm} />
